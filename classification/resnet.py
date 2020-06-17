@@ -14,8 +14,7 @@ class BasicBlock(nn.Module):
             kernel_size=3, 
             stride=stride, 
             padding=1, 
-            bias=False
-        )
+            bias=False)
         self.bn1 = nn.BatchNorm2d(planes)
         self.conv2 = nn.Conv2d(
             planes, 
@@ -23,8 +22,7 @@ class BasicBlock(nn.Module):
             kernel_size=3,
             stride=1,
             padding=1,
-            bias=False
-        )
+            bias=False)
         self.bn2 = nn.BatchNorm2d(planes)
         
         if stride != 1 or in_planes != self.expansion*planes:
@@ -34,10 +32,8 @@ class BasicBlock(nn.Module):
                     self.expansion*planes,
                     kernel_size=1,
                     stride=stride,
-                    bias=False
-                ),
-                nn.BatchNorm2d(self.expansion*planes)
-            )
+                    bias=False),
+                nn.BatchNorm2d(self.expansion*planes))
         else:
             self.shortcut = nn.Sequential()
 
@@ -72,8 +68,7 @@ class Bottleneck(nn.Module):
             planes, 
             self.expansion*planes, 
             kernel_size=1,
-            bias=False
-        )
+            bias=False)
         self.bn3 = nn.BatchNorm2d(self.expansion*planes)
         self.shortcut = nn.Sequential()
         if stride != 1 or in_planes != self.expansion*planes:
@@ -83,10 +78,8 @@ class Bottleneck(nn.Module):
                     self.expansion*planes,
                     kernel_size=1, 
                     stride=stride, 
-                    bias=False
-                ),
-                nn.BatchNorm2d(self.expansion*planes)
-            )
+                    bias=False),
+                nn.BatchNorm2d(self.expansion*planes))
 
     def forward(self, x):
         out = F.relu(self.bn1(self.conv1(x)))
@@ -107,14 +100,13 @@ class ResNet(nn.Module):
             kernel_size=3,
             stride=1, 
             padding=1, 
-            bias=False
-        )
+            bias=False)
         self.bn1 = nn.BatchNorm2d(64)
         self.layer1 = self._make_layer(block, 64, num_blocks[0], stride=1)
         self.layer2 = self._make_layer(block, 128, num_blocks[1], stride=2)
         self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2)
         self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2)
-        self.linear = nn.Linear(512*block.expansion, num_classes)
+        self.linear = nn.Linear(512 * block.expansion, num_classes)
 
     def _make_layer(self, block, planes, num_blocks, stride):
         strides = [stride] + [1]*(num_blocks-1)
@@ -141,9 +133,10 @@ def resnet_18():
     return ResNet(BasicBlock, [2, 2, 2, 2])
 
 def resnet_50():
-    return ResNet(Bottleneck, [3, 4, 6, 3])\
+    return ResNet(Bottleneck, [3, 4, 6, 3])
         
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-net = resnet_18().to(device)
-summary(net, input_data=(3, 32, 32), verbose=0)
+if __name__ == '__main__':
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    net = resnet_18().to(device)
+    print(summary(net, input_data=(3, 32, 32), verbose=0))
