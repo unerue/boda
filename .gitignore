@@ -6,3 +6,6 @@ tracking/
 *.jpg
 *.png
 *.jpeg
+classification/data/
+detection/data/
+
