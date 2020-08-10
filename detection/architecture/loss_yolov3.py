@@ -5,6 +5,117 @@ import torch
 import torch.nn as nn
 
 
+def bbox_iou(box1, box2, x1y1x2y2=True):
+    """
+    Returns the IoU of two bounding boxes
+    """
+    if not x1y1x2y2:
+        # Transform from center and width to exact coordinates
+        b1_x1, b1_x2 = box1[:, 0] - box1[:, 2] / 2, box1[:, 0] + box1[:, 2] / 2
+        b1_y1, b1_y2 = box1[:, 1] - box1[:, 3] / 2, box1[:, 1] + box1[:, 3] / 2
+        b2_x1, b2_x2 = box2[:, 0] - box2[:, 2] / 2, box2[:, 0] + box2[:, 2] / 2
+        b2_y1, b2_y2 = box2[:, 1] - box2[:, 3] / 2, box2[:, 1] + box2[:, 3] / 2
+    else:
+        # Get the coordinates of bounding boxes
+        b1_x1, b1_y1, b1_x2, b1_y2 = box1[:, 0], box1[:, 1], box1[:, 2], box1[:, 3]
+        b2_x1, b2_y1, b2_x2, b2_y2 = box2[:, 0], box2[:, 1], box2[:, 2], box2[:, 3]
+
+    # get the corrdinates of the intersection rectangle
+    # print(b1_x1.dtype, b2_x1.dtype)
+    # print(b1_x1.dtype, b2_x1.dtype)
+    print(b1_x1.size(), b2_x1.size())
+    inter_rect_x1 = torch.max(b1_x1, b2_x1)
+    inter_rect_y1 = torch.max(b1_y1, b2_y1)
+    inter_rect_x2 = torch.min(b1_x2, b2_x2)
+    inter_rect_y2 = torch.min(b1_y2, b2_y2)
+    # Intersection area
+    inter_area = torch.clamp(inter_rect_x2 - inter_rect_x1 + 1, min=0) * torch.clamp(
+        inter_rect_y2 - inter_rect_y1 + 1, min=0
+    )
+    # Union Area
+    b1_area = (b1_x2 - b1_x1 + 1) * (b1_y2 - b1_y1 + 1)
+    b2_area = (b2_x2 - b2_x1 + 1) * (b2_y2 - b2_y1 + 1)
+
+    iou = inter_area / (b1_area + b2_area - inter_area + 1e-16)
+
+    return iou
+
+import sys
+def non_max_suppression(boxes, scores, labels, conf_thres=0.7, nms_thres=0.4):
+    """
+    Removes detections with lower object confidence score than 'conf_thres' and performs
+    Non-Maximum Suppression to further filter detections.
+    Returns detections with shape:
+        (x1, y1, x2, y2, object_conf, class_score, class_pred)
+    """
+
+    # From (center x, center y, width, height) to (x1, y1, x2, y2)
+    print('*'*100)
+
+    boxes = xywh2xyxy(boxes)
+    # print(len(boxes))
+    output = [None for _ in range(len(boxes))]
+
+    # print(boxes)
+    # print(scores)
+    # print(labels)
+
+    for i, (box, score, label) in enumerate(zip(boxes, scores, labels)):
+        # Filter out confidence scores below threshold
+        # print(box, score, label)
+        if not score >= conf_thres:
+            continue
+        
+        
+        print(torch.argmax(label))
+        
+        score = score * torch.argmax(label).item()
+        print('image_pred:', box, score.item(), torch.argmax(label).item())
+        
+        # box = box[score >= conf_thres]
+        
+        # If none are remaining => process next image
+    #     if not box.size(0):
+    #         continue
+    #     # Object confidence times class confidence
+
+    
+    #     print('score:', score)
+    #     sys.exit(0)
+    #     # Sort by it
+    #     image_pred = image_pred[(-score).argsort()]
+    #     print(image_pred)
+        
+    #     class_confs, class_preds = labels.max(1, keepdim=True)
+    #     detections = torch.cat((image_pred, score, class_confs.float(), class_preds.float()), 1)
+    #     # Perform non-maximum suppression
+    #     keep_boxes = []
+
+    #     sys.exit(0)
+    #     while detections.size(0):
+    #         print(detections[0, :4])
+            
+    #         large_overlap = bbox_iou(detections[0, :4].unsqueeze(0), detections[:, :4]) > nms_thres
+    #         print(large_overlap)
+    #         label_match = detections[0, -1] == detections[:, -1]
+    #         # Indices of boxes with lower confidence scores, large IOUs and matching labels
+    #         print(large_overlap)
+    #         print(label_match)
+    #         # break
+    #         # invalid = large_overlap & label_match
+            
+    #         print(invalid)
+    #         # break
+    #         weights = detections[invalid, 4:5]
+    #         # Merge overlapping bboxes by order of confidence
+    #         detections[0, :4] = (weights * detections[invalid, :4]).sum(0) / weights.sum()
+    #         keep_boxes += [detections[0]]
+    #         detections = detections[~invalid]
+    #     if keep_boxes:
+    #         output[image_i] = torch.stack(keep_boxes)
+
+    # return output
+
 
 class Yolov3Loss(nn.Module):
     def __init__(self, config: Dict = None):
@@ -30,48 +141,166 @@ class Yolov3Loss(nn.Module):
         #         if isinstance(boxes, torch.Tensor):
         #             if boxes.size()[-1] != 4:
         #                 raise ValueError
-
-        self._transform(inputs, targets)
+        print(inputs[0]['boxes'].size())
+        for pred in inputs:
+            boxes = pred['boxes'].view(-1, 4)*pred['boxes'].size(2)
+            scores = pred['scores'].view(-1, 1)
+            labels = pred['labels'].view(-1, 2)
+            print(non_max_suppression(boxes, scores, labels))
+            break
+        # iou_scores, class_mask, obj_mask, noobj_mask, tx, ty, tw, th, tcls, tconf = self._transform(inputs, targets)
+        
+        
         
         return
         
     def _transform(self, inputs, targets: List = None, device: str = 'cpu'):
         device = 'cuda' if torch.cuda.is_available() else 'cpu' # 삭제해라!!!!
+        print(inputs[0]['boxes'].size())
+        bs = inputs[0]['boxes'].size(0)
+        na = inputs[0]['boxes'].size(1)
+        ng = inputs[0]['boxes'].size(2)
+        nl = inputs[0]['labels'].size(-1)
+        print(bs, na, ng, nl)
 
-        b = inputs[0]['boxes'].size(0)
-        a = inputs[0]['boxes'].size(1)
-        g = inputs[0]['boxes'].size(2)
-        l = inputs[0]['labels'].size(-1)
+        obj_mask = torch.ByteTensor(bs, na, ng, ng).fill_(0).to(device)
+        noobj_mask = torch.ByteTensor(bs, na, ng, ng).fill_(1).to(device)
+        label_mask = torch.FloatTensor(bs, na, ng, ng).fill_(0).to(device)
+        iou_scores = torch.FloatTensor(bs, na, ng, ng).fill_(0).to(device)
+        tl = torch.FloatTensor(bs, na, ng, ng, nl).fill_(0).to(device)
+        print(obj_mask)
+        print('obj.:', obj_mask.size())
+        print('no obj.:', noobj_mask.size())
 
-        obj_mask = torch.ByteTensor(b, a, g, g).fill_(0).to(device)
-        noobj_mask = torch.ByteTensor(b, a, g, g).fill_(1).to(device)
-        label_mask = torch.FloatTensor(b, a, g, g).fill_(0).to(device)
-        iou_scores = torch.FloatTensor(b, a, g, g).fill_(0).to(device)
-        tl = torch.FloatTensor(b, a, g, g, l).fill_(0).to(device)
 
-        tx = torch.FloatTensor(b, a, g, g).fill_(0).to(device)
-        ty = torch.FloatTensor(b, a, g, g).fill_(0).to(device)
-        tw = torch.FloatTensor(b, a, g, g).fill_(0).to(device)
-        th = torch.FloatTensor(b, a, g, g).fill_(0).to(device)
-
+        tx = torch.FloatTensor(bs, na, ng, ng).fill_(0).to(device)
+        ty = torch.FloatTensor(bs, na, ng, ng).fill_(0).to(device)
+        tw = torch.FloatTensor(bs, na, ng, ng).fill_(0).to(device)
+        th = torch.FloatTensor(bs, na, ng, ng).fill_(0).to(device)
+        print('tx:', tx.size())
         boxes = []
 
-        print(inputs[0]['boxes'])
-        print(len(self.config.masks))
-        print(targets)
-        for mask in self.config.masks:
-            anchors = [self.config.anchors[i] for i in mask]
-            for target, mask in zip(targets, self.config.masks):
-                print(anchors)
-                print(inputs[0]['scaled_anchors'])
-                # print(target)
-                xy = target['boxes'][:, :2]
-                wh = target['boxes'][:, 2:]
-                ious = elemwise_box_iou(inputs[0]['boxes'], target)
-                print(ious)
+        # print(inputs[0]['boxes'])
+        # print(len(self.config.masks))
+        # print(targets)
+        # print(len(inputs))
+        # print(inputs[0]['boxes'].size())
+        # print(inputs[1]['boxes'].size())
+        # print(inputs[2]['boxes'].size())
+        for pred in inputs:
+            print(non_max_suppression(pred['boxes'].view(-1, 4)*32, pred['scores'].view(-1, 1), pred['labels'].view(-1, 1)))
+            break
+
+        sys.exit(0)
+        
+        # for pred, mask in zip(inputs, self.config.masks):
+        for pred in inputs:
+            # print(type(preds))
+            # anchors = [self.config.anchors[i] for i in mask]
+            for target in targets:
+                # print(anchors)
+                # print(pred['boxes'].size())
+                # print(target['boxes'].size())
+
+                # pred_boxes = pred['boxes'].view(-1, 4)
+                # print(pred_boxes)
+                # print(pred_boxes.size())
+                
+                # print(target['boxes'] * g)
+                boxes = target['boxes'] / ng
+                gxy = target['boxes'][:, :2] / ng
+                gwh = target['boxes'][:, 2:] / ng
+                
+                
+
+                ious = torch.stack([bbox_wh_iou(anchor, gwh) for anchor in pred['scaled_anchors']])
+                print(ious.t() > 0.5)
+                best_ious, best_n = ious.max(0)
+
+                print(best_ious.size())
+                print(best_n.size())
+                
+                
+                # b, target_labels = target['boxes'][:, :2].long().t()
+                target_labels = target['labels'].long().t()
+                print(target_labels.size())
+                # b = torch.ones(target_labels.size()).long().t()
+                # print(b.size())
+                gx, gy = gxy.t()
+                gw, gh = gwh.t()
+                gi, gj = gxy.long().t()
+                # Set masks
+                obj_mask[0, best_n, gj, gi] = 1
+                noobj_mask[0, best_n, gj, gi] = 0
+
+                # ignore_thres = 0.5
+                print(obj_mask)
+                print(noobj_mask)
+                # print(b)
+                print(gj)
+                print(gi)
+                ignore_thres = 0.5
+                for i, anchor_ious in enumerate(ious.t()):
+                    noobj_mask[0, anchor_ious > ignore_thres, gj[i], gi[i]] = 0
+                    # noobj_mask[b[i], anchor_ious > ignore_thres, gj[i], gi[i]] = 0
+
+
+                # print(gx)
+                tx[0, best_n, gj, gi] = gx.type(torch.float32) - gx.type(torch.float32).floor()
+                ty[0, best_n, gj, gi] = gy.type(torch.float32) - gy.type(torch.float32).floor()
+                # Width and height
+                tw[0, best_n, gj, gi] = torch.log(gw / pred['scaled_anchors'][best_n][:, 0] + 1e-16)
+                th[0, best_n, gj, gi] = torch.log(gh / pred['scaled_anchors'][best_n][:, 1] + 1e-16)
+                # One-hot encoding of label
+                tl[0, best_n, gj, gi, target_labels] = 1
+                # Compute label correctness and iou at best anchor
+                label_mask[0, best_n, gj, gi] = (pred['labels'][0, best_n, gj, gi].argmax(-1) == target_labels).float()
+                iou_scores[0, best_n, gj, gi] = bbox_iou(pred['boxes'][0, best_n, gj, gi], boxes, x1y1x2y2=False)
+
+                tconf = obj_mask.float()
+
+                print(iou_scores, label_mask, obj_mask, noobj_mask, tx, ty, tw, th, tl, tconf)
+
+                return iou_scores, label_mask, obj_mask, noobj_mask, tx, ty, tw, th, tl, tconf
+                
         # print(tx, ty, tw, th, tl)
         # print(xy, wh)
+        if not self.training:
+            return #non_max_suppression(pred_boxes[0])
         return 
+
+def bbox_iou1(box1, box2, x1y1x2y2=True):
+    """
+    Returns the IoU of two bounding boxes
+    """
+    if not x1y1x2y2:
+        # Transform from center and width to exact coordinates
+        b1_x1, b1_x2 = box1[:, 0] - box1[:, 2] / 2, box1[:, 0] + box1[:, 2] / 2
+        b1_y1, b1_y2 = box1[:, 1] - box1[:, 3] / 2, box1[:, 1] + box1[:, 3] / 2
+        b2_x1, b2_x2 = box2[:, 0] - box2[:, 2] / 2, box2[:, 0] + box2[:, 2] / 2
+        b2_y1, b2_y2 = box2[:, 1] - box2[:, 3] / 2, box2[:, 1] + box2[:, 3] / 2
+    else:
+        # Get the coordinates of bounding boxes
+        b1_x1, b1_y1, b1_x2, b1_y2 = box1[:, 0], box1[:, 1], box1[:, 2], box1[:, 3]
+        b2_x1, b2_y1, b2_x2, b2_y2 = box2[:, 0], box2[:, 1], box2[:, 2], box2[:, 3]
+
+    # get the corrdinates of the intersection rectangle
+    print(b1_x1.dtype, b2_x1.dtype)
+    inter_rect_x1 = torch.max(b1_x1, b2_x1.type(torch.float32))
+    inter_rect_y1 = torch.max(b1_y1, b2_y1.type(torch.float32))
+    inter_rect_x2 = torch.min(b1_x2, b2_x2.type(torch.float32))
+    inter_rect_y2 = torch.min(b1_y2, b2_y2.type(torch.float32))
+    # Intersection area
+    inter_area = torch.clamp(inter_rect_x2 - inter_rect_x1 + 1, min=0) * torch.clamp(
+        inter_rect_y2 - inter_rect_y1 + 1, min=0
+    )
+    # Union Area
+    b1_area = (b1_x2 - b1_x1 + 1) * (b1_y2 - b1_y1 + 1)
+    b2_area = (b2_x2 - b2_x1 + 1) * (b2_y2 - b2_y1 + 1)
+
+    iou = inter_area / (b1_area + b2_area - inter_area + 1e-16)
+
+    return iou
 
 
 def elemwise_box_iou(box_a, box_b):
@@ -90,12 +319,84 @@ def elemwise_box_iou(box_a, box_b):
     # Return value is [n] for inputs [n, 4]
     return torch.clamp(inter / union, max=1)
 
+def rescale_boxes(boxes, current_dim, original_shape):
+    """ Rescales bounding boxes to the original shape """
+    orig_h, orig_w = original_shape
+    # The amount of padding that was added
+    pad_x = max(orig_h - orig_w, 0) * (current_dim / max(original_shape))
+    pad_y = max(orig_w - orig_h, 0) * (current_dim / max(original_shape))
+    # Image height and width after padding is removed
+    unpad_h = current_dim - pad_y
+    unpad_w = current_dim - pad_x
+    # Rescale bounding boxes to dimension of original image
+    boxes[:, 0] = ((boxes[:, 0] - pad_x // 2) / unpad_w) * orig_w
+    boxes[:, 1] = ((boxes[:, 1] - pad_y // 2) / unpad_h) * orig_h
+    boxes[:, 2] = ((boxes[:, 2] - pad_x // 2) / unpad_w) * orig_w
+    boxes[:, 3] = ((boxes[:, 3] - pad_y // 2) / unpad_h) * orig_h
+    return boxes
+
+
+def xywh2xyxy(x):
+    y = x.new(x.shape)
+    y[..., 0] = x[..., 0] - x[..., 2] / 2
+    y[..., 1] = x[..., 1] - x[..., 3] / 2
+    y[..., 2] = x[..., 0] + x[..., 2] / 2
+    y[..., 3] = x[..., 1] + x[..., 3] / 2
+    return y
+
+
+def non_max_suppression1(boxes, scores, labels, conf_thres=0.5, nms_thres=0.4):
+    """
+    Removes detections with lower object confidence score than 'conf_thres' and performs
+    Non-Maximum Suppression to further filter detections.
+    Returns detections with shape:
+        (x1, y1, x2, y2, object_conf, class_score, class_pred)
+    """
+
+    # From (center x, center y, width, height) to (x1, y1, x2, y2)
+    boxes = xywh2xyxy(boxes)
+    output = [None for _ in range(len(boxes))]
+    for image_i, image_pred in enumerate(boxes):
+        # Filter out confidence scores below threshold
+        image_pred = scores[scores >= conf_thres]
+        # If none are remaining => process next image
+        if not image_pred.size(0):
+            continue
+        # Object confidence times class confidence
+        print(labels)
+        print(scores)
+        score = scores * labels.max(1)[0]
+        # Sort by it
+        image_pred = image_pred[(-score).argsort()]
+        class_confs, class_preds = labels.max(1, keepdim=True)
+        detections = torch.cat((image_pred, scores, class_confs.float(), class_preds.float()), 1)
+        # Perform non-maximum suppression
+        keep_boxes = []
+        while boxes.size(0):
+            # large_overlap = bbox_iou(detections[0, :4].unsqueeze(0), detections[:, :4]) > nms_thres
+            large_overlap = bbox_iou(boxes.unsqueeze(0), boxes) > nms_thres
+            # label_match = detections[0, -1] == detections[:, -1]
+            label_match = class_preds[0] == class_preds[:]
+            # Indices of boxes with lower confidence scores, large IOUs and matching labels
+            invalid = large_overlap & label_match
+            weights = scores[invalid]
+            # Merge overlapping bboxes by order of confidence
+            boxes = (weights * boxes[invalid]).sum(0) / weights.sum()
+            keep_boxes += [boxes[0]]
+            boxes = boxes[~invalid]
+        if keep_boxes:
+            output[image_i] = torch.stack(keep_boxes)
+
+    return output
         
 def bbox_wh_iou(wh1, wh2):
+    wh1 = torch.tensor(wh1, dtype=torch.int32).to('cuda')
     wh2 = wh2.t()
-    print(wh2)
+    # print(wh2)
     w1, h1 = wh1[0], wh1[1]
+    print(w1, h1)
     w2, h2 = wh2[0], wh2[1]
+    print(w2, h2)
     inter_area = torch.min(w1, w2) * torch.min(h1, h2)
     union_area = (w1 * h1 + 1e-16) + w2 * h2 - inter_area
     return inter_area / union_area
@@ -166,9 +467,11 @@ def build_targets(pred_boxes, pred_cls, target, anchors, ignore_thres):
     obj_mask[b, best_n, gj, gi] = 1
     noobj_mask[b, best_n, gj, gi] = 0
 
+    ignore_thres = 0.5
     # Set noobj mask to zero where iou exceeds ignore threshold
     for i, anchor_ious in enumerate(ious.t()):
-        noobj_mask[b[i], anchor_ious > ignore_thres, gj[i], gi[i]] = 0
+        noobj_mask[b[i], anchor_ious > 0.5, gj[i], gi[i]] = 0
+        # noobj_mask[b[i], anchor_ious > ignore_thres, gj[i], gi[i]] = 0
 
     # Coordinates
     tx[b, best_n, gj, gi] = gx - gx.floor()

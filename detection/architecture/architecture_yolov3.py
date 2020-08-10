@@ -94,15 +94,13 @@ class Yolov3Model(nn.Module):
         self.num_classes = num_classes
         self.transform = None
         self.prediction_head = Yolov3PredictionHead(config)
-        print(self.prediction_head.backbone)
+        # print(self.prediction_head.backbone)
 
     def forward(self, inputs):
         # inputs = self.transform(inputs)
-        print(self.training)
-        print(self.eval)
-        print(inputs[0].size())
+        # if self.training
+    
         inputs = torch.stack(inputs)
-        print(inputs.size())
         # inputs = torch.FloatTensor(inputs)
         outs = self.prediction_head(inputs)
         preds = []

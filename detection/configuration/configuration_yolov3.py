@@ -29,7 +29,7 @@ pascal_dataset = dataset_base.copy({
     'train_label_path': './data/sbd/pascal_sbd_train.json',
     'valid_label_path': './data/sbd/pascal_sbd_val.json',
     'class_names': PASCAL_CLASSES,
-    'num_classes': 20,
+    'num_classes': 1,
 })
 
 backbone_base = Config({
