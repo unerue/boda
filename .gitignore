@@ -1,11 +1,7 @@
 .ipynb_checkpoints
 .vscode
-input/
-img/
-tracking/
-*.jpg
-*.png
-*.jpeg
-classification/data/
-detection/data/
+__pycache__
+misc/
+benchmarks/data/
+benchmarks/*pth
 
