@@ -45,6 +45,60 @@ class Yolov1Model(nn.Module):
         outputs = self.prediction_head(inputs)
         print(outputs.size())
 
+        grid_x = torch.arange(7, device='cuda').repeat(7, 1).view(1, 1, 7, 7)
+        grid_y = torch.arange(7, device='cuda').repeat(7, 1).t().view(1, 1, 7, 7)
+
+        print(grid_x.size(), grid_y.size())
+        norm_x = grid_x * (1./7)
+        norm_y = grid_y * (1./7)
+
+        labels = outputs[...,5*2:].argmax(-1)
+        for i in range(0, 5*2, 5):
+            scores = outputs[...,i+5]
+            
+            boxes = outputs[...,i:i+5]
+            print(boxes[0][0])
+            print(boxes.size(), scores.size(), labels.size())
+            
+            print(scores  * labels)
+            mask = (scores * labels) > 0.5
+            print(mask)
+            print(boxes[mask].size())
+            print(boxes[mask].type(torch.float32))
+
+            
+            break
+            boxes[...,0] = boxes[...,0] * (1./7) + norm_x
+            boxes[...,1] = boxes[...,1] * (1./7) + norm_y
+
+            xy_normal = boxes[...,:2]
+            wh_normal = boxes[...,2:4]
+
+            boxes[...,:2] = xy_normal - 0.5 * wh_normal
+            boxes[...,2:4] = xy_normal + 0.5 * wh_normal
+            
+            outputs[...,i:i+5] = boxes
+        
+        # print(outputs[...,2:4])
+            
+
+        # outputs[...,0] = outputs[...,0] * (1./7) + norm_x
+        # outputs[...,1] = outputs[...,1] * (1./7) + norm_y
+
+        # xy_normal = outputs[...,:2]
+        # wh_normal = outputs[...,2:4]
+
+        # outputs[...,:2] = xy_normal - 0.5 * wh_normal
+        # outputs[...,2:4] = xy_normal + 0.5 * wh_normal
+        
+        # print(outputs[...,2:4])
+
+
+
+        sys.exit()
+
+
+
         # outputs = outputs.view(outputs.size(0), 1, 30, outputs.size(2), outputs.size(2)).permute(0, 1, 3, 4, 2).contiguous()
         print(outputs[0][0].size(), outputs[0][0][0])
         outputs = outputs.view(outputs.size(0), 7*7, 30)
@@ -76,6 +130,9 @@ class Yolov1Model(nn.Module):
                 print(bbox.size(), bbox)
                 # boxes[i,:2] = , boxes[i,:2] * cell_size
                 # print(boxes)
+
+
+
 
         return outputs
 
