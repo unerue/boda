@@ -1,15 +1,11 @@
-from .resnet import resnet_50
-
-
-resnet = {
-    'resnet_50': resnet_50(),
-    'resnet_101': resnet_101()
-}
+from typing import Tuple, List
 
 
 class Backbone:
-    def __init__(self, config):
-        pass
-
-    def get_backbone(self):
-        pass
+    def __init__(self, config, backbone_list: List):
+        self.config = config
+        self.backbone_list = backbone_list
+        
+    def load_backbone(self):
+        
+        return

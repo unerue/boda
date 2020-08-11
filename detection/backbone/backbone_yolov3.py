@@ -121,6 +121,7 @@ class Darknet(nn.Module):
 class Yolov3Backbone:
     def __init__(self):
         raise NotImplementedError
+    
 
 def darknet21(pretrained=False, **kwargs):
     """Constructs a darknet-21.

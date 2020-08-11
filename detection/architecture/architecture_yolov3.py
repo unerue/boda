@@ -128,9 +128,9 @@ class Yolov3Model(nn.Module):
             labels = torch.sigmoid(out[..., 5:])  # predicted labels
            
             preds.append({
-                'boxes': boxes,
-                'scores': scores,
-                'labels': labels,
+                'boxes': boxes,  # [x, y, w, h]
+                'scores': scores,  # confidence scores
+                'labels': labels,  # predict_proba
                 'scaled_anchors': self.scaled_anchors,
             })
         # TODO: postprocessing 후처리 시스템 만들기 if not self.training: 바로 아웃풋 나올수 있는
