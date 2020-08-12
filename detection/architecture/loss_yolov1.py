@@ -68,6 +68,13 @@ class Yolov1Loss(nn.Module):
 
     def forward(self, inputs, targets) -> torch.Tensor:
         batch_size = 2
+        grid_size = inputs.size(2)
+
+        coord_mask = torch.cuda.ByteTensor(2, 7, 7, )
+        noobj_mask = torch.cuda.ByteTensor(2, 7, 7, 1)
+
+        targets = []
+
         coord_mask = targets  # torch.Size([batch, S, S])
         noobj_mask = targets
 
