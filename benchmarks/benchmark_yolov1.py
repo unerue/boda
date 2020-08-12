@@ -21,7 +21,7 @@ import albumentations as A
 from albumentations.pytorch.transforms import ToTensorV2
 
 sys.path.append('../')
-from detection import Yolov1Model
+from detection import Yolov1Model, Yolov1Loss
 from detection.utils import AverageMeter
 
 
