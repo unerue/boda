@@ -1,7 +1,9 @@
 import torch
-import torch.nn as nn
+from torch import nn, Tensor
+# import torch.nn as nn
 import torch.nn.functional as F
-
+from typing import Tuple, List, Dict, Any, Optional
+# from torch.jit.annotations import Tuple, List, Dict, Any, Optional
 
 
 def intersect(box_a, box_b):
@@ -67,6 +69,43 @@ class Yolov1Loss(nn.Module):
         pass
 
     def forward(self, inputs, targets) -> torch.Tensor:
+        pass
+
+
+
+    def _transform(self, inputs, targets):
+        """
+        inputs (images): List[Tensor]
+        targets: Optional[List[Dict[str, Tensor]]]
+
+        make a copy of targets to avoid modifying it in-place
+        targets = [{k: v for k,v in t.items()} for t in targets]
+        """
+        if targets is not None:
+            targets_copy: List[Dict[str, Tensor]] = []
+            for t in targets:
+                target: Dict[str, Tensor] = {}
+                for k, v in t.items():
+                    target[k] = v
+                targets_copy.append(target)
+            targets = targets_copy
+
+        for i in range(len(images)):
+            image = images[i]
+            target_index = targets[i] if targets is not None else None
+
+            if image.dim() != 3:
+                raise ValueError(f'images is expected to be 3d tensors of shape [C, H, W] {image.shape}')
+            
+            pass
+
+
+
+        pass
+
+
+    def __not_imple(self):
+
         batch_size = 2
         grid_size = inputs.size(2)
 
