@@ -9,7 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ..backbone import darknet53, Shortcut
-from ..configuration import yolov3_base_darknet_pascal
+# from ..configuration import yolov3_base_darknet_pascal
 from .layers import Conv2d1x1, Upsample
 # from .loss_yolov3 import Yolov3Loss
 

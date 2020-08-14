@@ -16,12 +16,14 @@ from torchvision import transforms
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.models.detection import FasterRCNN
 from torchvision.models.detection.rpn import AnchorGenerator
+from torchsummary import summary
 
 import albumentations as A
 from albumentations.pytorch.transforms import ToTensorV2
 
 sys.path.append('../')
-from detection import Yolov1Model, Yolov1Loss
+from detection import yolov1_base_config
+from detection import darknet9, Yolov1Model, Yolov1Loss
 from detection.utils import AverageMeter
 
 
@@ -29,17 +31,6 @@ DIR_INPUT = './data/global-wheat-detection'
 DIR_TRAIN_IMAGES = os.path.join(DIR_INPUT, 'train')
 DIR_VALID_IMAGES = os.path.join(DIR_INPUT, 'valid')
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-
-
-from torchsummary import summary
-
-# darknet = Darknet(9, TinyBlock)
-# darknet = Yolov1Model()
-# print(summary(darknet, input_data=(3, 448, 448), verbose=0))
-
-
-# sys.exit(0)
 
 
 class WheatDataset(Dataset):
@@ -124,7 +115,8 @@ valid_loader = DataLoader(
     num_workers=4,
     collate_fn=collate_fn)
 
-model = Yolov1Model().to(device)
+
+model = Yolov1Model(yolov1_base_config).to(device)
 criterion = Yolov1Loss()
 num_epochs = 2
 model.train()
@@ -138,7 +130,7 @@ for epoch in range(num_epochs):
         outputs = model(images)
         loss = criterion(outputs, targets)
         print(loss)
-        
+        loss.backward()
         model.eval()
         outputs = model(images)
         print(outputs)

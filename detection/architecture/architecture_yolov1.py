@@ -9,35 +9,35 @@ from torch import nn, Tensor
 import torch.nn.functional as F
 
 from ..backbone import darknet9
-from ..configuration import yolov3_base_darknet_pascal
 from .architecture_base import _check_inputs
 
 
 class Yolov1PredictionHead(nn.Module):
     def __init__(self, config: Dict, backbone: nn.Module = darknet9()):
         super().__init__()
-        self.config = config
-        self.num_classes = 20 # config.get('num_classes')
+        self.num_classes = config.dataset.num_classes
+        self.grid_size = config.grid_size
+        self.num_boxes = config.num_boxes
         self.backbone = backbone
-        self.grid_size = 7
-        self.out_channels = 5*2+self.num_classes
+        
+        self.out_channels = 5 * self.num_boxes + self.num_classes
         self.fc = nn.Linear(256*3*3, 1470)
 
-    def forward(self, inputs):
-        outputs = self.backbone(inputs)
-        output = self.fc(torch.flatten(outputs[-1], 1))
-        output = output.view(-1, 7, 7, self.out_channels)
+    def forward(self, x: List[Tensor]) -> Tensor:
+        x = self.backbone(x)
+        x = self.fc(torch.flatten(x[-1], 1))
+        x = x.view(-1, self.grid_size, self.grid_size, self.out_channels)
         
-        return output
-
+        return x
+        
 
 class Yolov1Model(nn.Module):
-    def __init__(self, config=None):
+    def __init__(self, config: Dict):
         super().__init__()
         self.config = config
         self.prediction_head = Yolov1PredictionHead(config)
 
-    def forward(self, inputs: List[torch.Tensor]):
+    def forward(self, inputs: List[Tensor]) -> Tensor:
         """
         Arguments
         ------
@@ -56,43 +56,57 @@ class Yolov1Model(nn.Module):
         # if batch size 1,
         if not isinstance(inputs, Tensor):
             inputs = torch.stack(inputs)
-
-        outputs = self.prediction_head(inputs)
         
         if self.training:
-            return outputs
-
+            return self.prediction_head(inputs)
         else:
-            grid_x = torch.arange(7, device='cuda').repeat(7, 1).view(1, 1, 7, 7)
-            grid_y = torch.arange(7, device='cuda').repeat(7, 1).t().view(1, 1, 7, 7)
+            with torch.no_grad():
+                outputs = self.prediction_head(inputs)
 
-            norm_x = grid_x * (1./7)
-            norm_y = grid_y * (1./7)
+            device = outputs.device
+            gs = self.config.grid_size
+            nb = self.config.num_boxes
+            w, h = (448, 448)
+            # cell_size = 1./gs
+            
+            grid_x = torch.arange(gs, device=device).repeat(gs, 1).view(1, 1, gs, gs)
+            grid_y = torch.arange(gs, device=device).repeat(gs, 1).t().view(1, 1, gs, gs)
+
+            norm_x = grid_x * (1./gs)
+            norm_y = grid_y * (1./gs)
 
             preds = []
-            labels = outputs[...,5*2:]  # torch.Size([B, 7, 7, 20]) -> [[[...num_classes]], [[...]]]
-            labels_proba = outputs[...,5*2:].argmax(-1)  # torch.Size([2, 7, 7])
-            for i in range(0, 5*2, 5):
-                boxes = outputs[...,i:i+4]  # torch.Size([2, 7, 7, 4]) -> [[[x,y,x,y]], [[...]]]
-                scores = outputs[...,i+5]  # torch.Size([2, 7, 7]) -> [[[]], [[]]]
-
-                mask = (scores * labels_proba) > 0.5 # torch.Size([2, 7, 7])
+            # torch.Size([B, 7, 7, 30]) -> [[[...num_classes]], [[...]]]
+            labels = outputs[..., 5*nb:]  
+            # torch.Size([2, 7, 7])
+            labels_proba = outputs[..., 5*nb:].argmax(-1)  
+            for i in range(0, 5*nb, 5):
+                # torch.Size([2, 7, 7, 4]) -> [[[x,y,x,y]], [[...]]]
+                boxes = outputs[..., i:i+4] 
+                # torch.Size([2, 7, 7]) -> [[[]], [[]]] 
+                scores = outputs[..., i+5]  
+                # torch.Size([2, 7, 7])
+                mask = (scores * labels_proba) > 0.5 
                 if not mask.size(0):
                     continue
             
-                boxes[...,0] = boxes[...,0] * (1./7) + norm_x
-                boxes[...,1] = boxes[...,1] * (1./7) + norm_y
+                boxes[..., 0] = boxes[..., 0] * (1./7) + norm_x
+                boxes[..., 1] = boxes[..., 1] * (1./7) + norm_y
 
-                xy_normal = boxes[...,:2]
-                wh_normal = boxes[...,2:]
+                norm_xy = boxes[..., :2]
+                norm_wh = boxes[..., 2:]
 
-                boxes[...,:2] = xy_normal - 0.5 * wh_normal
-                boxes[...,2:] = xy_normal + 0.5 * wh_normal
+                boxes[..., :2] = norm_xy - 0.5 * norm_wh
+                boxes[..., 2:] = norm_xy + 0.5 * norm_wh
                 preds.append({
                     'boxes': boxes[mask],
                     'scores': scores[mask],
                     'labels': labels[mask]
                 })
+            
+            print('='*100)
+            print(boxes.size())
+            print([boxes[...,0]*w, boxes[...,1]*w, boxes[...,2]*h, boxes[...,3]*h])
 
             return preds
             # print(preds)
@@ -172,7 +186,6 @@ class Yolov1Model(nn.Module):
 
 
 
-        
 
 
         

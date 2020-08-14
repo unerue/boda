@@ -1,6 +1,7 @@
-from .configuration_yolov3 import yolov3_base_darknet_pascal
+from .configuration_yolov1 import yolov1_base_config, yolov1_config
 
 
 __all__ = [
-    'yolov3_base_darknet_pascal'
+    'yolov1_config',
+    'yolov1_base_config', 
 ]

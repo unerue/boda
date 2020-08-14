@@ -1,5 +1,5 @@
 import math
-from typing import List
+from typing import List, Dict
 
 import torch
 from torch import nn, Tensor
@@ -65,9 +65,11 @@ class Darknet(nn.Module):
         self.layers.append(nn.Sequential(*layers))
         
 
-def darknet9(pretrained=False, **kwargs):
+def darknet9(config: Dict = None):
     model = Darknet()
-    if pretrained:
-        model.load_state_dict(torch.load(pretrained))
+    if isinstance(config, dict):
+        if config.backbone.pretrained:
+            model.load_state_dict(torch.load(config.backbone.path))
 
     return model
+
