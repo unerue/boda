@@ -5,11 +5,12 @@ from typing import Tuple, List, Dict, Any
 
 import numpy as np
 import torch
-import torch.nn as nn
+from torch import nn, Tensor
 import torch.nn.functional as F
 
 from ..backbone import darknet9
 from ..configuration import yolov3_base_darknet_pascal
+from .architecture_base import _check_inputs
 
 
 class Yolov1PredictionHead(nn.Module):
@@ -35,9 +36,9 @@ class Yolov1Model(nn.Module):
         super().__init__()
         self.prediction_head = Yolov1PredictionHead()
 
-        raise NotImplementedError
+        # raise NotImplementedError
 
-    def forward(self, inputs: List[torch.Tensor]) -> List[Dict[torch.Tensor]]:
+    def forward(self, inputs: List[torch.Tensor]):
         """
         Arguments
         ------
@@ -50,16 +51,21 @@ class Yolov1Model(nn.Module):
                 scores: torch.Size([n, 1])
                 labels: torch.Size([n, 20])
         """
+        # images = [image for image in inputs]
+        _check_inputs(inputs)
+
         # if batch size 1,
-        if not isinstance(inputs, torch.Tensor):
+        if not isinstance(inputs, Tensor):
             inputs = torch.stack(inputs)
 
         outputs = self.prediction_head(inputs)
-        # print(outputs.size())
+        
+
         if self.training:
-            raise NotImplementedError
+            print(outputs.size())
+            return outputs
         else:
-            sys.exit(0)
+            # sys.exit(0)
 
             grid_x = torch.arange(7, device='cuda').repeat(7, 1).view(1, 1, 7, 7)
             grid_y = torch.arange(7, device='cuda').repeat(7, 1).t().view(1, 1, 7, 7)
@@ -92,33 +98,34 @@ class Yolov1Model(nn.Module):
                     'labels': labels[mask]
                 })
 
+            return preds
             # print(preds)
             # preds: torch.Size([num_boxes, 4]), torch.Size([num_boxes, 1]), torch.Size([num_boxes, 20])        
             # NMS 후 selected boxes에 담아서 원본 이미지 크기로 다시 재변환
-            selected_boxes = []
-            for pred in preds:
-                print(len(pred['boxes']))
-                print(non_maximum_supression(pred['boxes'], pred['scores']))
-                print(len(non_maximum_supression(pred['boxes'], pred['scores'])))
+            # selected_boxes = []
+            # for pred in preds:
+            #     print(len(pred['boxes']))
+            #     print(non_maximum_supression(pred['boxes'], pred['scores']))
+            #     print(len(non_maximum_supression(pred['boxes'], pred['scores'])))
 
 
-            ## Recover inputs image size!!!
-            boxes_detected, class_names_detected, probs_detected = [], [], []
-            for b in range(boxes_normalized.size(0)):
-                box_normalized = boxes_normalized[b]
-                class_label = class_labels[b]
-                prob = probs[b]
+            # ## Recover inputs image size!!!
+            # boxes_detected, class_names_detected, probs_detected = [], [], []
+            # for b in range(boxes_normalized.size(0)):
+            #     box_normalized = boxes_normalized[b]
+            #     class_label = class_labels[b]
+            #     prob = probs[b]
 
-                x1, x2 = w * box_normalized[0], w * box_normalized[2] # unnormalize x with image width.
-                y1, y2 = h * box_normalized[1], h * box_normalized[3] # unnormalize y with image height.
-                boxes_detected.append(((x1, y1), (x2, y2)))
+            #     x1, x2 = w * box_normalized[0], w * box_normalized[2] # unnormalize x with image width.
+            #     y1, y2 = h * box_normalized[1], h * box_normalized[3] # unnormalize y with image height.
+            #     boxes_detected.append(((x1, y1), (x2, y2)))
 
-                class_label = int(class_label) # convert from LongTensor to int.
-                class_name = self.class_name_list[class_label]
-                class_names_detected.append(class_name)
+            #     class_label = int(class_label) # convert from LongTensor to int.
+            #     class_name = self.class_name_list[class_label]
+            #     class_names_detected.append(class_name)
 
-                prob = float(prob) # convert from Tensor to float.
-                probs_detected.append(prob)
+            #     prob = float(prob) # convert from Tensor to float.
+            #     probs_detected.append(prob)
 
         # sys.exit(0)
             

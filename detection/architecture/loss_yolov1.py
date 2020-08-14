@@ -1,8 +1,11 @@
+import sys
 import torch
 from torch import nn, Tensor
 # import torch.nn as nn
 import torch.nn.functional as F
 from typing import Tuple, List, Dict, Any, Optional
+
+from .loss_base import _check_targets
 # from torch.jit.annotations import Tuple, List, Dict, Any, Optional
 
 
@@ -61,6 +64,8 @@ def jaccard(box_a, box_b, iscrowd: bool = False):
 
 
 
+
+
 class Yolov1Loss(nn.Module):
     def __init__(self, lambda_coord=0.5, lambda_noobj=0.5):
         super().__init__()
@@ -68,105 +73,78 @@ class Yolov1Loss(nn.Module):
         self.lambda_noobj = lambda_noobj
         pass
 
-    def forward(self, inputs, targets) -> torch.Tensor:
-        pass
-
-
-
-    def _transform(self, inputs, targets):
-        """
-        inputs (images): List[Tensor]
-        targets: Optional[List[Dict[str, Tensor]]]
-
-        make a copy of targets to avoid modifying it in-place
-        targets = [{k: v for k,v in t.items()} for t in targets]
-        """
-        if targets is not None:
-            targets_copy: List[Dict[str, Tensor]] = []
-            for t in targets:
-                target: Dict[str, Tensor] = {}
-                for k, v in t.items():
-                    target[k] = v
-                targets_copy.append(target)
-            targets = targets_copy
-
-        for i in range(len(images)):
-            image = images[i]
-            target_index = targets[i] if targets is not None else None
-
-            if image.dim() != 3:
-                raise ValueError(f'images is expected to be 3d tensors of shape [C, H, W] {image.shape}')
-            
-            pass
-
-
-
-        pass
-
-
-    def __not_imple(self):
-
-        batch_size = 2
+    def forward(self, inputs, targets) -> Tensor:
+        if self.training and targets is None:
+            raise ValueError
+        
+        batch_size = inputs.size(0)
         grid_size = inputs.size(2)
 
-        coord_mask = torch.cuda.ByteTensor(2, 7, 7, )
-        noobj_mask = torch.cuda.ByteTensor(2, 7, 7, 1)
+        targets = self._transform_targets(targets)
+        print(inputs.size(), targets.size())
 
-        targets = []
+        coord_mask = targets[..., 4] > 0
+        noobj_mask = targets[..., 4] == 0
+        coord_mask = coord_mask.unsqueeze(-1).expand_as(targets)
+        noobj_mask = noobj_mask.unsqueeze(-1).expand_as(targets)
+        print(coord_mask.dtype, noobj_mask.dtype)
 
-        coord_mask = targets  # torch.Size([batch, S, S])
-        noobj_mask = targets
+        coord_pred = inputs[coord_mask].view(-1, 30)  
+        boxes_pred = coord_pred[:, :5*2].contiguous().view(-1, 5)    # [n_coord x B, 5=len([x, y, w, h, conf])]
+        label_pred = coord_pred[:, 5*2:]
+        print(coord_pred.dtype, boxes_pred.dtype)
 
-        coord_mask = coord_mask.unsqueeze(-1).expand_as(targets) # torch.Size([batch, S, S, N])
 
-        coord_mask = coord_mask.unsqueeze(-1).expand_as(target_tensor) # [n_batch, S, S] -> [n_batch, S, S, N]
-        noobj_mask = noobj_mask.unsqueeze(-1).expand_as(target_tensor) # [n_batch, S, S] -> [n_batch, S, S, N]
+        coord_target = targets[coord_mask].view(-1, 30)
+        boxes_target = coord_target[:, :5*2].contiguous().view(-1, 5)# [n_coord x B, 5=len([x, y, w, h, conf])]
+        label_target = coord_target[:, 5*2:]
 
-        coord_pred = pred_tensor[coord_mask].view(-1, N)            # pred tensor on the cells which contain objects. [n_coord, N]
-                                                                    # n_coord: number of the cells which contain objects.
-        bbox_pred = coord_pred[:, :5*B].contiguous().view(-1, 5)    # [n_coord x B, 5=len([x, y, w, h, conf])]
-        class_pred = coord_pred[:, 5*B:]                            # [n_coord, C]
-
-        coord_target = target_tensor[coord_mask].view(-1, N)        # target tensor on the cells which contain objects. [n_coord, N]
-                                                                    # n_coord: number of the cells which contain objects.
-        bbox_target = coord_target[:, :5*B].contiguous().view(-1, 5)# [n_coord x B, 5=len([x, y, w, h, conf])]
-        class_target = coord_target[:, 5*B:]                        # [n_coord, C]
 
         # Compute loss for the cells with no object bbox.
-        noobj_pred = pred_tensor[noobj_mask].view(-1, N)        # pred tensor on the cells which do not contain objects. [n_noobj, N]
+        noobj_pred = inputs[noobj_mask].view(-1, 30)        # pred tensor on the cells which do not contain objects. [n_noobj, N]
                                                                 # n_noobj: number of the cells which do not contain objects.
-        noobj_target = target_tensor[noobj_mask].view(-1, N)    # target tensor on the cells which do not contain objects. [n_noobj, N]
+        noobj_target = targets[noobj_mask].view(-1, 30)    # target tensor on the cells which do not contain objects. [n_noobj, N]
                                                                 # n_noobj: number of the cells which do not contain objects.
-        noobj_conf_mask = torch.cuda.ByteTensor(noobj_pred.size()).fill_(0) # [n_noobj, N]
-        for b in range(B):
-            noobj_conf_mask[:, 4 + b*5] = 1 # noobj_conf_mask[:, 4] = 1; noobj_conf_mask[:, 9] = 1
+        noobj_conf_mask = torch.cuda.BoolTensor(noobj_pred.size()).fill_(0) # [n_noobj, N]
+        print(noobj_conf_mask.dtype, noobj_target.dtype)
+
+        for b in range(2):
+            noobj_conf_mask[:, 4+b*5] = 1 # noobj_conf_mask[:, 4] = 1; noobj_conf_mask[:, 9] = 1
+
         noobj_pred_conf = noobj_pred[noobj_conf_mask]       # [n_noobj, 2=len([conf1, conf2])]
         noobj_target_conf = noobj_target[noobj_conf_mask]   # [n_noobj, 2=len([conf1, conf2])]
-        loss_noobj = F.mse_loss(noobj_pred_conf, noobj_target_conf, reduction='sum')
+        print(noobj_pred_conf.device, noobj_target_conf.device)
+
+        loss_noobj = F.mse_loss(noobj_pred_conf, noobj_target_conf.to('cuda'), reduction='sum')
 
         # Compute loss for the cells with objects.
-        coord_response_mask = torch.cuda.ByteTensor(bbox_target.size()).fill_(0)    # [n_coord x B, 5]
-        coord_not_response_mask = torch.cuda.ByteTensor(bbox_target.size()).fill_(1)# [n_coord x B, 5]
-        bbox_target_iou = torch.zeros(bbox_target.size()).cuda()                    # [n_coord x B, 5], only the last 1=(conf,) is used
+        coord_response_mask = torch.cuda.BoolTensor(boxes_target.size()).fill_(0)    # [n_coord x B, 5]
+        coord_not_response_mask = torch.cuda.BoolTensor(boxes_target.size()).fill_(1)# [n_coord x B, 5]
+
+        
+        bbox_target_iou = torch.zeros(boxes_target.size()).cuda()                    # [n_coord x B, 5], only the last 1=(conf,) is used
 
         # Choose the predicted bbox having the highest IoU for each target bbox.
-        for i in range(0, bbox_target.size(0), B):
-            pred = bbox_pred[i:i+B] # predicted bboxes at i-th cell, [B, 5=len([x, y, w, h, conf])]
-            pred_xyxy = Variable(torch.FloatTensor(pred.size())) # [B, 5=len([x1, y1, x2, y2, conf])]
+        for i in range(0, boxes_target.size(0), 2):
+            pred = boxes_pred[i:i+2] # predicted bboxes at i-th cell, [B, 5=len([x, y, w, h, conf])]
+            pred_xyxy = torch.FloatTensor(pred.size()) # [B, 5=len([x1, y1, x2, y2, conf])]
             # Because (center_x,center_y)=pred[:, 2] and (w,h)=pred[:,2:4] are normalized for cell-size and image-size respectively,
             # rescale (center_x,center_y) for the image-size to compute IoU correctly.
-            pred_xyxy[:,  :2] = pred[:, :2]/float(S) - 0.5 * pred[:, 2:4]
-            pred_xyxy[:, 2:4] = pred[:, :2]/float(S) + 0.5 * pred[:, 2:4]
 
-            target = bbox_target[i] # target bbox at i-th cell. Because target boxes contained by each cell are identical in current implementation, enough to extract the first one.
-            target = bbox_target[i].view(-1, 5) # target bbox at i-th cell, [1, 5=len([x, y, w, h, conf])]
-            target_xyxy = Variable(torch.FloatTensor(target.size())) # [1, 5=len([x1, y1, x2, y2, conf])]
+            pred_xyxy[:,  :2] = pred[:, :2]/float(grid_size) - 0.5 * pred[:, 2:4]
+            pred_xyxy[:, 2:4] = pred[:, :2]/float(grid_size) + 0.5 * pred[:, 2:4]
+
+            target = boxes_target[i] # target bbox at i-th cell. Because target boxes contained by each cell are identical in current implementation, enough to extract the first one.
+            target = boxes_target[i].view(-1, 5) # target bbox at i-th cell, [1, 5=len([x, y, w, h, conf])]
+            target_xyxy = torch.FloatTensor(target.size()) # [1, 5=len([x1, y1, x2, y2, conf])]
             # Because (center_x,center_y)=target[:, 2] and (w,h)=target[:,2:4] are normalized for cell-size and image-size respectively,
             # rescale (center_x,center_y) for the image-size to compute IoU correctly.
-            target_xyxy[:,  :2] = target[:, :2]/float(S) - 0.5 * target[:, 2:4]
-            target_xyxy[:, 2:4] = target[:, :2]/float(S) + 0.5 * target[:, 2:4]
+            target_xyxy[:,  :2] = target[:, :2]/float(grid_size) - 0.5 * target[:, 2:4]
+            target_xyxy[:, 2:4] = target[:, :2]/float(grid_size) + 0.5 * target[:, 2:4]
 
-            iou = self.compute_iou(pred_xyxy[:, :4], target_xyxy[:, :4]) # [B, 1]
+            iou = jaccard(pred_xyxy[..., :4], target_xyxy[..., :4]) # [B, 1]
+            
+
             max_iou, max_index = iou.max(0)
             max_index = max_index.data.cuda()
 
@@ -176,19 +154,100 @@ class Yolov1Loss(nn.Module):
             # "we want the confidence score to equal the intersection over union (IOU) between the predicted box and the ground truth"
             # from the original paper of YOLO.
             bbox_target_iou[i+max_index, torch.LongTensor([4]).cuda()] = (max_iou).data.cuda()
-        bbox_target_iou = Variable(bbox_target_iou).cuda()
-
+        
         # BBox location/size and objectness loss for the response bboxes.
-        bbox_pred_response = bbox_pred[coord_response_mask].view(-1, 5)      # [n_response, 5]
-        bbox_target_response = bbox_target[coord_response_mask].view(-1, 5)  # [n_response, 5], only the first 4=(x, y, w, h) are used
-        target_iou = bbox_target_iou[coord_response_mask].view(-1, 5)        # [n_response, 5], only the last 1=(conf,) is used
-        loss_xy = F.mse_loss(bbox_pred_response[:, :2], bbox_target_response[:, :2], reduction='sum')
-        loss_wh = F.mse_loss(torch.sqrt(bbox_pred_response[:, 2:4]), torch.sqrt(bbox_target_response[:, 2:4]), reduction='sum')
-        loss_obj = F.mse_loss(bbox_pred_response[:, 4], target_iou[:, 4], reduction='sum')
+        bbox_pred_response = boxes_pred[coord_response_mask].view(-1, 5).to('cuda')      # [n_response, 5]
+        bbox_target_response = boxes_target[coord_response_mask].view(-1, 5).to('cuda')  # [n_response, 5], only the first 4=(x, y, w, h) are used
+
+        target_iou = bbox_target_iou[coord_response_mask].view(-1, 5).to('cuda')        # [n_response, 5], only the last 1=(conf,) is used
+
+        loss_xy = F.mse_loss(bbox_pred_response[:, :2].to('cuda'), bbox_target_response[:, :2].to('cuda'), reduction='sum')
+        loss_wh = F.mse_loss(torch.sqrt(bbox_pred_response[:, 2:4].to('cuda')), torch.sqrt(bbox_target_response[:, 2:4]), reduction='sum')
+        loss_obj = F.mse_loss(bbox_pred_response[:, 4].to('cuda'), target_iou[:, 4], reduction='sum')
 
         # Class probability loss for the cells which contain objects.
-        loss_class = F.mse_loss(class_pred, class_target, reduction='sum')
+        loss_class = F.mse_loss(label_pred.to('cuda'), label_target.to('cuda'), reduction='sum')
 
         # Total loss
         loss = self.lambda_coord * (loss_xy + loss_wh) + loss_obj + self.lambda_noobj * loss_noobj + loss_class
         loss = loss / float(batch_size)
+
+        return loss
+
+        
+
+
+    def _transform_targets(self, targets):
+        """
+        inputs (images): List[Tensor]
+        targets: Optional[List[Dict[str, Tensor]]]
+
+        make a copy of targets to avoid modifying it in-place
+        targets = [{k: v for k,v in t.items()} for t in targets]
+        """
+        _check_targets(targets)
+
+        if targets is not None:
+            targets_copy: List[Dict[str, Tensor]] = []
+            for t in targets:
+                target: Dict[str, Tensor] = {}
+                for k, v in t.items():
+                    target[k] = v
+                targets_copy.append(target)
+            targets = targets_copy
+            
+        
+        # STEP 1. Normalized between 0 and 1, 
+        # STEP 2. encode a target (boxes, labels)
+        # Center x, y, w h는 데이터셋에서 변환해라
+        # List[Dict[str, Tensor]]
+        # boxes: Tensor
+        # labels: Tensor      
+        num_boxes = 2
+        grid_size = 7  # grid size
+        num_classes = 20
+        cell_size = 1.0 / grid_size
+
+        transformed_targets = torch.zeros(len(targets), grid_size, grid_size, 5*num_boxes+num_classes)
+    
+        w, h = (448, 448) ## config 처리
+        for b, target in enumerate(targets):
+            boxes = target['boxes']
+            norm_boxes = boxes / torch.Tensor([[w, h, w, h]]).expand_as(boxes).to(boxes.device)
+
+            cxys = (norm_boxes[:, 2:] + norm_boxes[:, :2]) / 2
+            whs = norm_boxes[:, 2:] - norm_boxes[:, :2]
+
+            for box_id in range(boxes.size(0)):
+                cxy = cxys[box_id]
+                wh = whs[box_id]
+                ij = (cxy / cell_size).ceil() - 1.0
+                top_left = ij * cell_size
+                norm_xy = (cxy - top_left) / cell_size
+                i, j = int(ij[0]), int(ij[1])
+
+                for k in range(0, 5*2, 5):
+                    transformed_targets[b, j, i, k:k+4] = torch.cat([norm_xy, wh])
+                    transformed_targets[b, j, i, k+4] = 1.0
+
+                transformed_targets[b, j, i, 5*2:] = target['labels'][box_id]
+
+        return transformed_targets
+
+
+                
+
+
+            
+
+        
+
+
+
+
+    #     pass
+
+
+    # def __not_imple(self):
+
+    #     

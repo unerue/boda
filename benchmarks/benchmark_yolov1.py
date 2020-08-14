@@ -65,7 +65,7 @@ class WheatDataset(Dataset):
         area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
         area = torch.as_tensor(area, dtype=torch.float32)
         # there is only one class
-        labels = torch.ones((records.shape[0],), dtype=torch.int64)
+        labels = torch.ones((records.shape[0],20), dtype=torch.int64)
         # suppose all instances are not crowd
         iscrowd = torch.zeros((records.shape[0],), dtype=torch.int64)
         
@@ -112,7 +112,7 @@ def collate_fn(batch):
 
 train_loader = DataLoader(
     trainset,
-    batch_size=2,
+    batch_size=3,
     shuffle=False,
     num_workers=4,
     collate_fn=collate_fn)
@@ -125,18 +125,23 @@ valid_loader = DataLoader(
     collate_fn=collate_fn)
 
 model = Yolov1Model().to(device)
-
+criterion = Yolov1Loss()
 num_epochs = 2
 model.train()
 for epoch in range(num_epochs):
     for images, targets in train_loader:
         images = [image.to(device) for image in images]
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-
+        print(len(targets), len(images), type(images), type(targets))
         # print(targets[0]['boxes'])
 
         outputs = model(images)
-
+        loss = criterion(outputs, targets)
+        print(loss)
+        
+        model.eval()
+        outputs = model(images)
+        print(outputs)
         sys.exit(0)
         # print(len(outputs))
         # print(outputs[0]['boxes'].size())
