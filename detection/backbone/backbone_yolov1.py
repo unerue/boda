@@ -1,7 +1,8 @@
 import math
 from typing import List
+
 import torch
-import torch.nn as nn
+from torch import nn, Tensor
 import torch.nn.functional as F
 
 
@@ -21,7 +22,6 @@ class TinyBlock(nn.Module):
         self.leaky = nn.LeakyReLU()
         self.mp = nn.MaxPool2d(kernel_size=2, stride=2)
         
-
     def forward(self, x):
         x = self.conv(x)
         x = self.bn(x)
@@ -30,6 +30,7 @@ class TinyBlock(nn.Module):
             x = self.mp(x)
 
         return x
+
 
 class Darknet(nn.Module):
     def __init__(self, num_layers=9, block=TinyBlock):
@@ -65,18 +66,8 @@ class Darknet(nn.Module):
         
 
 def darknet9(pretrained=False, **kwargs):
-    """Constructs a darknet-21.
-    """
     model = Darknet()
     if pretrained:
         model.load_state_dict(torch.load(pretrained))
 
     return model
-
-
-if __name__ == '__main__':
-    from torchsummary import summary
-
-    # darknet = Darknet(9, TinyBlock)
-    darknet = darknet9()
-    print(summary(darknet, input_data=(3, 448, 448), verbose=0))

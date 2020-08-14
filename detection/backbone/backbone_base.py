@@ -1,7 +1,7 @@
 from typing import Tuple, List
 
 
-class Backbone:
+class SelectBackbone:
     def __init__(self, config, backbone_list: List):
         self.config = config
         self.backbone_list = backbone_list

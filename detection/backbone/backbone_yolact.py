@@ -1,5 +1,5 @@
 import torch
-import torch.nn as nn
+from torch import nn, Tensor
 import torch.nn.functional as F
 from torchsummary import summary
 
@@ -49,7 +49,7 @@ class Bottleneck(nn.Module):
 
         return out
 
-class ResNetBackbone(nn.Module):
+class ResNet(nn.Module):
     def __init__(self, layers, block=Bottleneck):
         super().__init__()
         self.num_base_layers = len(layers)
@@ -57,8 +57,8 @@ class ResNetBackbone(nn.Module):
         self.channels = []
 
         self.inplanes = 64
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
-        self.bn1 = nn.BatchNorm2d(64)
+        self.conv = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        self.bn = nn.BatchNorm2d(64)
         self.relu = nn.ReLU()
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
@@ -96,8 +96,8 @@ class ResNetBackbone(nn.Module):
         return self
 
     def forward(self, x):
-        x = self.conv1(x)
-        x = self.bn1(x)
+        x = self.conv(x)
+        x = self.bn(x)
         x = self.relu(x)
         x = self.maxpool(x)
 
@@ -125,11 +125,13 @@ class ResNetBackbone(nn.Module):
 
 
 
+def yoloact_backbone(config):
+    backbone = ResNet(config.get('layers'))
 
 def YolactBackbone(layers=[3, 4, 6, 3]):
     """ Constructs a backbone given a backbone config object (see config.py). """
     # backbone = cfg.type(*cfg.args)
-    backbone = ResNetBackbone(layers)
+    backbone = ResNet(layers)
 
     # Add downsampling layers until we reach the number we need
     selected_layers = [1, 2, 3]
@@ -142,18 +144,3 @@ def YolactBackbone(layers=[3, 4, 6, 3]):
     return backbone
 
 
-
-       
-
-if __name__ == '__main__':
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    backbone = YolactBackbone().to(device)
-    print(summary(backbone, input_data=(3, 550, 550), verbose=0))
-    
-    input_data = torch.randn(1, 3, 550, 550)
-    backbone = YolactBackbone()(input_data)
-    print(len(backbone))
-    print(f'C2: {backbone[0].size()}')
-    print(f'C3: {backbone[1].size()}')
-    print(f'C4: {backbone[2].size()}')
-    print(f'C5: {backbone[3].size()}')

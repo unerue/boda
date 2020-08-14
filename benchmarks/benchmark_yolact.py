@@ -206,3 +206,20 @@ ax.imshow(sample)
 plt.show()
 
 torch.save(model.state_dict(), 'fasterrcnn_resnet50_fpn.pth')
+
+
+
+       
+
+# if __name__ == '__main__':
+#     device = 'cuda' if torch.cuda.is_available() else 'cpu'
+#     backbone = YolactBackbone().to(device)
+#     print(summary(backbone, input_data=(3, 550, 550), verbose=0))
+    
+#     input_data = torch.randn(1, 3, 550, 550)
+#     backbone = YolactBackbone()(input_data)
+#     print(len(backbone))
+#     print(f'C2: {backbone[0].size()}')
+#     print(f'C3: {backbone[1].size()}')
+#     print(f'C4: {backbone[2].size()}')
+#     print(f'C5: {backbone[3].size()}')

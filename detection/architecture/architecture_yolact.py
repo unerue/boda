@@ -1,5 +1,7 @@
+from typing import Tuple, List, Dict
+
 import torch
-import torch.nn as nn
+from torch import nn, Tensor
 import torch.nn.functional as F
 
 
@@ -7,7 +9,7 @@ class FPN(nn.Module):
     """Feature Pyramid Networks (FPN) for YOLACT
     https://arxiv.org/pdf/1612.03144.pdf
     """
-    def __init__(self, in_channels=[512, 1024, 2048]):
+    def __init__(self, in_channels: List = [512, 1024, 2048]):
         super().__init__()
         self.fpn_num_features = 256  # REPLACE CONFIG!
         self.fpn_pad = 1  # REPLACE CONFIG!
@@ -39,7 +41,7 @@ class FPN(nn.Module):
 
         self.interpolate_mode = 'bilinear'
 
-    def forward(self, inputs):
+    def forward(self, inputs: List[Tensor]):
         """
         backbone_outs = [[n, 512, 69, 69], [n, 1024, 35, 35], [n, 2048, 18, 18]]
         In class Yolact's train(), remove C2 from bakebone_outs. So FPN gets three feature outs.
@@ -70,7 +72,7 @@ class FPN(nn.Module):
         return outputs
 
 
-class Yolact:
+class YolactModel:
     def __init__(self, backbone):
         self.backbone = backbone
         self.fpn = FPN([512, 1024, 2048])

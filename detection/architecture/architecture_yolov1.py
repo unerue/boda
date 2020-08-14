@@ -14,13 +14,13 @@ from .architecture_base import _check_inputs
 
 
 class Yolov1PredictionHead(nn.Module):
-    def __init__(self, config=None, num_classes=20, backbone=darknet9()):
+    def __init__(self, config: Dict, backbone: nn.Module = darknet9()):
         super().__init__()
         self.config = config
-        self.num_classes = num_classes
+        self.num_classes = 20 # config.get('num_classes')
         self.backbone = backbone
         self.grid_size = 7
-        self.out_channels = 5*2+num_classes
+        self.out_channels = 5*2+self.num_classes
         self.fc = nn.Linear(256*3*3, 1470)
 
     def forward(self, inputs):
@@ -32,11 +32,10 @@ class Yolov1PredictionHead(nn.Module):
 
 
 class Yolov1Model(nn.Module):
-    def __init__(self):
+    def __init__(self, config=None):
         super().__init__()
-        self.prediction_head = Yolov1PredictionHead()
-
-        # raise NotImplementedError
+        self.config = config
+        self.prediction_head = Yolov1PredictionHead(config)
 
     def forward(self, inputs: List[torch.Tensor]):
         """
@@ -60,18 +59,15 @@ class Yolov1Model(nn.Module):
 
         outputs = self.prediction_head(inputs)
         
-
         if self.training:
-            print(outputs.size())
             return outputs
-        else:
-            # sys.exit(0)
 
+        else:
             grid_x = torch.arange(7, device='cuda').repeat(7, 1).view(1, 1, 7, 7)
             grid_y = torch.arange(7, device='cuda').repeat(7, 1).t().view(1, 1, 7, 7)
 
             norm_x = grid_x * (1./7)
-            norm_y = grid_y * (1./7)     
+            norm_y = grid_y * (1./7)
 
             preds = []
             labels = outputs[...,5*2:]  # torch.Size([B, 7, 7, 20]) -> [[[...num_classes]], [[...]]]
@@ -176,10 +172,8 @@ class Yolov1Model(nn.Module):
 
 
 
-        return outputs
+        
 
-    def _transform(self, outputs):
-        pass
 
         
 
