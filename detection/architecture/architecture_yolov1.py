@@ -24,12 +24,14 @@ class Yolov1PredictionHead(nn.Module):
         self.fc = nn.Linear(256*3*3, 1470)
 
     def forward(self, x: List[Tensor]) -> Tensor:
+        """
+        """
         x = self.backbone(x)
         x = self.fc(torch.flatten(x[-1], 1))
         x = x.view(-1, self.grid_size, self.grid_size, self.out_channels)
         
         return x
-        
+
 
 class Yolov1Model(nn.Module):
     def __init__(self, config: Dict):
