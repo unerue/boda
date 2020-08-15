@@ -63,10 +63,17 @@ class Darknet(nn.Module):
             
         layers.append(block(out_channels, 256, pooling=pooling))
         self.layers.append(nn.Sequential(*layers))
-        
+    
+    def init_weights(self):
+        for m in self.layers:
+            if type(m) == nn.Conv2d:
+                torch.nn.init.kaiming_normal(m.weight)
 
 def darknet9(config: Dict = None):
     model = Darknet()
+
+    model.init_weights()
+    
     if isinstance(config, dict):
         if config.backbone.pretrained:
             model.load_state_dict(torch.load(config.backbone.path))

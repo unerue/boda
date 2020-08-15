@@ -7,18 +7,19 @@ from typing import Tuple, List, Dict, Any, Optional
 
 from .loss_base import _check_targets
 from ..configuration import yolov1_config
-from ..utils import intersect, jaccard
+from ..utils import jaccard
 # from torch.jit.annotations import Tuple, List, Dict, Any, Optional
 
 
 class Yolov1Loss(nn.Module):
-    def __init__(self, lambda_coord=0.5, lambda_noobj=0.5):
+    def __init__(self):
         super().__init__()
-        self.lambda_coord = yolov1_config.lambda_coord
-        self.lambda_noobj = yolov1_config.lambda_noobj
         self.num_boxes = yolov1_config.num_boxes
         self.num_classes = yolov1_config.dataset.num_classes
         self.grid_size = yolov1_config.grid_size
+
+        self.lambda_coord = yolov1_config.lambda_coord
+        self.lambda_noobj = yolov1_config.lambda_noobj
 
     def forward(self, inputs: List[Tensor], targets: List[Dict[str, Tensor]]) -> Tensor:
         """
@@ -30,7 +31,7 @@ class Yolov1Loss(nn.Module):
             raise ValueError
         
         self.device = inputs.device
-        bs = inputs.size(0)
+        bs = inputs.size(0)  # batch size
         nb = self.num_boxes  # B
         gs = inputs.size(2)  # S
 
@@ -84,7 +85,7 @@ class Yolov1Loss(nn.Module):
 
         # [n_noobj, 2=len([conf1, conf2])]
         # [n_noobj, 2=len([conf1, conf2])]
-        noobj_conf_preds = noobj_preds[noobj_conf_mask]       
+        noobj_conf_preds = noobj_preds[noobj_conf_mask]     
         noobj_conf_targets = noobj_targets[noobj_conf_mask]   
         # print(noobj_conf_preds.device, noobj_conf_targets.device)
 
@@ -155,13 +156,13 @@ class Yolov1Loss(nn.Module):
 
         loss_obj = F.mse_loss(
             response_boxes_preds[:, 4], iou_targets[:, 4], reduction='sum')
-        loss_conf = (loss_obj + self.lambda_noobj * loss_noobj) / bs
+        loss_object = (loss_obj + self.lambda_noobj * loss_noobj) / bs
         # Class probability loss for the cells which contain objects.
         loss_class = F.mse_loss(class_preds, class_targets, reduction='sum') / bs
         
         losses = {
             'loss_boxes': loss_boxes,
-            'loss_conf': loss_conf,
+            'loss_object': loss_object,
             'loss_class': loss_class,
         }
 
@@ -217,7 +218,7 @@ class Yolov1Loss(nn.Module):
                 for k in range(0, 5*nb, 5):
                     transformed_targets[b, j, i, k:k+4] = torch.cat([norm_xy, wh])
                     transformed_targets[b, j, i, k+4] = 1.0
-
+                
                 transformed_targets[b, j, i, 5*nb:] = target['labels'][box_id]
         
         return transformed_targets

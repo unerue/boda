@@ -19,123 +19,132 @@ from torchvision.models.detection.rpn import AnchorGenerator
 from torchsummary import summary
 
 import albumentations as A
-from albumentations.pytorch.transforms import ToTensorV2
+from albumentations.pytorch.transforms import ToTensorV2, ToTensor
 
 sys.path.append('../')
+from benchmark_base import parser_txt, PascalVocDataset
 from detection import yolov1_base_config
 from detection import darknet9, Yolov1Model, Yolov1Loss
 from detection.utils import AverageMeter
 
 
-DIR_INPUT = './data/global-wheat-detection'
-DIR_TRAIN_IMAGES = os.path.join(DIR_INPUT, 'train')
-DIR_VALID_IMAGES = os.path.join(DIR_INPUT, 'valid')
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
-class WheatDataset(Dataset):
-    def __init__(self, df, image_dir, transform=None):
-        super().__init__()
-        self.df = df
-        self.image_ids = df['image_id'].unique()
-        self.image_dir = image_dir
-        self.transform = transform
-             
-    def __getitem__(self, index: int):
-        image_id = self.image_ids[index]
-        records = self.df[self.df['image_id'] == image_id]
 
-        image = cv2.imread(os.path.join(self.image_dir, f'{image_id}.jpg'), cv2.IMREAD_COLOR)
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB).astype(np.float32)
-        image /= 255.0
 
-        boxes = records[['x', 'y', 'w', 'h']].values.astype(np.int32)
-        boxes[:, 2] = boxes[:, 0] + boxes[:, 2]
-        boxes[:, 3] = boxes[:, 1] + boxes[:, 3]
+
+
+
+
+# def parser_txt(path):
+#     """Test labels parser
+
+#     """
+#     with open(path) as f:
+#         lines = f.readlines()
+
+#     # data = {
+#     #     'image_ids': [],
+#     #     'boxes': [],
+#     #     'labels': [],
+#     # }
+#     data = {}
+#     for line in lines:
+#         line = line.strip().split()
+#         # data['image_ids'].append(line[0])
+#         image_id = line[0]
+#         boxes, labels = [], []
+#         for i in range((len(line)-1) // 5):
+#             x_min = float(line[i*5 + 1])
+#             y_min = float(line[i*5 + 2])
+#             x_max = float(line[i*5 + 3])
+#             y_max = float(line[i*5 + 4])
+#             label = int(line[i*5 + 5])
+
+#             boxes.append([x_min, y_min, x_max, y_max])
+#             labels.append(label)
         
-        area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
-        area = torch.as_tensor(area, dtype=torch.float32)
-        # there is only one class
-        labels = torch.ones((records.shape[0],20), dtype=torch.int64)
-        # suppose all instances are not crowd
-        iscrowd = torch.zeros((records.shape[0],), dtype=torch.int64)
-        
-        target = {
-            'image_id': torch.tensor([index]),
-            'boxes': boxes,
-            'labels': labels,
-            'area': area,
-            'iscrowd': iscrowd
-        }
-        if self.transform:
-            sample = {
-                'image': image,
-                'bboxes': boxes,
-                'labels': labels,
-            }
-            sample = self.transform(**sample)
-            image = sample['image']
-            target['boxes'] = torch.tensor(sample['bboxes'])
-        
-        return image, target
+#         data[image_id] = {
+#             'boxes': [],
+#             'labels': [],
+#         }
+#         data[image_id]['boxes'] = boxes
+#         data[image_id]['labels'] = labels
 
-    def __len__(self) -> int:
-        return len(self.image_ids)
+#     return data
+
+
+
+# data = parser_txt(yolov1_base_config.dataset.train_labels)
+# # print(data)
+
+# print(len(data.keys()))
+# ssibal = []
+# for path in data.keys():
+#     # print('./data/pascal-voc/VOC2007/JPEGImages/'+path)
+#     try:
+#         image = cv2.imread('./data/pascal-voc/VOC2007/train/JPEGImages/'+path, cv2.IMREAD_COLOR)
+#         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+#         # print(image)
+#     except:
+#         ssibal.append(path)
+# print(len(ssibal))
+# print(ssibal)
+# sys.exit(0)
 
 
 def get_transform(train=True):
     return A.Compose([
         A.Resize(448, 448),
-        ToTensorV2(p=1.0)], 
-        bbox_params={
-            'format': 'pascal_voc', 
-            'label_fields': ['labels']})
+        ToTensor(num_classes=20),
+        # ToTensorV2(p=1.0)
+        ], 
+        bbox_params={'format': 'pascal_voc', 'label_fields': ['category_ids']})
 
-
-train_labels = pd.read_csv(os.path.join(DIR_INPUT, 'train_labels.csv'))
-valid_labels = pd.read_csv(os.path.join(DIR_INPUT, 'valid_labels.csv'))
-
-trainset = WheatDataset(train_labels, DIR_TRAIN_IMAGES, get_transform())
-validset = WheatDataset(valid_labels, DIR_VALID_IMAGES, get_transform())
+trainset = PascalVocDataset(yolov1_base_config, get_transform())
 
 def collate_fn(batch):
     return tuple(zip(*batch))
 
 train_loader = DataLoader(
     trainset,
-    batch_size=3,
-    shuffle=False,
-    num_workers=4,
+    batch_size=32,
+    shuffle=True,
+    num_workers=8,
     collate_fn=collate_fn)
 
-valid_loader = DataLoader(
-    validset,
-    batch_size=8,
-    shuffle=False,
-    num_workers=4,
-    collate_fn=collate_fn)
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+
+
 
 
 model = Yolov1Model(yolov1_base_config).to(device)
+optimizer = torch.optim.SGD(model.parameters(), 0.001)
 criterion = Yolov1Loss()
-num_epochs = 2
+num_epochs = 100
+
+
 model.train()
 for epoch in range(num_epochs):
     for images, targets in train_loader:
         images = [image.to(device) for image in images]
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+        # sys.exit(0)
+        optimizer.zero_grad()
         # print(targets[0]['boxes'])
 
         outputs = model(images)
         losses = criterion(outputs, targets)
-        print(losses)
+        print(f"Epoch #{epoch} loss: {losses}")
         losses = sum(loss for loss in losses.values())
-        
+        print(f"loss: {losses}")
         losses.backward()
-        model.eval()
-        outputs = model(images)
-        print(outputs)
-        sys.exit(0)
+        optimizer.step()
+        
+        
+        # print(outputs)
+        # sys.exit(0)
         # print(len(outputs))
         # print(outputs[0]['boxes'].size())
         # print(outputs[0]['boxes'].view(2, -1, 4).size())
@@ -148,16 +157,16 @@ for epoch in range(num_epochs):
         
         
         
-        loss_value = losses.item()
+        # loss_value = losses.item()
 
-        loss_hist.update(loss_value)
+        # loss_hist.update(loss_value)
 
-        optimizer.zero_grad()
-        losses.backward()
-        optimizer.step()
+        
+        # losses.backward()
+        # optimizer.step()
 
     
-    print(f"Epoch #{epoch} loss: {losses}")   
+    
 
 sys.exit(0)
 

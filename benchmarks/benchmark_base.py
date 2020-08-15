@@ -1,69 +1,152 @@
+#-*- coding:utf-8 -*-
 import os
 import sys
+import glob
+from typing import Tuple, List, Dict
 
 import cv2
-import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 
 import torch
 from torch.utils.data import DataLoader, Dataset
 
-import albumentations as A
-from albumentations.pytorch.transforms import ToTensorV2
 
+def parser_txt(path):
+    """Test labels parser
+
+    """
+    with open(path) as f:
+        lines = f.readlines()
+
+    # data = {
+    #     'image_ids': [],
+    #     'boxes': [],
+    #     'labels': [],
+    # }
+    data = {}
+    for line in lines:
+        line = line.strip().split()
+        # data['image_ids'].append(line[0])
+        image_id = line[0]
+        boxes, labels = [], []
+        for i in range((len(line)-1) // 5):
+            x_min = float(line[i*5 + 1])
+            y_min = float(line[i*5 + 2])
+            x_max = float(line[i*5 + 3])
+            y_max = float(line[i*5 + 4])
+            label = int(line[i*5 + 5])
+
+            boxes.append([x_min, y_min, x_max, y_max])
+            labels.append(label)
+        
+        data[image_id] = {
+            'boxes': [],
+            'labels': [],
+        }
+        data[image_id]['boxes'] = boxes
+        data[image_id]['labels'] = labels
+
+    return data
+
+def parser_xml(path):
+    return 
 
 
 class PascalVocDataset(Dataset):
     """Pascal VOC dataset"""
-    def __init__(self, df, image_dir, transform=None):
+    def __init__(self, config: Dict, transforms, sample: bool = True, is_train: bool = True):
         super().__init__()
- 
-        self.df = df
-        self.image_ids = df['image_id'].unique()
-        self.image_dir = image_dir
-        self.transform = transform
-             
+        self.config = config
+        self.transforms = transforms
+        self.sample = sample
+        self.is_train = is_train
+        self.num_classes = self.config.dataset.num_classes
+
+        if self.sample and self.is_train:
+            self.image_dir = self.config.dataset.train_images
+            self.labels = parser_txt(self.config.dataset.train_labels)
+        elif self.sample and not self.is_train:
+            self.image_dir = self.config.dataset.test_images
+            self.labels = parser_txt(self.config.dataset.test_labels)
+        
+        self.image_ids = list(self.labels.keys())
+        
     def __getitem__(self, index: int):
         image_id = self.image_ids[index]
-        records = self.df[self.df['image_id'] == image_id]
-
-        image = cv2.imread(os.path.join(self.image_dir, f'{image_id}.jpg'), cv2.IMREAD_COLOR)
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB).astype(np.float32)
-        image /= 255.0
-
-        boxes = records[['x', 'y', 'w', 'h']].values.astype(np.int32)
-        boxes[:, 2] = boxes[:, 0] + boxes[:, 2]
-        boxes[:, 3] = boxes[:, 1] + boxes[:, 3]
+        data = self.labels[image_id]
         
-        area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
-        area = torch.as_tensor(area, dtype=torch.float32)
-        # there is only one class
-        labels = torch.ones((records.shape[0],20), dtype=torch.int64)
-        # suppose all instances are not crowd
-        iscrowd = torch.zeros((records.shape[0],), dtype=torch.int64)
+        image = cv2.imread(os.path.join(self.image_dir, image_id), cv2.IMREAD_COLOR)
+        
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        
+        
+        
+
+            
+        
+        boxes = np.asarray(data['boxes'], dtype=np.int64)
+        indices = torch.as_tensor(data['labels'], dtype=torch.int64).view(-1, 1)
+        labels = torch.zeros(indices.size(0), self.num_classes).scatter_(1, indices, 1)
         
         target = {
-            'image_id': torch.tensor([index]),
             'boxes': boxes,
             'labels': labels,
-            'area': area,
-            'iscrowd': iscrowd
         }
-        if self.transform:
+        
+        if self.transforms is not None:
             sample = {
                 'image': image,
                 'bboxes': boxes,
-                'labels': labels,
+                'category_ids': data['labels'],
             }
-            sample = self.transform(**sample)
+            sample = self.transforms(**sample)
             image = sample['image']
-            target['boxes'] = torch.tensor(sample['bboxes'])
-        
+            target['boxes'] = torch.as_tensor(sample['bboxes'])
+
+        # print(target)
         return image, target
 
     def __len__(self) -> int:
         return len(self.image_ids)
+        
+        
+        # records = self.df[self.df['image_id'] == image_id]
+
+        # image = cv2.imread(os.path.join(self.image_dir, f'{image_id}.jpg'), cv2.IMREAD_COLOR)
+        # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB).astype(np.float32)
+        # image /= 255.0
+
+        # boxes = records[['x', 'y', 'w', 'h']].values.astype(np.int32)
+        # boxes[:, 2] = boxes[:, 0] + boxes[:, 2]
+        # boxes[:, 3] = boxes[:, 1] + boxes[:, 3]
+        
+        # area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
+        # area = torch.as_tensor(area, dtype=torch.float32)
+        # # there is only one class
+        # labels = torch.ones((records.shape[0],20), dtype=torch.int64)
+        # # suppose all instances are not crowd
+        # iscrowd = torch.zeros((records.shape[0],), dtype=torch.int64)
+        
+        # target = {
+        #     'image_id': torch.tensor([index]),
+        #     'boxes': boxes,
+        #     'labels': labels,
+        #     'area': area,
+        #     'iscrowd': iscrowd
+        # }
+        # if self.transform:
+        #     sample = {
+        #         'image': image,
+        #         'bboxes': boxes,
+        #         'labels': labels,
+        #     }
+        #     sample = self.transform(**sample)
+        #     image = sample['image']
+        #     target['boxes'] = torch.tensor(sample['bboxes'])
+        
+        # return image, target
+
+
 
 
 def get_transform(train=True):
@@ -75,27 +158,27 @@ def get_transform(train=True):
             'label_fields': ['labels']})
 
 
-train_labels = pd.read_csv(os.path.join(DIR_INPUT, 'train_labels.csv'))
-valid_labels = pd.read_csv(os.path.join(DIR_INPUT, 'valid_labels.csv'))
+# train_labels = pd.read_csv(os.path.join(DIR_INPUT, 'train_labels.csv'))
+# valid_labels = pd.read_csv(os.path.join(DIR_INPUT, 'valid_labels.csv'))
 
-trainset = WheatDataset(train_labels, DIR_TRAIN_IMAGES, get_transform())
-validset = WheatDataset(valid_labels, DIR_VALID_IMAGES, get_transform())
+# trainset = WheatDataset(train_labels, DIR_TRAIN_IMAGES, get_transform())
+# validset = WheatDataset(valid_labels, DIR_VALID_IMAGES, get_transform())
 
-def collate_fn(batch):
-    return tuple(zip(*batch))
+# def collate_fn(batch):
+#     return tuple(zip(*batch))
 
-train_loader = DataLoader(
-    trainset,
-    batch_size=3,
-    shuffle=False,
-    num_workers=4,
-    collate_fn=collate_fn)
+# train_loader = DataLoader(
+#     trainset,
+#     batch_size=3,
+#     shuffle=False,
+#     num_workers=4,
+#     collate_fn=collate_fn)
 
-valid_loader = DataLoader(
-    validset,
-    batch_size=8,
-    shuffle=False,
-    num_workers=4,
-    collate_fn=collate_fn)
+# valid_loader = DataLoader(
+#     validset,
+#     batch_size=8,
+#     shuffle=False,
+#     num_workers=4,
+#     collate_fn=collate_fn)
 
 

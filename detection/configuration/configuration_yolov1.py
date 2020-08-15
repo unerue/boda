@@ -39,11 +39,11 @@ model_base = Config({
 })
 
 pascal_voc_datset = dataset_base.copy({
-    'name': 'pascal voc 2012',
-    'train_images': './data',
-    'valid_images': './data',
-    'train_labels': './data/',
-    'valid_labels': './data/',
+    'name': 'pascal voc 2007',
+    'train_images': './data/pascal-voc/VOC2007/train/JPEGImages',
+    'test_images': './data/pasca-voc/VOC2007/test/JPEGImages',
+    'train_labels': './data/pascal-voc/VOC2007/train_labels.txt',
+    'test_labels': './data/pascal-voc/VOC2007/test_labels.txt',
     'class_names': PASCAL_CLASSES,
     'num_classes': 20,
 })
