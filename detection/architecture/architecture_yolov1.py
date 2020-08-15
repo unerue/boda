@@ -64,22 +64,23 @@ class Yolov1Model(nn.Module):
         else:
             with torch.no_grad():
                 outputs = self.prediction_head(inputs)
-
+    
+    
             device = outputs.device
             gs = self.config.grid_size
             nb = self.config.num_boxes
             w, h = (448, 448)
-            # cell_size = 1./gs
+            cell_size = 1./gs
             
             grid_x = torch.arange(gs, device=device).repeat(gs, 1).view(1, 1, gs, gs)
             grid_y = torch.arange(gs, device=device).repeat(gs, 1).t().view(1, 1, gs, gs)
 
-            norm_x = grid_x * (1./gs)
-            norm_y = grid_y * (1./gs)
+            norm_x = grid_x * cell_size
+            norm_y = grid_y * cell_size
 
             preds = []
             # torch.Size([B, 7, 7, 30]) -> [[[...num_classes]], [[...]]]
-            labels = outputs[..., 5*nb:]  
+            labels = outputs[..., 5*nb:]
             # torch.Size([2, 7, 7])
             labels_proba = outputs[..., 5*nb:].argmax(-1)  
             for i in range(0, 5*nb, 5):
@@ -92,25 +93,82 @@ class Yolov1Model(nn.Module):
                 if not mask.size(0):
                     continue
             
-                boxes[..., 0] = boxes[..., 0] * (1./7) + norm_x
-                boxes[..., 1] = boxes[..., 1] * (1./7) + norm_y
+                boxes[..., 0] = boxes[..., 0] * cell_size + norm_x
+                boxes[..., 1] = boxes[..., 1] * cell_size + norm_y
 
                 norm_xy = boxes[..., :2]
                 norm_wh = boxes[..., 2:]
 
                 boxes[..., :2] = norm_xy - 0.5 * norm_wh
                 boxes[..., 2:] = norm_xy + 0.5 * norm_wh
+
+                # boxes = torch.cat([boxes[...,0]*w, boxes[...,1]*w, boxes[...,2]*h, boxes[...,3]*h], 1)
                 preds.append({
                     'boxes': boxes[mask],
                     'scores': scores[mask],
                     'labels': labels[mask]
                 })
             
-            print('='*100)
-            print(boxes.size())
-            print([boxes[...,0]*w, boxes[...,1]*w, boxes[...,2]*h, boxes[...,3]*h])
-
             return preds
+
+    def _decode_outputs(self, inputs):
+        return NotImplementedError
+
+    def _encode_outputs(self, inputs):
+        # Get detected boxes_detected, labels, confidences, class-scores.
+        # Return to self.decode(outputs)
+        # boxes_normalized_all, class_labels_all, confidences_all, class_scores_all = self.decode(pred_tensor)
+        
+        if boxes_normalized_all.size(0) == 0:
+            return [], [], [] # if no box found, return empty lists.
+
+        # Apply non maximum supression for boxes of each class.
+        boxes_normalized, class_labels, probs = [], [], []
+
+        for class_label in range(len(self.class_name_list)):
+            mask = (class_labels_all == class_label)
+            if torch.sum(mask) == 0:
+                continue # if no box found, skip that class.
+
+            boxes_normalized_masked = boxes_normalized_all[mask]
+            class_labels_maked = class_labels_all[mask]
+            confidences_masked = confidences_all[mask]
+            class_scores_masked = class_scores_all[mask]
+
+            ids = self.nms(boxes_normalized_masked, confidences_masked)
+
+            boxes_normalized.append(boxes_normalized_masked[ids])
+            class_labels.append(class_labels_maked[ids])
+            probs.append(confidences_masked[ids] * class_scores_masked[ids])
+
+        boxes_normalized = torch.cat(boxes_normalized, 0)
+        class_labels = torch.cat(class_labels, 0)
+        probs = torch.cat(probs, 0)
+
+        # Postprocess for box, labels, probs.
+        boxes_detected, class_names_detected, probs_detected = [], [], []
+        for b in range(boxes_normalized.size(0)):
+            box_normalized = boxes_normalized[b]
+            class_label = class_labels[b]
+            prob = probs[b]
+
+            x1, x2 = w * box_normalized[0], w * box_normalized[2] # unnormalize x with image width.
+            y1, y2 = h * box_normalized[1], h * box_normalized[3] # unnormalize y with image height.
+            boxes_detected.append(((x1, y1), (x2, y2)))
+
+            class_label = int(class_label) # convert from LongTensor to int.
+            class_name = self.class_name_list[class_label]
+            class_names_detected.append(class_name)
+
+            prob = float(prob) # convert from Tensor to float.
+            probs_detected.append(prob)
+
+        return NotImplementedError
+            # print('='*100)
+            # print(boxes.size())
+            # print([boxes[...,0]*w, boxes[...,1]*w, boxes[...,2]*h, boxes[...,3]*h])
+
+            
             # print(preds)
             # preds: torch.Size([num_boxes, 4]), torch.Size([num_boxes, 1]), torch.Size([num_boxes, 20])        
             # NMS 후 selected boxes에 담아서 원본 이미지 크기로 다시 재변환

@@ -124,13 +124,14 @@ for epoch in range(num_epochs):
     for images, targets in train_loader:
         images = [image.to(device) for image in images]
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-        print(len(targets), len(images), type(images), type(targets))
         # print(targets[0]['boxes'])
 
         outputs = model(images)
-        loss = criterion(outputs, targets)
-        print(loss)
-        loss.backward()
+        losses = criterion(outputs, targets)
+        print(losses)
+        losses = sum(loss for loss in losses.values())
+        
+        losses.backward()
         model.eval()
         outputs = model(images)
         print(outputs)
@@ -146,7 +147,7 @@ for epoch in range(num_epochs):
 
         
         
-        losses = sum(loss for loss in loss_dict.values())
+        
         loss_value = losses.item()
 
         loss_hist.update(loss_value)
