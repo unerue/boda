@@ -110,41 +110,79 @@ train_loader = DataLoader(
     trainset,
     batch_size=32,
     shuffle=True,
-    num_workers=8,
+    num_workers=4,
     collate_fn=collate_fn)
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-
-
-
-
 model = Yolov1Model(yolov1_base_config).to(device)
 optimizer = torch.optim.SGD(model.parameters(), 0.001)
 criterion = Yolov1Loss()
-num_epochs = 100
 
 
-model.train()
+
+num_epochs = 30
 for epoch in range(num_epochs):
-    for images, targets in train_loader:
+    model.train()
+    for i, (images, targets) in enumerate(train_loader):
         images = [image.to(device) for image in images]
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+        # print(images)
+        # print('='*100)
+        # print(targets)
+        # print('='*100)
         # sys.exit(0)
         optimizer.zero_grad()
         # print(targets[0]['boxes'])
 
         outputs = model(images)
+        # print(outputs[0][0])
+        # print('='*100)
         losses = criterion(outputs, targets)
-        print(f"Epoch #{epoch} loss: {losses}")
+        print('='*100)
+        
+        print(f"Epoch #{epoch} id: {i} loss: {losses}")
         losses = sum(loss for loss in losses.values())
         print(f"loss: {losses}")
+        # sys.exit(0)
+        
         losses.backward()
         optimizer.step()
-        
-        
-        # print(outputs)
-        # sys.exit(0)
+
+        # if (i+1) % 40 == 0:
+        #     break
+
+model.eval()
+for (images, targets) in train_loader:
+    images = [image.to(device) for image in images]
+    outputs = model(images)
+    break
+
+image = images[0]
+
+print('#'*100)
+    
+    # print(outputs)
+
+import matplotlib.pyplot as plt
+
+
+fig, ax = plt.subplots(1, 1, figsize=(16, 8))
+
+image = image.permute(1, 2, 0).detach().cpu().numpy()
+for box in outputs[0]['boxes']:
+    cv2.rectangle(image, (int(box[0]), int(box[1])), (int(box[2]), int(box[3])), (255, 0, 0), 2)
+    
+ax.set_axis_off()
+ax.imshow(image)
+plt.show()
+
+print(outputs[0]['boxes'])
+print(torch.max(outputs[0]['labels'], 1))
+# sys.exit(0)
+
+
+
         # print(len(outputs))
         # print(outputs[0]['boxes'].size())
         # print(outputs[0]['boxes'].view(2, -1, 4).size())
@@ -168,34 +206,34 @@ for epoch in range(num_epochs):
     
     
 
-sys.exit(0)
+# sys.exit(0)
 
-images, targets = next(iter(valid_loader))
-images = list(img.to(device) for img in images)
-targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+# images, targets = next(iter(valid_loader))
+# images = list(img.to(device) for img in images)
+# targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
-boxes = targets[1]['boxes'].cpu().numpy().astype(np.int32)
-sample = images[1].permute(1,2,0).cpu().numpy()
+# boxes = targets[1]['boxes'].cpu().numpy().astype(np.int32)
+# sample = images[1].permute(1,2,0).cpu().numpy()
 
-model.eval()
-cpu_device = torch.device("cpu")
+# model.eval()
+# cpu_device = torch.device("cpu")
 
-outputs = model(images)
-print(outputs)
-outputs = [{k: v.to(cpu_device) for k, v in t.items()} for t in outputs]
+# outputs = model(images)
+# print(outputs)
+# outputs = [{k: v.to(cpu_device) for k, v in t.items()} for t in outputs]
 
 
 
-fig, ax = plt.subplots(1, 1, figsize=(16, 8))
+# fig, ax = plt.subplots(1, 1, figsize=(16, 8))
 
-for box in boxes:
-    cv2.rectangle(sample,
-                  (box[0], box[1]),
-                  (box[2], box[3]),
-                  (220, 0, 0), 3)
+# for box in boxes:
+#     cv2.rectangle(sample,
+#                   (box[0], box[1]),
+#                   (box[2], box[3]),
+#                   (220, 0, 0), 3)
     
-ax.set_axis_off()
-ax.imshow(sample)
-plt.show()
+# ax.set_axis_off()
+# ax.imshow(sample)
+# plt.show()
 
-torch.save(model.state_dict(), 'fasterrcnn_resnet50_fpn.pth')
+# torch.save(model.state_dict(), 'fasterrcnn_resnet50_fpn.pth')

@@ -44,6 +44,10 @@ class Yolov1Loss(nn.Module):
         noobj_mask = targets[..., 4] == 0
         coord_mask = coord_mask.unsqueeze(-1).expand_as(targets)#.to(self.device)
         noobj_mask = noobj_mask.unsqueeze(-1).expand_as(targets)#.to(self.device)
+
+        # print(coord_mask[0][3])
+        # print(noobj_mask[0][3])
+        # print('='*100)
         # print(coord_mask.size(), noobj_mask.size())
         # print(coord_mask.dtype, noobj_mask.dtype)
         # print(coord_mask.device, noobj_mask.device)
@@ -57,14 +61,22 @@ class Yolov1Loss(nn.Module):
         # print(coord_preds.size(), boxes_preds.size(), class_preds.size())
         # print(coord_preds.dtype, boxes_preds.dtype, class_preds.dtype)
         # print(coord_preds.device, boxes_preds.device, class_preds.device)
-
+        # print(coord_preds)
+        # print(boxes_preds)
+        # print(class_preds)
+        # print('='*100)
         # Covert targets
         coord_targets = targets[coord_mask].view(-1, 5*nb+self.num_classes)
         # [n_coord x B, 5=len([x, y, w, h, conf])]
         boxes_targets = coord_targets[:, :5*nb].contiguous().view(-1, 5)
         class_targets = coord_targets[:, 5*nb:]
+        # print(coord_targets.size(), boxes_targets.size(), class_targets.size())
+        # print(coord_targets.dtype, boxes_targets.dtype, class_targets.dtype)
         # print(coord_targets.device, boxes_targets.device, class_targets.device)
-        
+        # print(coord_targets)
+        # print(boxes_targets)
+        # print(class_targets)
+        # print('='*100)
         # Compute loss for the cells with no object bbox.
         # pred tensor on the cells which do not contain objects. [n_noobj, N]
         # n_noobj: number of the cells which do not contain objects.
@@ -76,21 +88,22 @@ class Yolov1Loss(nn.Module):
         # [n_noobj, N]
         noobj_conf_mask = torch.BoolTensor(noobj_preds.size()).fill_(False).to(self.device)
         # print(noobj_conf_mask[0])
-        # print(noobj_conf_mask.dtype, noobj_preds.dtype)
-        # print(noobj_conf_mask.device, noobj_targets.device)
-
+        # print(noobj_preds.size(), noobj_targets.size(), noobj_conf_mask.size())
+        # print(noobj_preds.dtype, noobj_targets.dtype, noobj_conf_mask.dtype)
+        # print(noobj_preds.device, noobj_targets.device, noobj_conf_mask.device)
+        # print('='*100)
         # noobj_conf_mask[:, 4] = 1; noobj_conf_mask[:, 9] = 1
         for b in range(nb):
-            noobj_conf_mask[:, 4+b*5] = True
-
+            noobj_conf_mask[:, 4+b*5] = 1
+        # print(noobj_conf_mask[noobj_conf_mask > 0])
         # [n_noobj, 2=len([conf1, conf2])]
         # [n_noobj, 2=len([conf1, conf2])]
-        noobj_conf_preds = noobj_preds[noobj_conf_mask]     
-        noobj_conf_targets = noobj_targets[noobj_conf_mask]   
+        noobj_conf_preds = noobj_preds[noobj_conf_mask] 
+        noobj_conf_targets = noobj_targets[noobj_conf_mask]
         # print(noobj_conf_preds.device, noobj_conf_targets.device)
 
         loss_noobj = F.mse_loss(noobj_conf_preds, noobj_conf_targets, reduction='sum')
-
+        # print(loss_noobj)
         # Compute loss for the cells with objects.
         # We assign one predictor to be “responsible” for predicting an object based on which
         # prediction has the highest current IOU with the ground truth.
@@ -133,8 +146,8 @@ class Yolov1Loss(nn.Module):
             # print(max_iou.dtype, max_index.dtype)
             # print(max_iou.device, max_index.device)
             
-            coord_response_mask[i+max_index] = True
-            coord_not_response_mask[i+max_index] = False
+            coord_response_mask[i+max_index] = 1
+            coord_not_response_mask[i+max_index] = 0
             # "we want the confidence score to equal the intersection over union (IOU) between the predicted box and the ground truth"
             # from the original paper of YOLO.
             iou_targets[i+max_index, torch.LongTensor([4])] = max_iou
@@ -143,15 +156,22 @@ class Yolov1Loss(nn.Module):
         response_boxes_preds = boxes_preds[coord_response_mask].view(-1, 5)# .to('cuda')      # [n_response, 5]
         response_boxes_targets = boxes_targets[coord_response_mask].view(-1, 5)  # [n_response, 5], only the first 4=(x, y, w, h) are used
         # print(response_boxes_preds.size(), response_boxes_targets.size())
-
+        # print('-'*100)
+        # print(response_boxes_preds)
+        # print(response_boxes_targets)
+        # print('-'*100)
         iou_targets = iou_targets[coord_response_mask].view(-1, 5)#.to('cuda')        # [n_response, 5], only the last 1=(conf,) is used
-
+        # print(iou_targets)
+        # print('-'*100)
         loss_xy = F.mse_loss(
             response_boxes_preds[:, :2], 
             response_boxes_targets[:, :2], reduction='sum')
+
         loss_wh = F.mse_loss(
-            torch.sqrt(response_boxes_preds[:, 2:4]), 
+            torch.sqrt(torch.abs(response_boxes_preds[:, 2:4])), 
             torch.sqrt(response_boxes_targets[:, 2:4]), reduction='sum')
+        
+        # print(loss_xy.item(), loss_wh.item())
         loss_boxes = (self.lambda_coord * (loss_xy + loss_wh)) / bs
 
         loss_obj = F.mse_loss(
@@ -159,7 +179,7 @@ class Yolov1Loss(nn.Module):
         loss_object = (loss_obj + self.lambda_noobj * loss_noobj) / bs
         # Class probability loss for the cells which contain objects.
         loss_class = F.mse_loss(class_preds, class_targets, reduction='sum') / bs
-        
+        # print(loss_boxes, loss_object, loss_class)
         losses = {
             'loss_boxes': loss_boxes,
             'loss_object': loss_object,
@@ -221,6 +241,7 @@ class Yolov1Loss(nn.Module):
                 
                 transformed_targets[b, j, i, 5*nb:] = target['labels'][box_id]
         
+        # print(transformed_targets[0][3])
         return transformed_targets
 
 
