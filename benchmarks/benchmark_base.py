@@ -176,3 +176,8 @@ def get_transform(train=True):
 #     collate_fn=collate_fn)
 
 
+class CocoDataset(Dataset):
+    """Pascal VOC dataset"""
+    def __init__(self, config: Dict, transforms, sample: bool = True, is_train: bool = True):
+        super().__init__()
+        pass
