@@ -32,10 +32,6 @@ from detection.utils import AverageMeter
 
 
 
-
-
-
-
 # def parser_txt(path):
 #     """Test labels parser
 
@@ -118,18 +114,18 @@ test_loader = DataLoader(
     trainset,
     batch_size=1,
     shuffle=True,
-    num_workers=4,
+    num_workers=1,
     collate_fn=collate_fn)
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 model = Yolov1Model(yolov1_base_config).to(device)
-optimizer = torch.optim.SGD(model.parameters(), 0.0001)
+optimizer = torch.optim.SGD(model.parameters(), 0.001)
 criterion = Yolov1Loss()
 
 
 
-num_epochs = 10
+num_epochs = 40
 for epoch in range(num_epochs):
     model.train()
     for i, (images, targets) in enumerate(train_loader):

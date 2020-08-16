@@ -129,6 +129,7 @@ class Yolov1Model(nn.Module):
         # print(len(preds))
         for pred in preds:
             boxes = pred['boxes']
+            # boxes = xywh2xyxy(boxes)
             if boxes.size(0) == 0:
                 continue
 
@@ -243,7 +244,7 @@ def non_maximum_supression(inputs, threshold=0.5):
         boxes = pred['boxes']
         scores = pred['scores']
 
-        boxes = xywh2xyxy(boxes)
+        # boxes = xywh2xyxy(boxes)
         x1, y1 = boxes[:, 0], boxes[:, 1]
         x2, y2 = boxes[:, 2], boxes[:, 3]
 

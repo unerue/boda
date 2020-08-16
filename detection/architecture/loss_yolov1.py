@@ -237,7 +237,7 @@ class Yolov1Loss(nn.Module):
 
                 for k in range(0, 5*nb, 5):
                     transformed_targets[b, j, i, k:k+4] = torch.cat([norm_xy, wh])
-                    transformed_targets[b, j, i, k+4] = 1.0
+                    transformed_targets[b, j, i, k+4] = 1
                 
                 transformed_targets[b, j, i, 5*nb:] = target['labels'][box_id]
         
