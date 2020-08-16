@@ -106,7 +106,7 @@ class ResNet(nn.Module):
             x = layer(x)
             outs.append(x)
 
-        return tuple(outs)
+        return outs
 
     def init_backbone(self, path):
         state_dict = torch.load(path)
@@ -128,7 +128,7 @@ class ResNet(nn.Module):
 def yoloact_backbone(config):
     backbone = ResNet(config.get('layers'))
 
-def YolactBackbone(layers=[3, 4, 6, 3]):
+def yoloact_resnet50(layers=[3, 4, 6, 3]):
     """ Constructs a backbone given a backbone config object (see config.py). """
     # backbone = cfg.type(*cfg.args)
     backbone = ResNet(layers)

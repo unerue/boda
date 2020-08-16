@@ -102,13 +102,21 @@ def get_transform(train=True):
         bbox_params={'format': 'pascal_voc', 'label_fields': ['category_ids']})
 
 trainset = PascalVocDataset(yolov1_base_config, get_transform())
+testset = PascalVocDataset(yolov1_base_config, get_transform(), is_train=False)
 
 def collate_fn(batch):
     return tuple(zip(*batch))
 
 train_loader = DataLoader(
     trainset,
-    batch_size=32,
+    batch_size=64,
+    shuffle=True,
+    num_workers=4,
+    collate_fn=collate_fn)
+
+test_loader = DataLoader(
+    trainset,
+    batch_size=1,
     shuffle=True,
     num_workers=4,
     collate_fn=collate_fn)
@@ -116,12 +124,12 @@ train_loader = DataLoader(
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 model = Yolov1Model(yolov1_base_config).to(device)
-optimizer = torch.optim.SGD(model.parameters(), 0.001)
+optimizer = torch.optim.SGD(model.parameters(), 0.0001)
 criterion = Yolov1Loss()
 
 
 
-num_epochs = 30
+num_epochs = 10
 for epoch in range(num_epochs):
     model.train()
     for i, (images, targets) in enumerate(train_loader):
@@ -153,7 +161,7 @@ for epoch in range(num_epochs):
         #     break
 
 model.eval()
-for (images, targets) in train_loader:
+for (images, targets) in test_loader:
     images = [image.to(device) for image in images]
     outputs = model(images)
     break
@@ -167,6 +175,9 @@ print('#'*100)
 import matplotlib.pyplot as plt
 
 
+print(outputs[0]['boxes'])
+print(torch.max(outputs[0]['labels'], 1))
+
 fig, ax = plt.subplots(1, 1, figsize=(16, 8))
 
 image = image.permute(1, 2, 0).detach().cpu().numpy()
@@ -177,8 +188,6 @@ ax.set_axis_off()
 ax.imshow(image)
 plt.show()
 
-print(outputs[0]['boxes'])
-print(torch.max(outputs[0]['labels'], 1))
 # sys.exit(0)
 
 
