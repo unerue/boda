@@ -6,6 +6,7 @@ from typing import Tuple, List, Dict
 
 import cv2
 import numpy as np
+from PIL import Image
 
 import torch
 from torch.utils.data import DataLoader, Dataset
@@ -75,12 +76,13 @@ class PascalVocDataset(Dataset):
         image_id = self.image_ids[index]
         data = self.labels[image_id]
     
-        image = cv2.imread(os.path.join(self.image_dir, image_id), cv2.IMREAD_COLOR)
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-                    
+        # image = cv2.imread(os.path.join(self.image_dir, image_id), cv2.IMREAD_COLOR)
+        # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image = Image.open(os.path.join(self.image_dir, image_id)).convert('RGB')
+        image = np.array(image).astype(np.float32) / 255.
+
         boxes = np.asarray(data['boxes'], dtype=np.int64)
-        indices = torch.as_tensor(data['labels'], dtype=torch.int64).view(-1, 1)
-        labels = torch.zeros(indices.size(0), self.num_classes).scatter_(1, indices, 1)
+        labels = torch.as_tensor(data['labels'], dtype=torch.int64)#.view(-1, 1)
         
         target = {
             'boxes': boxes,

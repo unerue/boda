@@ -23,7 +23,7 @@ from albumentations.pytorch.transforms import ToTensorV2, ToTensor
 
 sys.path.append('../')
 from benchmark_base import parser_txt, PascalVocDataset
-from detection import yolov1_base_config
+from detection import yolov1_base_config, PASCAL_CLASSES
 from detection import darknet9, Yolov1Model, Yolov1Loss
 from detection.utils import AverageMeter
 
@@ -89,43 +89,52 @@ from detection.utils import AverageMeter
 # sys.exit(0)
 
 
-def get_transform(train=True):
-    return A.Compose([
-        A.Resize(448, 448),
-        ToTensor(num_classes=20),
-        # ToTensorV2(p=1.0)
-        ], 
-        bbox_params={'format': 'pascal_voc', 'label_fields': ['category_ids']})
+def get_transform(is_train=True):
+    if is_train:
+        return A.Compose([
+            A.Resize(448, 448),
+            # A.Rotate(p=0.2),
+            # A.VerticalFlip(p=0.2),
+            # A.HorizontalFlip(p=0.2),
+            ToTensor(num_classes=20)], 
+            bbox_params={'format': 'pascal_voc', 'label_fields': ['category_ids']})
+    else:
+        return A.Compose([
+            A.Resize(448, 448),
+            ToTensor(num_classes=20)], 
+            bbox_params={'format': 'pascal_voc', 'label_fields': ['category_ids']})
 
 trainset = PascalVocDataset(yolov1_base_config, get_transform())
-testset = PascalVocDataset(yolov1_base_config, get_transform(), is_train=False)
+testset = PascalVocDataset(yolov1_base_config, get_transform(False))
 
 def collate_fn(batch):
     return tuple(zip(*batch))
 
 train_loader = DataLoader(
     trainset,
-    batch_size=64,
+    batch_size=16,
     shuffle=True,
     num_workers=4,
     collate_fn=collate_fn)
 
 test_loader = DataLoader(
-    trainset,
-    batch_size=1,
+    testset,
+    batch_size=4,
     shuffle=True,
     num_workers=1,
     collate_fn=collate_fn)
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
+
+from torch.optim.lr_scheduler import StepLR
+
 model = Yolov1Model(yolov1_base_config).to(device)
 optimizer = torch.optim.SGD(model.parameters(), 0.001)
 criterion = Yolov1Loss()
+scheduler = StepLR(optimizer, step_size=1, gamma=0.1)
 
-
-
-num_epochs = 40
+num_epochs = 1
 for epoch in range(num_epochs):
     model.train()
     for i, (images, targets) in enumerate(train_loader):
@@ -152,9 +161,15 @@ for epoch in range(num_epochs):
         
         losses.backward()
         optimizer.step()
+    
+        # if (i+1) > 200:
+        #     scheduler.step()
 
-        # if (i+1) % 40 == 0:
-        #     break
+        if (i+1) % 300 == 0:
+            break
+
+    scheduler.step()
+
 
 model.eval()
 for (images, targets) in test_loader:
@@ -162,26 +177,42 @@ for (images, targets) in test_loader:
     outputs = model(images)
     break
 
+print(torch.max(outputs[0]['labels'], 1))
+# print(outputs)
+# print(torch.max(outputs[0]['labels'], 1))
+# sys.exit(0)
 image = images[0]
-
+# print(image.size())
+# print(images)
+image = image.permute(1, 2, 0)
+image = image.detach()
+image = image.cpu()
+image = image.numpy()
 print('#'*100)
     
     # print(outputs)
 
-import matplotlib.pyplot as plt
+# targets[0]['boxes']
+# # print(outputs[0]['boxes'])
 
-
-print(outputs[0]['boxes'])
-print(torch.max(outputs[0]['labels'], 1))
 
 fig, ax = plt.subplots(1, 1, figsize=(16, 8))
+# boxes2 = targets[0]['boxes'].numpy()
+# image = image.permute(1, 2, 0).detach().cpu().numpy()
+for image, out1, out2 in zip(image, outputs, targets):
+    image = image.permute(1, 2, 0).detach().cpu().numpy()
+    # for box, box2 in zip(outputs[0]['boxes'], targets[0]['boxes']):
 
-image = image.permute(1, 2, 0).detach().cpu().numpy()
-for box in outputs[0]['boxes']:
-    cv2.rectangle(image, (int(box[0]), int(box[1])), (int(box[2]), int(box[3])), (255, 0, 0), 2)
-    
-ax.set_axis_off()
-ax.imshow(image)
+    for o1, o2 in zip(out1, out2):
+        box = o1['boxes']
+        box2 = o2['boxes']
+        cv2.rectangle(image, (int(box[0]), int(box[1])), (int(box[2]), int(box[3])), (255, 0, 0), 2)
+        label = PASCAL_CLASSES[torch.max(o1['labels'], 1)[1]]
+        cv2.putText(image, label, (int(box[0]), int(box[1])), cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.9, color=(255, 0, 0), thickness=1, lineType=8)
+        cv2.rectangle(image, (int(box2[0]), int(box2[1])), (int(box2[2]), int(box2[3])), (0, 0, 255), 2)
+
+    ax.set_axis_off()
+    ax.imshow(image)
 plt.show()
 
 # sys.exit(0)

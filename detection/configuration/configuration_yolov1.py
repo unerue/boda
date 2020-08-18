@@ -40,10 +40,10 @@ model_base = Config({
 
 pascal_voc_datset = dataset_base.copy({
     'name': 'pascal voc 2007',
-    'train_images': './data/pascal-voc/VOC2007/train/JPEGImages',
-    'test_images': './data/pasca-voc/VOC2007/test/JPEGImages',
-    'train_labels': './data/pascal-voc/VOC2007/train_labels.txt',
-    'test_labels': './data/pascal-voc/VOC2007/test_labels.txt',
+    'train_images': './data/pascal_voc/VOC2012/train/JPEGImages',
+    'test_images': './data/pasca_voc/VOC2012/test/JPEGImages',
+    'train_labels': './data/pascal_voc/VOC2012/train_labels.txt',
+    'test_labels': './data/pascal_voc/VOC2012/test_labels.txt',
     'class_names': PASCAL_CLASSES,
     'num_classes': 20,
 })
@@ -77,7 +77,7 @@ yolov1_base_config = model_base.copy({
     'rescore': 1,
     'sqrt': 1,
     'num': 3,  # ????
-    'lambda_coord': 0.5,
+    'lambda_coord': 5.0,
     'lambda_noobj': 0.5,
 })
 
