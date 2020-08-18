@@ -134,7 +134,7 @@ optimizer = torch.optim.SGD(model.parameters(), 0.001)
 criterion = Yolov1Loss()
 scheduler = StepLR(optimizer, step_size=1, gamma=0.1)
 
-num_epochs = 1
+num_epochs = 7
 for epoch in range(num_epochs):
     model.train()
     for i, (images, targets) in enumerate(train_loader):
@@ -165,8 +165,8 @@ for epoch in range(num_epochs):
         # if (i+1) > 200:
         #     scheduler.step()
 
-        if (i+1) % 300 == 0:
-            break
+        # if (i+1) % 300 == 0:
+        #     break
 
     scheduler.step()
 
@@ -196,23 +196,20 @@ print('#'*100)
 # # print(outputs[0]['boxes'])
 
 
-fig, ax = plt.subplots(1, 1, figsize=(16, 8))
+fig, axes = plt.subplots(1, 4, figsize=(16, 8), dpi=300)
 # boxes2 = targets[0]['boxes'].numpy()
 # image = image.permute(1, 2, 0).detach().cpu().numpy()
-for image, out1, out2 in zip(image, outputs, targets):
+for i, (image, out1, out2) in enumerate(zip(images, outputs, targets)):
     image = image.permute(1, 2, 0).detach().cpu().numpy()
     # for box, box2 in zip(outputs[0]['boxes'], targets[0]['boxes']):
-
-    for o1, o2 in zip(out1, out2):
-        box = o1['boxes']
-        box2 = o2['boxes']
+    for box, box2 in zip(out1['boxes'], out2['boxes']):
         cv2.rectangle(image, (int(box[0]), int(box[1])), (int(box[2]), int(box[3])), (255, 0, 0), 2)
-        label = PASCAL_CLASSES[torch.max(o1['labels'], 1)[1]]
-        cv2.putText(image, label, (int(box[0]), int(box[1])), cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.9, color=(255, 0, 0), thickness=1, lineType=8)
+        # label = PASCAL_CLASSES[torch.max(out1['labels'], 1)[1]]
+        # cv2.putText(image, label, (int(box[0]), int(box[1])), cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.9, color=(255, 0, 0), thickness=1, lineType=8)
         cv2.rectangle(image, (int(box2[0]), int(box2[1])), (int(box2[2]), int(box2[3])), (0, 0, 255), 2)
 
-    ax.set_axis_off()
-    ax.imshow(image)
+    axes.flat[i].set_axis_off()
+    axes.flat[i].imshow(image)
 plt.show()
 
 # sys.exit(0)

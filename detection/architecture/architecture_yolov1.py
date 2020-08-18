@@ -276,7 +276,7 @@ class Yolov1Model(nn.Module):
                             score = outputs[bs, j, i, k*5+4]
                             proba = score * class_proba
                             proba = score * 1.0
-                            if proba < 0.2:
+                            if proba < 0.05:
                                 continue
 
                             box = outputs[bs, j, i, k*5:k*5+4]
