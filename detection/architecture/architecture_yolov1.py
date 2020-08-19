@@ -18,7 +18,7 @@ from torchsummary import summary
 
 
 
-backbone1 = models.resnet50(pretrained=True)
+backbone1 = models.resnet101(pretrained=True)
 # print(summary(backbone1, (3, 448, 448)))
 # print(backbone1.layer4)
 for p in backbone1.parameters():
@@ -52,7 +52,7 @@ class Yolov1PredictionHead(nn.Module):
         self.classifier = nn.Sequential(
             nn.Linear(7 * 7 * 1024, 4096),
             nn.LeakyReLU(0.1),
-            nn.Linear(4096, 7 * 7 * self.out_channels),
+            nn.Linear(4096, self.grid_size * self.grid_size * self.out_channels),
             nn.Sigmoid())
 
     def forward(self, x: List[Tensor]) -> Tensor:
@@ -113,198 +113,73 @@ class Yolov1Model(nn.Module):
         if self.training:
             outputs = self.prediction_head(inputs)
 
-            # self.device = outputs.device
-            # gs = self.config.grid_size
-            # nb = self.config.num_boxes
             
-            # cell_size = 1./gs
-            
-            # grid_x = torch.arange(gs, device=self.device).repeat(gs, 1).view(1, 1, gs, gs)
-            # grid_y = torch.arange(gs, device=self.device).repeat(gs, 1).t().view(1, 1, gs, gs)
-
-            # norm_x = grid_x * cell_size 
-            # norm_y = grid_y * cell_size
-
-            # print(outputs[0,..., :4])
-            # outputs[..., 0] = (outputs[..., 0] + grid_x )  / cell_size
-            # outputs[..., 1] = (outputs[..., 1] + grid_x ) / cell_size
-
-            # outputs[..., 5] = outputs[..., 5] * cell_size + norm_x
-            # outputs[..., 6] = outputs[..., 6] * cell_size + norm_y
-            # print('='*100)
-            # print(outputs[0,..., :4])
-
-            # norm_xy = outputs[..., 0:2]
-            # norm_wh = outputs[..., 2:4]
-            # outputs[..., 2:4] = norm_xy + 0.5 * norm_wh
-
-            # norm_xy = outputs[..., 5:7]
-            # norm_wh = outputs[..., 7:9]
-            # outputs[..., 7:9] = norm_xy + 0.5 * norm_wh
-            # print('='*100)
-            # print(outputs[0,..., :4].half())
-
-            # sys.exit(0)
-
-            # for i in range(0, 5*nb, 5):
-            #     # torch.Size([2, 7, 7, 4]) -> [[[x,y,x,y]], [[...]]]
-            #     boxes = outputs[..., i:i+4] 
-            #     # torch.Size([2, 7, 7]) -> [[[]], [[]]] 
-            #     scores = outputs[..., i+5]  
-            #     # torch.Size([2, 7, 7])
-            #     mask = (scores * labels_proba) > 0.5 
-            #     if not mask.size(0):
-            #         continue
-            
-            #     boxes[..., 0] = boxes[..., 0] * cell_size + norm_x
-            #     boxes[..., 1] = boxes[..., 1] * cell_size + norm_y
-
-            #     norm_xy = boxes[..., :2]
-            #     norm_wh = boxes[..., 2:]
-
-            #     boxes[..., :2] = norm_xy - 0.5 * norm_wh
-            #     boxes[..., 2:] = norm_xy + 0.5 * norm_wh
-
-            # nb = self.num_boxes
-            # gs = self.grid_size  # grid size
-            # nc = self.num_classes
-            # cell_size = 1.0 / gs
-            # w, h = yolov1_config.max_size  # Tuple[int, int]
-            
-            # # 모형에서 나온 아웃풋과 동일한 모양으로 변환
-            # # x1, y1, x2, y2를 center x, center y, w, h로 변환하고
-            # # 모든 0~1사이로 변환, cx, cy는 each cell안에서의 비율
-            # # w, h는 이미지 대비 비율
-            # transformed_targets = torch.zeros(len(targets), gs, gs, 5*nb+nc, device=self.device)
-            # for b, target in enumerate(targets):
-            #     boxes = target['boxes']
-            #     norm_boxes = boxes / torch.Tensor([[w, h, w, h]]).expand_as(boxes).to(self.device)
-
-            #     xys = (norm_boxes[:, :2] + norm_boxes[:, 2:]) / 2.0
-            #     whs = norm_boxes[:, 2:] - norm_boxes[:, :2]
-        
-            #     for box_id in range(boxes.size(0)):
-            #         xy = xys[box_id]
-            #         wh = whs[box_id]
-        
-            #         ij = (xy / cell_size).ceil() - 1.0
-            #         top_left = ij * cell_size
-            #         norm_xy = (xy - top_left) / cell_size
-                    
-            #         i, j = int(ij[0]), int(ij[1])
-            #         for k in range(0, 5*nb, 5):
-            #             transformed_targets[b, j, i, k:k+4] = torch.cat([norm_xy, wh])
-            #             transformed_targets[b, j, i, k+4] = 1.0
-                    
-            #         indices = torch.as_tensor(target['labels'][box_id], dtype=torch.int64).view(-1, 1)
-            #         labels = torch.zeros(indices.size(0), self.num_classes).scatter_(1, indices, 1)
-            #         transformed_targets[b, j, i, 5*nb:] = labels.squeeze()
 
 
             return outputs
         else:
             with torch.no_grad():
                 outputs = self.prediction_head(inputs)
+
+            
             
             self.device = outputs.device
             gs = self.config.grid_size
             nb = self.config.num_boxes
             bs = outputs.size(0)
             
-            cell_size = 1.0 / gs
+            cell_size = 1. / gs
             
-            # grid_x = torch.arange(gs, device=self.device).repeat(gs, 1).view(1, 1, gs, gs)
-            # grid_y = torch.arange(gs, device=self.device).repeat(gs, 1).t().view(1, 1, gs, gs)
-
-            # norm_x = grid_x * cell_size
-            # norm_y = grid_y * cell_size
-            # print(norm_x.size())
-            # print(norm_y.size())
-
-            # preds = []
-            # # torch.Size([B, 7, 7, 30]) -> [[[...num_classes]], [[...]]]
-            # labels = outputs[..., 5*nb:]
-            # # torch.Size([2, 7, 7])
-            # labels_proba = outputs[..., 5*nb:].argmax(-1)  
-            # for i in range(0, 5*nb, 5):
-            #     # torch.Size([2, 7, 7, 4]) -> [[[x,y,x,y]], [[...]]]
-            #     boxes = outputs[..., i:i+4] 
-            #     # torch.Size([2, 7, 7]) -> [[[]], [[]]] 
-            #     scores = outputs[..., i+5]  
-            #     # torch.Size([2, 7, 7])
-            #     mask = (scores * labels_proba) > 0.2
-            #     if not mask.size(0):
-            #         continue
             
-            #     # x0 = boxes[..., 0] * cell_size + norm_x
-            #     # y0 = boxes[..., 1] * cell_size + norm_y
-            #     x0 = boxes[..., 0] * cell_size + norm_x
-            #     y0 = boxes[..., 1] * cell_size + norm_y
-
-            #     # norm_xy = boxes[..., :2]
-            #     norm_wh = boxes[..., 2:]
-
-            #     # [x1, y1, x2, y2]
-            #     # boxes[..., :2] = top_left - 0.5 * norm_wh
-            #     # boxes[..., 2:] = top_left + 0.5 * norm_wh
-            #     boxes[..., 0] = x0 - 0.5 * norm_wh[...,0]
-            #     boxes[..., 1] = y0 - 0.5 * norm_wh[...,1]
-            #     boxes[..., 2] = x0 + 0.5 * norm_wh[...,0]
-            #     boxes[..., 3] = y0 + 0.5 * norm_wh[...,1]
-
-            #     # boxes = torch.cat([boxes[...,0]*w, boxes[...,1]*w, boxes[...,2]*h, boxes[...,3]*h], 1)
-                
-            #     # boxes = xywh2xyxy(boxes)
-
-            #     preds.append({
-            #         'boxes': boxes[mask],
-            #         'scores': scores[mask],
-            #         'labels': labels[mask]
-            #     })\
-            print(outputs.size())
             preds = []
-            
-            for bs in range(outputs.size(0)):
+            for bi in range(outputs.size(0)):
                 boxes = []
                 scores = []
                 labels = []
                 for i in range(gs):
                     for j in range(gs):
-                        label = outputs[bs, j, i, 5*nb:]
-                        class_proba, _ = torch.max(outputs[bs, j, i, 5*nb:], dim=0)
+                        label = outputs[bi, j, i, 5*nb:]
+                        class_proba, _ = torch.max(outputs[bi, j, i, 5*nb:], dim=0)
                         for k in range(nb):
-                            score = outputs[bs, j, i, k*5+4]
+                            score = outputs[bi, j, i, k*5+4]
+                        
                             proba = score * class_proba
                             proba = score * 1.0
-                            if proba < 0.05:
+                            if proba < 0.1:
                                 continue
 
-                            box = outputs[bs, j, i, k*5:k*5+4]
-                            x0y0 = torch.FloatTensor([i,j]).to(self.device) * cell_size
+                            # ij = (xy / cell_size).ceil() - 1.0
+                            # x0y0 = ij * cell_size
+                            # norm_xy = (xy - x0y0) / cell_size
 
+                            box = outputs[bi, j, i, k*5:k*5+4]
+                            # print(box)
+                            x0y0 = torch.FloatTensor([i, j]).to(self.device) * cell_size
+                            # print(x0y0)
                             norm_xy = box[:2] * cell_size + x0y0
                             norm_wh = box[2:]
-
-                            xyxy = torch.FloatTensor(4).to(self.device)
-                            xyxy[:2] = norm_xy - 0.5 * norm_wh
-                            xyxy[2:] = norm_xy + 0.5 * norm_wh
+                            # print(norm_xy, norm_wh)
+                            xyxy = torch.zeros(4, device=self.device)
+                            xyxy[:2] = norm_xy - 0.5 * norm_wh# * 0.5# * norm_wh
+                            xyxy[2:] = norm_xy + 0.5 * norm_wh# * 0.5
                             # print(class_proba.size(), class_label.size())
-                            
+                            # sys.exit()
                             boxes.append(xyxy)
                             scores.append(score)
                         # print(boxes)
                         labels.append(label)
                 print(len(boxes))
+                # sys.exit(0)
                 if len(boxes) > 0:
                     preds.append({
-                        'boxes': torch.stack(boxes),
-                        'scores': torch.stack(scores),
-                        'labels': torch.stack(labels)})
+                        'boxes': torch.stack(boxes).to(self.device),
+                        'scores': torch.stack(scores).to(self.device),
+                        'labels': torch.stack(labels).to(self.device)})
                 else:
                     preds.append({
-                        'boxes': torch.zeros((1, 4)),
-                        'scores': torch.zeros(1),
-                        'labels': torch.zeros((1, 20))})
+                        'boxes': torch.zeros((1, 4)).to(self.device),
+                        'scores': torch.zeros(1).to(self.device),
+                        'labels': torch.zeros((1, 20)).to(self.device)})
             
             # print(preds)
             # sys.exit(0)
@@ -323,22 +198,37 @@ class Yolov1Model(nn.Module):
         
         # preds = inputs
         # print('*'*100)
-        preds = non_maximum_supression(inputs)
+        # preds = non_maximum_supression(inputs)
+        keeps = non_maximum_supression(inputs)
         
         # print('*'*100)
         # print(len(preds))
-        for pred in preds:
-            boxes = pred['boxes']
-            # boxes = xywh2xyxy(boxes)
-            if boxes.size(0) == 0:
+        for pred, keep in zip(inputs, keeps):
+            if keep.size(0) == 0:
                 continue
 
+            boxes = pred['boxes'][keep]
+            scores = pred['scores'][keep]
+            labels = pred['labels'][keep]
+
+            
+
             boxes[:, 0], boxes[:, 1] = boxes[:, 0]*w, boxes[:, 1]*h
-            boxes[:, 2], boxes[:, 3] = boxes[:, 2]*w, boxes[:, 3]*h     
+            boxes[:, 2], boxes[:, 3] = boxes[:, 2]*w, boxes[:, 3]*h
+        # for pred in preds:
+        #     boxes = pred['boxes']
+        #     # boxes = xywh2xyxy(boxes)
+        #     if boxes.size(0) == 0:
+        #         continue
+
+        #     boxes[:, 0], boxes[:, 1] = boxes[:, 0]*w, boxes[:, 1]*h
+        #     boxes[:, 2], boxes[:, 3] = boxes[:, 2]*w, boxes[:, 3]*h
 
             pred['boxes'] = boxes
+            pred['scores'] = scores
+            pred['labels'] = labels
 
-        return preds
+        return inputs
             # print('='*100)
             # print(boxes.size())
             # print([boxes[...,0]*w, boxes[...,1]*w, boxes[...,2]*h, boxes[...,3]*h])
@@ -435,14 +325,14 @@ def xywh2xyxy(boxes: torch.Tensor) -> torch.Tensor:
 def non_maximum_supression(inputs, threshold=0.5):
     """Non-maximum supression
     
-    boxes: torch.Size(N, 4)
+    boxes: torch.Size(N, 4) [x1, y1, x2, y3]
     scores: torch.Size(N, )
     labels: torch.Size(N, num_classes)
     """
     outputs = []
     for pred in inputs:
-        boxes = pred['boxes']
-        scores = pred['scores']
+        boxes = pred['boxes'].clone()
+        scores = pred['scores'].clone()
 
         # boxes = xywh2xyxy(boxes)
         x1, y1 = boxes[:, 0], boxes[:, 1]
@@ -451,15 +341,25 @@ def non_maximum_supression(inputs, threshold=0.5):
         areas = (x2 - x1) * (y2 - y1)
 
         _, indices = scores.sort(0, descending=True)
-
+        print(indices)
         keeps = []
-        while indices.numel():
-            i = indices.item() if (indices.numel() == 1) else indices[0].item()
-            keeps.append(i)
+        # indices = indices.tolist()
+        while indices.numel() > 0:
+        # while len(indices) > 0:
             
+            # if indices.numel() == 1:
+            #     i = indices.item()
+            # else:
+            #     i = indices[0]
+
+            # keeps.append(i)        
             if indices.numel() == 1:
                 break
-            
+            i = indices[0]
+            keeps.append(i)
+            # print(indices)
+            # print(indices[1:])
+            # print(x1[i])
             inter_x1 = x1[indices[1:]].clamp(min=x1[i]) # [m-1, ]
             inter_y1 = y1[indices[1:]].clamp(min=y1[i]) # [m-1, ]
             inter_x2 = x2[indices[1:]].clamp(max=x2[i]) # [m-1, ]
@@ -474,25 +374,178 @@ def non_maximum_supression(inputs, threshold=0.5):
             ious = inters / unions # [m-1, ]
             # [m-1, ]. Because `nonzero()` adds extra dimension, squeeze it.
             # ids_keep = (ious >= threshold).nonzero().squeeze() 
-            ids_keep = (ious <= threshold).nonzero().squeeze() 
+            ids_keep = (ious <= threshold).nonzero().squeeze()
+            print(ids_keep)
             if ids_keep.numel() == 0:
                 break # If no box left, break.
 
             indices = indices[ids_keep+1]
+
+        outputs.append(torch.LongTensor(keeps))
         # print('KEEP!!!', keeps)
         # print('KEEP BOX!!!!', boxes[keeps])
-        # print(boxes[keeps].size())
-        if len(keeps) != 0:
-            outputs.append({
-                'boxes': boxes[keeps],
-                'scores': scores[keeps],
-                'labels': pred['labels'][keeps],
-            })
-        else:
-            pass
+        # # print(boxes[keeps].size())
+        # if keeps.numel() != 0:
+        #     outputs.append({
+        #         'boxes': boxes[keeps],
+        #         'scores': scores[keeps],
+        #         'labels': pred['labels'][keeps],
+        #     })
+        # else:
+        #     pass
     # print('+'*100)
     # print(outputs)
     # print('+'*100)
     return outputs
 
 
+
+
+
+
+
+# self.device = outputs.device
+            # gs = self.config.grid_size
+            # nb = self.config.num_boxes
+            
+            # cell_size = 1./gs
+            
+            # grid_x = torch.arange(gs, device=self.device).repeat(gs, 1).view(1, 1, gs, gs)
+            # grid_y = torch.arange(gs, device=self.device).repeat(gs, 1).t().view(1, 1, gs, gs)
+
+            # norm_x = grid_x * cell_size 
+            # norm_y = grid_y * cell_size
+
+            # print(outputs[0,..., :4])
+            # outputs[..., 0] = (outputs[..., 0] + grid_x )  / cell_size
+            # outputs[..., 1] = (outputs[..., 1] + grid_x ) / cell_size
+
+            # outputs[..., 5] = outputs[..., 5] * cell_size + norm_x
+            # outputs[..., 6] = outputs[..., 6] * cell_size + norm_y
+            # print('='*100)
+            # print(outputs[0,..., :4])
+
+            # norm_xy = outputs[..., 0:2]
+            # norm_wh = outputs[..., 2:4]
+            # outputs[..., 2:4] = norm_xy + 0.5 * norm_wh
+
+            # norm_xy = outputs[..., 5:7]
+            # norm_wh = outputs[..., 7:9]
+            # outputs[..., 7:9] = norm_xy + 0.5 * norm_wh
+            # print('='*100)
+            # print(outputs[0,..., :4].half())
+
+            # sys.exit(0)
+
+            # for i in range(0, 5*nb, 5):
+            #     # torch.Size([2, 7, 7, 4]) -> [[[x,y,x,y]], [[...]]]
+            #     boxes = outputs[..., i:i+4] 
+            #     # torch.Size([2, 7, 7]) -> [[[]], [[]]] 
+            #     scores = outputs[..., i+5]  
+            #     # torch.Size([2, 7, 7])
+            #     mask = (scores * labels_proba) > 0.5 
+            #     if not mask.size(0):
+            #         continue
+            
+            #     boxes[..., 0] = boxes[..., 0] * cell_size + norm_x
+            #     boxes[..., 1] = boxes[..., 1] * cell_size + norm_y
+
+            #     norm_xy = boxes[..., :2]
+            #     norm_wh = boxes[..., 2:]
+
+            #     boxes[..., :2] = norm_xy - 0.5 * norm_wh
+            #     boxes[..., 2:] = norm_xy + 0.5 * norm_wh
+
+            # nb = self.num_boxes
+            # gs = self.grid_size  # grid size
+            # nc = self.num_classes
+            # cell_size = 1.0 / gs
+            # w, h = yolov1_config.max_size  # Tuple[int, int]
+            
+            # # 모형에서 나온 아웃풋과 동일한 모양으로 변환
+            # # x1, y1, x2, y2를 center x, center y, w, h로 변환하고
+            # # 모든 0~1사이로 변환, cx, cy는 each cell안에서의 비율
+            # # w, h는 이미지 대비 비율
+            # transformed_targets = torch.zeros(len(targets), gs, gs, 5*nb+nc, device=self.device)
+            # for b, target in enumerate(targets):
+            #     boxes = target['boxes']
+            #     norm_boxes = boxes / torch.Tensor([[w, h, w, h]]).expand_as(boxes).to(self.device)
+
+            #     xys = (norm_boxes[:, :2] + norm_boxes[:, 2:]) / 2.0
+            #     whs = norm_boxes[:, 2:] - norm_boxes[:, :2]
+        
+            #     for box_id in range(boxes.size(0)):
+            #         xy = xys[box_id]
+            #         wh = whs[box_id]
+        
+            #         ij = (xy / cell_size).ceil() - 1.0
+            #         top_left = ij * cell_size
+            #         norm_xy = (xy - top_left) / cell_size
+                    
+            #         i, j = int(ij[0]), int(ij[1])
+            #         for k in range(0, 5*nb, 5):
+            #             transformed_targets[b, j, i, k:k+4] = torch.cat([norm_xy, wh])
+            #             transformed_targets[b, j, i, k+4] = 1.0
+                    
+            #         indices = torch.as_tensor(target['labels'][box_id], dtype=torch.int64).view(-1, 1)
+            #         labels = torch.zeros(indices.size(0), self.num_classes).scatter_(1, indices, 1)
+            #         transformed_targets[b, j, i, 5*nb:] = labels.squeeze()
+
+
+
+
+
+
+
+
+
+
+# grid_x = torch.arange(gs, device=self.device).repeat(gs, 1).view(1, 1, gs, gs)
+            # grid_y = torch.arange(gs, device=self.device).repeat(gs, 1).t().view(1, 1, gs, gs)
+
+            # norm_x = grid_x * cell_size
+            # norm_y = grid_y * cell_size
+            # print(norm_x.size())
+            # print(norm_y.size())
+
+            # preds = []
+            # # torch.Size([B, 7, 7, 30]) -> [[[...num_classes]], [[...]]]
+            # labels = outputs[..., 5*nb:]
+            # # torch.Size([2, 7, 7])
+            # labels_proba = outputs[..., 5*nb:].argmax(-1)  
+            # for i in range(0, 5*nb, 5):
+            #     # torch.Size([2, 7, 7, 4]) -> [[[x,y,x,y]], [[...]]]
+            #     boxes = outputs[..., i:i+4] 
+            #     # torch.Size([2, 7, 7]) -> [[[]], [[]]] 
+            #     scores = outputs[..., i+5]  
+            #     # torch.Size([2, 7, 7])
+            #     mask = (scores * labels_proba) > 0.2
+            #     if not mask.size(0):
+            #         continue
+            
+            #     # x0 = boxes[..., 0] * cell_size + norm_x
+            #     # y0 = boxes[..., 1] * cell_size + norm_y
+            #     x0 = boxes[..., 0] * cell_size + norm_x
+            #     y0 = boxes[..., 1] * cell_size + norm_y
+
+            #     # norm_xy = boxes[..., :2]
+            #     norm_wh = boxes[..., 2:]
+
+            #     # [x1, y1, x2, y2]
+            #     # boxes[..., :2] = top_left - 0.5 * norm_wh
+            #     # boxes[..., 2:] = top_left + 0.5 * norm_wh
+            #     boxes[..., 0] = x0 - 0.5 * norm_wh[...,0]
+            #     boxes[..., 1] = y0 - 0.5 * norm_wh[...,1]
+            #     boxes[..., 2] = x0 + 0.5 * norm_wh[...,0]
+            #     boxes[..., 3] = y0 + 0.5 * norm_wh[...,1]
+
+            #     # boxes = torch.cat([boxes[...,0]*w, boxes[...,1]*w, boxes[...,2]*h, boxes[...,3]*h], 1)
+                
+            #     # boxes = xywh2xyxy(boxes)
+
+            #     preds.append({
+            #         'boxes': boxes[mask],
+            #         'scores': scores[mask],
+            #         'labels': labels[mask]
+            #     })\
+            # print(outputs.size())

@@ -93,9 +93,10 @@ def get_transform(is_train=True):
     if is_train:
         return A.Compose([
             A.Resize(448, 448),
+            A.HueSaturationValue(),
             # A.Rotate(p=0.2),
-            # A.VerticalFlip(p=0.2),
-            # A.HorizontalFlip(p=0.2),
+            A.VerticalFlip(p=0.4),
+            A.HorizontalFlip(p=0.4),
             ToTensor(num_classes=20)], 
             bbox_params={'format': 'pascal_voc', 'label_fields': ['category_ids']})
     else:
@@ -112,9 +113,9 @@ def collate_fn(batch):
 
 train_loader = DataLoader(
     trainset,
-    batch_size=16,
+    batch_size=32,
     shuffle=True,
-    num_workers=4,
+    num_workers=2,
     collate_fn=collate_fn)
 
 test_loader = DataLoader(
@@ -132,68 +133,186 @@ from torch.optim.lr_scheduler import StepLR
 model = Yolov1Model(yolov1_base_config).to(device)
 optimizer = torch.optim.SGD(model.parameters(), 0.001)
 criterion = Yolov1Loss()
-scheduler = StepLR(optimizer, step_size=1, gamma=0.1)
+scheduler = StepLR(optimizer, step_size=5, gamma=0.1)
 
-num_epochs = 7
+num_epochs = 10
 for epoch in range(num_epochs):
     model.train()
     for i, (images, targets) in enumerate(train_loader):
         images = [image.to(device) for image in images]
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-        # print(images)
-        # print('='*100)
-        # print(targets)
-        # print('='*100)
-        # sys.exit(0)
-        optimizer.zero_grad()
-        # print(targets[0]['boxes'])
 
+        optimizer.zero_grad()
         outputs = model(images)
-        # print(outputs[0][0])
-        # print('='*100)
+
         losses = criterion(outputs, targets)
-        print('='*100)
         
-        print(f"Epoch #{epoch} id: {i} loss: {losses}")
+        print(f'Epoch #{epoch} id: {i}\n loss_boxes: {losses["loss_boxes"]:.6f} loss_object: {losses["loss_object"]:.6f} loss_class: {losses["loss_class"]:.6f}')
         losses = sum(loss for loss in losses.values())
-        print(f"loss: {losses}")
-        # sys.exit(0)
-        
+        print(f' total loss: {losses:.6f}')
+
+        # sys.exit()
         losses.backward()
         optimizer.step()
     
         # if (i+1) > 200:
         #     scheduler.step()
 
-        # if (i+1) % 300 == 0:
+        # if (i+1) % 200 == 0:
         #     break
 
     scheduler.step()
 
 
+
+def convert(targets):
+    nb = 2
+    gs = 7  # grid size
+    nc = 20
+    cell_size = 1.0 / gs
+    w, h = (448, 448) # Tuple[int, int]
+    # 모형에서 나온 아웃풋과 동일한 모양으로 변환
+    # x1, y1, x2, y2를 center x, center y, w, h로 변환하고
+    # 모든 0~1사이로 변환, cx, cy는 each cell안에서의 비율
+    # w, h는 이미지 대비 비율
+    transformed_targets = torch.zeros(len(targets), gs, gs, 5*nb+nc, device='cuda')
+    for b, target in enumerate(targets):
+        boxes = target['boxes']
+        norm_boxes = boxes / torch.Tensor([[w, h, w, h]]).expand_as(boxes).to('cuda')
+        # center x, y, width and height
+        xys = (norm_boxes[:, 2:] + norm_boxes[:, :2]) / 2.0
+        whs = norm_boxes[:, 2:] - norm_boxes[:, :2]
+
+        # cnt += boxes.size(0)
+        # print(boxes.size(0))
+        for box_id in range(boxes.size(0)):
+            xy = xys[box_id]
+            wh = whs[box_id]
+
+            ij = (xy / cell_size).ceil() - 1.0
+            x0y0 = ij * cell_size
+            norm_xy = (xy - x0y0) / cell_size
+
+            i, j = int(ij[0]), int(ij[1])
+            for k in range(0, 5*nb, 5):
+                if transformed_targets[b, j, i, k+4] == 1.0:
+                    transformed_targets[b, j, i, k+5:k+5+4] = torch.cat([norm_xy, wh])
+                else:
+                    transformed_targets[b, j, i, k:k+4] = torch.cat([norm_xy, wh])
+                    transformed_targets[b, j, i, k+4] = 1.0
+                
+            # print(transformed_targets[b, j, i, :10])
+            indices = torch.as_tensor(target['labels'][box_id], dtype=torch.int64).view(-1, 1)
+            labels = torch.zeros(indices.size(0), 20).scatter_(1, indices, 1)
+            transformed_targets[b, j, i, 5*nb:] = labels.squeeze()
+    # sys.exit()
+    return transformed_targets
+
+
 model.eval()
 for (images, targets) in test_loader:
     images = [image.to(device) for image in images]
+    targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
     outputs = model(images)
+    
+    # transformed = convert(targets)
     break
 
-print(torch.max(outputs[0]['labels'], 1))
-# print(outputs)
-# print(torch.max(outputs[0]['labels'], 1))
-# sys.exit(0)
-image = images[0]
-# print(image.size())
-# print(images)
-image = image.permute(1, 2, 0)
-image = image.detach()
-image = image.cpu()
-image = image.numpy()
-print('#'*100)
-    
-    # print(outputs)
+# print(transformed.size())
 
-# targets[0]['boxes']
-# # print(outputs[0]['boxes'])
+# # -> torch.Size([batch_size, S, S, 5*B+C])
+# coord_mask = transformed[..., 4] > 0
+# coord_mask = coord_mask.unsqueeze(-1).expand_as(transformed)#.to(self.device)
+
+# coord_targets = transformed[coord_mask].view(-1, 30)
+# boxes_targets = coord_targets[:, :5*2].contiguous().view(-1, 5)
+# class_targets = coord_targets[:, 5*2:]
+
+
+# import pprint
+# print('Ground truth')
+# for target in targets:
+#     pprint.pprint(target['boxes'])
+    
+# print()
+# print('Transform')
+# print(boxes_targets[:, :4])
+
+# print()
+# print('Convert')
+# w, h = (448, 448)
+# cell_size = 1./7
+# preds = []
+# for bi in range(transformed.size(0)):
+#     boxes = []
+#     scores = []
+#     labels = []
+#     for i in range(7):
+#         for j in range(7):
+#             label = transformed[bi, j, i, 5*2:]
+#             class_proba, _ = torch.max(transformed[bi, j, i, 5*2:], dim=0)
+#             for k in range(2):
+#                 score = transformed[bi, j, i, k*5+4]
+            
+#                 proba = score * class_proba
+#                 proba = score * 1.0
+#                 if proba < 0.2:
+#                     continue
+
+#                 # ij = (xy / cell_size).ceil() - 1.0
+#                 # x0y0 = ij * cell_size
+#                 # norm_xy = (xy - x0y0) / cell_size
+
+#                 box = transformed[bi, j, i, k*5:k*5+4]
+
+#                 # print(box)
+#                 x0y0 = torch.FloatTensor([i, j]).to('cuda') * cell_size
+#                 # print(x0y0)
+#                 norm_xy = box[:2] * cell_size + x0y0 
+#                 norm_wh = box[2:]
+#                 # print(norm_xy, norm_wh)
+#                 xyxy = torch.zeros(4, device='cuda')
+#                 xyxy[:2] = norm_xy - 0.5 * norm_wh# * 0.5# * norm_wh
+#                 xyxy[2:] = norm_xy + 0.5 * norm_wh# * 0.5
+#                 # print(class_proba.size(), class_label.size())
+
+#                 xyxy[0], xyxy[1] = xyxy[0]*w, xyxy[1]*h
+#                 xyxy[2], xyxy[3] = xyxy[2]*w, xyxy[3]*h
+#                 # print(xyxy)
+#                 # sys.exit()
+#                 # sys.exit()
+#                 boxes.append(xyxy)
+#                 scores.append(score)
+#             # print(boxes)
+#             labels.append(label)
+#     preds.append({'boxes': torch.stack(boxes).to('cuda')})
+
+# for i in preds:
+#     pprint.pprint(i['boxes'])
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# image = images[0]
+# # print(image.size())
+# # print(images)
+# image = image.permute(1, 2, 0)
+# image = image.detach()
+# image = image.cpu()
+# image = image.numpy()
+# print('#'*100)
+    
 
 
 fig, axes = plt.subplots(1, 4, figsize=(16, 8), dpi=300)
@@ -202,17 +321,26 @@ fig, axes = plt.subplots(1, 4, figsize=(16, 8), dpi=300)
 for i, (image, out1, out2) in enumerate(zip(images, outputs, targets)):
     image = image.permute(1, 2, 0).detach().cpu().numpy()
     # for box, box2 in zip(outputs[0]['boxes'], targets[0]['boxes']):
-    for box, box2 in zip(out1['boxes'], out2['boxes']):
+    print(torch.max(out1['labels'], 1)[1])
+
+    for box in out1['boxes']:
         cv2.rectangle(image, (int(box[0]), int(box[1])), (int(box[2]), int(box[3])), (255, 0, 0), 2)
         # label = PASCAL_CLASSES[torch.max(out1['labels'], 1)[1]]
         # cv2.putText(image, label, (int(box[0]), int(box[1])), cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.9, color=(255, 0, 0), thickness=1, lineType=8)
+        
+
+    for box2 in out2['boxes']:
+        
+        # label = PASCAL_CLASSES[torch.max(out1['labels'], 1)[1]]
+        # cv2.putText(image, label, (int(box[0]), int(box[1])), cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.9, color=(255, 0, 0), thickness=1, lineType=8)
         cv2.rectangle(image, (int(box2[0]), int(box2[1])), (int(box2[2]), int(box2[3])), (0, 0, 255), 2)
+
 
     axes.flat[i].set_axis_off()
     axes.flat[i].imshow(image)
 plt.show()
 
-# sys.exit(0)
+
 
 
 

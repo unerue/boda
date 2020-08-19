@@ -12,7 +12,7 @@ class VGG(nn.Module):
     https://github.com/pytorch/vision/blob/master/torchvision/models/vgg.py
     """
     def __init__(self, config, batch_norm=True):
-        super(VGG, self).__init__()
+        super().__init__()
         self.layers = nn.ModuleList()
         self._make_layers(config)
 

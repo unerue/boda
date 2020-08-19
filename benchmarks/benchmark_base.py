@@ -75,13 +75,13 @@ class PascalVocDataset(Dataset):
     def __getitem__(self, index: int):
         image_id = self.image_ids[index]
         data = self.labels[image_id]
-    
+        
         # image = cv2.imread(os.path.join(self.image_dir, image_id), cv2.IMREAD_COLOR)
         # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         image = Image.open(os.path.join(self.image_dir, image_id)).convert('RGB')
         image = np.array(image).astype(np.float32) / 255.
 
-        boxes = np.asarray(data['boxes'], dtype=np.int64)
+        boxes = np.asarray(data['boxes'], np.float32)
         labels = torch.as_tensor(data['labels'], dtype=torch.int64)#.view(-1, 1)
         
         target = {
