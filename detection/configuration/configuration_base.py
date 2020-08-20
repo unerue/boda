@@ -5,8 +5,7 @@ PASCAL_CLASSES: Tuple[str] = (
     'aeroplane', 'bicycle', 'bird', 'boat', 'bottle',
     'bus', 'car', 'cat', 'chair', 'cow', 'diningtable',
     'dog', 'horse', 'motorbike', 'person', 'pottedplant',
-    'sheep', 'sofa', 'train', 'tvmonitor'
-)
+    'sheep', 'sofa', 'train', 'tvmonitor')
 
 COLORS: Tuple[Tuple[int]] = (
     (244, 67, 54),
@@ -27,8 +26,7 @@ COLORS: Tuple[Tuple[int]] = (
     (255, 87, 34),
     (121, 85, 72),
     (158, 158, 158),
-    (96, 125, 139)
-)
+    (96, 125, 139))
 
 COCO_CLASSES: Tuple[str] = (
     'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
@@ -44,8 +42,7 @@ COCO_CLASSES: Tuple[str] = (
     'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop',
     'mouse', 'remote', 'keyboard', 'cell phone', 'microwave', 'oven',
     'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase',
-    'scissors', 'teddy bear', 'hair drier', 'toothbrush'
-)
+    'scissors', 'teddy bear', 'hair drier', 'toothbrush')
 
 # COCO_LABEL_MAP: Dict[int, int] = { 
 #     1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 
@@ -110,20 +107,17 @@ dataset_base = Config({
     'valid_labels': './path/to/labels/',
 
     'class_names': Tuple[str],
-    'num_classes': int,
-})
+    'num_classes': int,})
 
 transform_base = Config({
     'saturation': 1.5,
     'exposure': 1.5,
-    'hue': 0.1,
-})
+    'hue': 0.1,})
 
 backbone_base = Config({
     'name': 'base backbone',
     'pretrained': bool,
-    'path': 'path/to/pretrained/weights',
-})
+    'path': 'path/to/pretrained/weights',})
 
 model_base = Config({
     'name': 'base model',
@@ -132,5 +126,4 @@ model_base = Config({
     'backbone': backbone_base,
     'batch_size': int,
     'max_size': Tuple[int, int],
-    'lr': float,
-})
+    'lr': float,})

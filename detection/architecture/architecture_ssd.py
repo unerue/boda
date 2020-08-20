@@ -35,7 +35,7 @@ config = {
 
 class L2Norm(nn.Module):
     def __init__(self, n_channels, scale):
-        super(L2Norm,self).__init__()
+        super().__init__()
         self.n_channels = n_channels
         self.gamma = scale or None
         self.eps = 1e-10
@@ -43,12 +43,12 @@ class L2Norm(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        init.constant_(self.weight,self.gamma)
+        init.constant_(self.weight, val=self.gamma)
 
     def forward(self, x):
-        norm = x.pow(2).sum(dim=1, keepdim=True).sqrt()+self.eps
+        norm = x.pow(2).sum(dim=1, keepdim=True).sqrt() + self.eps
         #x /= norm
-        x = torch.div(x,norm)
+        x = torch.div(x, norm)
         out = self.weight.unsqueeze(0).unsqueeze(2).unsqueeze(3).expand_as(x) * x
 
         return out
@@ -87,7 +87,7 @@ class PriorBox:
 
                 # aspect_ratio: 1
                 # rel size: min_size
-                s_k = self.min_sizes[k]/self.image_size
+                s_k = self.min_sizes[k] / self.image_size
                 mean += [cx, cy, s_k, s_k]
 
                 # aspect_ratio: 1
@@ -97,10 +97,10 @@ class PriorBox:
 
                 # rest of aspect ratios
                 for ar in self.aspect_ratios[k]:
-                    mean += [cx, cy, s_k*math.sqrt(ar), s_k/math.sqrt(ar)]
-                    mean += [cx, cy, s_k/math.sqrt(ar), s_k*math.sqrt(ar)]
+                    mean += [cx, cy, s_k * math.sqrt(ar), s_k / math.sqrt(ar)]
+                    mean += [cx, cy, s_k / math.sqrt(ar), s_k * math.sqrt(ar)]
         # back to torch land
-        output = torch.Tensor(mean).view(-1, 4)
+        output = torch.FloatTensor(mean).view(-1, 4)
         if self.clip:
             output.clamp_(max=1, min=0)
             

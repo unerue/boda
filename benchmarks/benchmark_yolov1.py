@@ -89,31 +89,40 @@ from detection.utils import AverageMeter
 # sys.exit(0)
 
 
-def get_transform(is_train=True):
+def get_transforms(is_train=True):
+    return transforms.Compose([
+        transforms.Resize((448,448)),
+        transforms.ToTensor()
+    ])
+
+def get_transforms(is_train=True):
     if is_train:
         return A.Compose([
             A.Resize(448, 448),
-            A.HueSaturationValue(),
+            # A.Normalize(mean=(122.67891434, 116.66876762, 104.00698793)),
+            # A.HueSaturationValue(),
             # A.Rotate(p=0.2),
-            A.VerticalFlip(p=0.4),
-            A.HorizontalFlip(p=0.4),
-            ToTensor(num_classes=20)], 
+            # A.VerticalFlip(p=0.4),
+            # A.HorizontalFlip(p=0.4),
+            ToTensor()], 
             bbox_params={'format': 'pascal_voc', 'label_fields': ['category_ids']})
     else:
         return A.Compose([
             A.Resize(448, 448),
-            ToTensor(num_classes=20)], 
+            # A.Normalize(mean=(122.67891434, 116.66876762, 104.00698793)),
+            ToTensor()], 
             bbox_params={'format': 'pascal_voc', 'label_fields': ['category_ids']})
 
-trainset = PascalVocDataset(yolov1_base_config, get_transform())
-testset = PascalVocDataset(yolov1_base_config, get_transform(False))
+trainset = PascalVocDataset(yolov1_base_config, get_transforms())
+# testset = PascalVocDataset(yolov1_base_config, get_transform(False))
+testset = PascalVocDataset(yolov1_base_config, get_transforms(False))
 
 def collate_fn(batch):
     return tuple(zip(*batch))
 
 train_loader = DataLoader(
     trainset,
-    batch_size=32,
+    batch_size=16,
     shuffle=True,
     num_workers=2,
     collate_fn=collate_fn)
@@ -131,11 +140,11 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 from torch.optim.lr_scheduler import StepLR
 
 model = Yolov1Model(yolov1_base_config).to(device)
-optimizer = torch.optim.SGD(model.parameters(), 0.001)
+optimizer = torch.optim.SGD(model.parameters(), 0.01, momentum=0.9, weight_decay=0.0005)
 criterion = Yolov1Loss()
-scheduler = StepLR(optimizer, step_size=5, gamma=0.1)
+scheduler = StepLR(optimizer, step_size=1, gamma=0.1)
 
-num_epochs = 10
+num_epochs = 150
 for epoch in range(num_epochs):
     model.train()
     for i, (images, targets) in enumerate(train_loader):
@@ -150,6 +159,7 @@ for epoch in range(num_epochs):
         print(f'Epoch #{epoch} id: {i}\n loss_boxes: {losses["loss_boxes"]:.6f} loss_object: {losses["loss_object"]:.6f} loss_class: {losses["loss_class"]:.6f}')
         losses = sum(loss for loss in losses.values())
         print(f' total loss: {losses:.6f}')
+        print(losses)
 
         # sys.exit()
         losses.backward()
@@ -158,12 +168,15 @@ for epoch in range(num_epochs):
         # if (i+1) > 200:
         #     scheduler.step()
 
-        # if (i+1) % 200 == 0:
-        #     break
+        if (i+1) % 200 == 0:
+            break
+    
+    if (epoch+1) in [3, 5, 50, 100]:
+        scheduler.step()
+        print('#'*100)
+        torch.save(model.state_dict(), f'./data/yolov1-{epoch}-1.pth')
 
-    scheduler.step()
-
-
+torch.save(model.state_dict(), './data/yolov1-1.pth')
 
 def convert(targets):
     nb = 2
@@ -209,6 +222,8 @@ def convert(targets):
     return transformed_targets
 
 
+model = Yolov1Model(yolov1_base_config).to(device)
+model.load_state_dict(torch.load('./data/yolov1.pth'))
 model.eval()
 for (images, targets) in test_loader:
     images = [image.to(device) for image in images]
@@ -321,6 +336,8 @@ fig, axes = plt.subplots(1, 4, figsize=(16, 8), dpi=300)
 for i, (image, out1, out2) in enumerate(zip(images, outputs, targets)):
     image = image.permute(1, 2, 0).detach().cpu().numpy()
     # for box, box2 in zip(outputs[0]['boxes'], targets[0]['boxes']):
+    # print(out1)
+    # sys.exit(0)
     print(torch.max(out1['labels'], 1)[1])
 
     for box in out1['boxes']:

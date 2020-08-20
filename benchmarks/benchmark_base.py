@@ -75,13 +75,28 @@ class PascalVocDataset(Dataset):
     def __getitem__(self, index: int):
         image_id = self.image_ids[index]
         data = self.labels[image_id]
+
+        #TODO:
+        # data
         
         # image = cv2.imread(os.path.join(self.image_dir, image_id), cv2.IMREAD_COLOR)
         # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         image = Image.open(os.path.join(self.image_dir, image_id)).convert('RGB')
-        image = np.array(image).astype(np.float32) / 255.
+        image = image.resize((448, 448))
+        # print(image.shape)
+        # mean = np.array([122.67891434, 116.66876762, 104.00698793])
+        image = np.array(image).astype(np.float32)
+        print(image.shape)
+        image = np.array(image).astype(np.float32).transpose(2, 0, 1)
+        print(image.shape)
+        # print(image.shape)
+        sys.exit(0)
+        image /= 255.
+        # image = (image - image.min()) / (image.max() - image.min())
+        
+        # image /= 255.
 
-        boxes = np.asarray(data['boxes'], np.float32)
+        boxes = np.asarray(data['boxes'], np.float64)
         labels = torch.as_tensor(data['labels'], dtype=torch.int64)#.view(-1, 1)
         
         target = {
@@ -98,6 +113,11 @@ class PascalVocDataset(Dataset):
             sample = self.transforms(**sample)
             image = sample['image']
             target['boxes'] = torch.as_tensor(sample['bboxes'])
+
+        
+        
+        image = torch.as_tensor(image)
+        # target['boxes'] = torch.as_tensor(target['boxes'])
 
         # print(target)
         return image, target

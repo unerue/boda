@@ -1,6 +1,16 @@
 from typing import Tuple, List, Dict
-from .configuration_base import Config
-from .configuration_base import PASCAL_CLASSES, COCO_CLASSES, COCO_LABEL_MAP
+from .configuration_base import Config, dataset_base, backbone_base
+from .configuration_base import PASCAL_CLASSES, COCO_CLASSES
+
+
+cfg = [
+    (7, 64, 2), 'M', 
+    (3, 192), 'M',
+    (1, 128), (3, 256), (1, 256), (3, 512), 'M',
+    [(1, 256), (3, 512), 4], (1, 512), (3, 1024), 'M',
+    [(1, 512), (3, 1024), 2], (3, 1024), (3, 1024), 
+    (3, 1024), (3, 1024),
+]
 
 
 dataset_base = Config({
@@ -20,12 +30,6 @@ backbone_base = Config({
     'name': 'base backbone',
     'pretrained': bool,
     'path': 'path/to/pretrained/weights',
-})
-
-augmentation_base = Config({
-    'saturation': 1.5,
-    'exposure': 1.5,
-    'hue': 0.1,
 })
 
 model_base = Config({
@@ -60,7 +64,7 @@ yolov1_base_config = model_base.copy({
     'backbone': darknet9_backbone,
     'augmentation': None,
     'max_size': (448, 448),  # width, height
-    'batch_size': 1,  # train batch size 64
+    'batch_size': 32,  # train batch size 64
     'max_iter': 40000,  # max_batches
     'lr': 0.0005,
     'momentum': 0.9,

@@ -98,6 +98,8 @@ class Yolov1Loss(nn.Module):
         if self.training and targets is None:
             raise ValueError
         
+        
+        
         self.device = inputs.device
         bs = inputs.size(0)  # batch size
         nb = self.num_boxes  # B
@@ -205,11 +207,20 @@ class Yolov1Loss(nn.Module):
 
         loss_xy = F.mse_loss(
             response_boxes_preds[:, :2], 
-            response_boxes_targets[:, :2], reduction='sum')
+            response_boxes_targets[:, :2], reduction='sum') + 0.0001
+
+        # loss_xy = torch.sum(torch.pow(response_boxes_targets[:, 0] - response_boxes_preds[:, 0], 2) \
+        # + torch.pow(response_boxes_targets[:, 1] - response_boxes_preds[:, 1], 2))
+
         loss_wh = F.mse_loss(
             torch.sqrt(response_boxes_preds[:, 2:4]), 
-            torch.sqrt(response_boxes_targets[:, 2:4]), reduction='sum')
-        loss_boxes = (self.lambda_coord * (loss_xy + loss_wh)) / bs
+            torch.sqrt(response_boxes_targets[:, 2:4]), reduction='sum') + 0.0001
+
+        # loss_wh = torch.sum(torch.pow(torch.sqrt(response_boxes_targets[:, 3]) - torch.sqrt(response_boxes_preds[:, 3]), 2) \
+        # + torch.pow(torch.sqrt(response_boxes_targets[:, 4]) - torch.sqrt(response_boxes_preds[:, 4]), 2))
+        
+        loss_boxes = (self.lambda_coord * (loss_xy + loss_wh)) / bs 
+        # loss_boxes = (self.lambda_coord * (loss_xy)) / bs 
 
         loss_obj = F.mse_loss(
             response_boxes_preds[:, 4], iou_targets[:, 4], reduction='sum')

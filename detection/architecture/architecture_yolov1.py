@@ -18,7 +18,7 @@ from torchsummary import summary
 
 
 
-backbone1 = models.resnet101(pretrained=True)
+backbone1 = models.resnet50(pretrained=True)
 # print(summary(backbone1, (3, 448, 448)))
 # print(backbone1.layer4)
 for p in backbone1.parameters():
@@ -52,8 +52,10 @@ class Yolov1PredictionHead(nn.Module):
         self.classifier = nn.Sequential(
             nn.Linear(7 * 7 * 1024, 4096),
             nn.LeakyReLU(0.1),
-            nn.Linear(4096, self.grid_size * self.grid_size * self.out_channels),
-            nn.Sigmoid())
+            nn.Linear(4096, self.grid_size * self.grid_size * self.out_channels)
+            # nn.Sigmoid()
+        )
+        self._initialize_weights()
 
     def forward(self, x: List[Tensor]) -> Tensor:
         """
@@ -68,9 +70,8 @@ class Yolov1PredictionHead(nn.Module):
         x = self.backbone.layer2(x)
         x = self.backbone.layer3(x)
         x = self.backbone.layer4(x)
-
-
-
+        
+        
         # x = self.fc(torch.flatten(x[-1], 1))
         # x = x.view(-1, self.grid_size, self.grid_size, self.out_channels)
         # x = self.fc1(x[-1])
@@ -81,6 +82,19 @@ class Yolov1PredictionHead(nn.Module):
         x = x.view(-1, self.grid_size, self.grid_size, self.out_channels)
         
         return x
+
+    def _initialize_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, 0, 0.05)
+                nn.init.constant_(m.bias, 0)
 
 
 class Yolov1Model(nn.Module):
@@ -112,7 +126,9 @@ class Yolov1Model(nn.Module):
         
         if self.training:
             outputs = self.prediction_head(inputs)
-
+            # outputs = torch.clamp(outputs, min=0.0, max=1.0, out=None)
+            # print(outputs.size())
+            # outputs = outputs[torch.isnan(outputs)] = 0
             
 
 
@@ -138,12 +154,14 @@ class Yolov1Model(nn.Module):
                 labels = []
                 for i in range(gs):
                     for j in range(gs):
-                        label = outputs[bi, j, i, 5*nb:]
+                        
                         class_proba, _ = torch.max(outputs[bi, j, i, 5*nb:], dim=0)
                         for k in range(nb):
+                            label = outputs[bi, j, i, 5*nb:]
+
                             score = outputs[bi, j, i, k*5+4]
-                        
-                            proba = score * class_proba
+
+                            # proba = score * class_proba
                             proba = score * 1.0
                             if proba < 0.1:
                                 continue
@@ -166,8 +184,10 @@ class Yolov1Model(nn.Module):
                             # sys.exit()
                             boxes.append(xyxy)
                             scores.append(score)
+                            labels.append(label)
                         # print(boxes)
-                        labels.append(label)
+                        # labels.append(label)
+                        # print(labels)
                 print(len(boxes))
                 # sys.exit(0)
                 if len(boxes) > 0:
@@ -175,6 +195,7 @@ class Yolov1Model(nn.Module):
                         'boxes': torch.stack(boxes).to(self.device),
                         'scores': torch.stack(scores).to(self.device),
                         'labels': torch.stack(labels).to(self.device)})
+                    # print(torch.stack(labels).to(self.device))
                 else:
                     preds.append({
                         'boxes': torch.zeros((1, 4)).to(self.device),
@@ -198,21 +219,22 @@ class Yolov1Model(nn.Module):
         
         # preds = inputs
         # print('*'*100)
-        # preds = non_maximum_supression(inputs)
-        keeps = non_maximum_supression(inputs)
+        
+
+        # keeps = non_maximum_supression(inputs)
         
         # print('*'*100)
         # print(len(preds))
-        for pred, keep in zip(inputs, keeps):
-            if keep.size(0) == 0:
-                continue
+        # for pred, keep in zip(inputs, keeps):
+        #     if keep.size(0) == 0:
+        #         continue
 
-            boxes = pred['boxes'][keep]
-            scores = pred['scores'][keep]
-            labels = pred['labels'][keep]
+            # boxes = pred['boxes'][keep]
+            # scores = pred['scores'][keep]
+            # labels = pred['labels'][keep]
 
-            
-
+        for pred in inputs:
+            boxes = pred['boxes']
             boxes[:, 0], boxes[:, 1] = boxes[:, 0]*w, boxes[:, 1]*h
             boxes[:, 2], boxes[:, 3] = boxes[:, 2]*w, boxes[:, 3]*h
         # for pred in preds:
@@ -225,9 +247,9 @@ class Yolov1Model(nn.Module):
         #     boxes[:, 2], boxes[:, 3] = boxes[:, 2]*w, boxes[:, 3]*h
 
             pred['boxes'] = boxes
-            pred['scores'] = scores
-            pred['labels'] = labels
-
+            # pred['scores'] = scores
+            # pred['labels'] = labels
+        # print(inputs)
         return inputs
             # print('='*100)
             # print(boxes.size())

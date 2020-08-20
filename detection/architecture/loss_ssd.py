@@ -33,7 +33,7 @@ class L2Norm(nn.Module):
 
 
 
-class MultiBoxLoss(nn.Module):
+class SsdLoss(nn.Module):
     """SSD Weighted Loss Function
     Compute Targets:
         1) Produce Confidence Target Indices by matching  ground truth boxes

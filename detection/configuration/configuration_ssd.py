@@ -1,5 +1,50 @@
 # config.py
+from .configuration_base import PASCAL_CLASSES, COCO_CLASSES
+from .configuration_base import dataset_base, transform_base, backbone_base, model_base
 import os.path
+
+
+pascal_voc_datset = dataset_base.copy({
+    'name': 'pascal voc 2007+2012',
+    'train_images': './data/pascal_voc/VOC2012/train/JPEGImages',
+    'test_images': './data/pasca_voc/VOC2012/test/JPEGImages',
+    'train_labels': './data/pascal_voc/VOC2012/train_labels.txt',
+    'test_labels': './data/pascal_voc/VOC2012/test_labels.txt',
+    'class_names': PASCAL_CLASSES,
+    'num_classes': 20})
+
+vgg16_backbone = backbone_base.copy({
+    'name': 'VGG16',
+    'pretrained': False, 
+    'path': 'path/to/pretrained/weights',
+})
+
+ssd_voc_vgg = model_base.copy({
+    'name': 'yolov1 base',
+    'dataset': pascal_voc_datset,
+    'backbone': vgg16_backbone,
+    'augmentation': None,
+    'max_size': (448, 448),  # width, height
+    'batch_size': 32,  # train batch size 64
+    'max_iter': 120000,  # max_batches
+    'lr': 0.0005,
+    'momentum': 0.9,
+    'decay': 0.0005,
+    'lr_steps': (80000, 100000, 120000),
+    'lr_scales': (2.5, 2.0, 2.0, 0.1, 0.1),
+    # SSD
+    'feature_maps': [38, 19, 10, 5, 3, 1],
+    'min_dim': 300,
+    'steps': [8, 16, 32, 64, 100, 300],
+    'min_sizes': [30, 60, 111, 162, 213, 264],
+    'max_sizes': [60, 111, 162, 213, 264, 315],
+    'aspect_ratios': [[2], [2, 3], [2, 3], [2, 3], [2], [2]],
+    'variance': [0.1, 0.2],
+    'clip': True,
+})
+
+ssd_base_config = ssd_voc_vgg.copy()
+
 
 # gets home dir cross platform
 HOME = os.path.expanduser("~")
@@ -11,20 +56,6 @@ COLORS = ((255, 0, 0, 128), (0, 255, 0, 128), (0, 0, 255, 128),
 MEANS = (104, 117, 123)
 
 # SSD300 CONFIGS
-voc = {
-    'num_classes': 21,
-    'lr_steps': (80000, 100000, 120000),
-    'max_iter': 120000,
-    'feature_maps': [38, 19, 10, 5, 3, 1],
-    'min_dim': 300,
-    'steps': [8, 16, 32, 64, 100, 300],
-    'min_sizes': [30, 60, 111, 162, 213, 264],
-    'max_sizes': [60, 111, 162, 213, 264, 315],
-    'aspect_ratios': [[2], [2, 3], [2, 3], [2, 3], [2], [2]],
-    'variance': [0.1, 0.2],
-    'clip': True,
-    'name': 'VOC',
-}
 
 coco = {
     'num_classes': 201,
