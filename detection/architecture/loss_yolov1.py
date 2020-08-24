@@ -55,31 +55,45 @@ class Yolov1Loss(nn.Module):
         # x1, y1, x2, y2를 center x, center y, w, h로 변환하고
         # 모든 0~1사이로 변환, cx, cy는 each cell안에서의 비율
         # w, h는 이미지 대비 비율
-        transformed_targets = torch.zeros(len(targets), gs, gs, 5*nb+nc, device=self.device)
+        transformed_targets = torch.zeros((len(targets), gs, gs, 5*nb+nc), device=self.device)
         # cnt = 0
+        
         for b, target in enumerate(targets):
             boxes = target['boxes']
+
+            
+
+
+            
             norm_boxes = boxes / torch.Tensor([[w, h, w, h]]).expand_as(boxes).to(self.device)
             # 데이터셋에서 변환해서 들어오기
             # center x, y, width and height
+
+
             xys = (norm_boxes[:, 2:] + norm_boxes[:, :2]) / 2.0
             whs = norm_boxes[:, 2:] - norm_boxes[:, :2]
-            
+
+
             for box_id in range(boxes.size(0)):
                 xy = xys[box_id]
                 wh = whs[box_id]
-    
+                
                 ij = (xy / cell_size).ceil() - 1.0
+                i, j = int(ij[0]), int(ij[1])
+                
+
                 x0y0 = ij * cell_size
                 norm_xy = (xy - x0y0) / cell_size
 
-                i, j = int(ij[0]), int(ij[1])
+                
                 for k in range(0, 5*nb, 5):
                     if transformed_targets[b, j, i, k+4] == 1.0:
                         transformed_targets[b, j, i, k+5:k+5+4] = torch.cat([norm_xy, wh])
                     else:
                         transformed_targets[b, j, i, k:k+4] = torch.cat([norm_xy, wh])
                         transformed_targets[b, j, i, k+4] = 1.0
+                    # transformed_targets[b, j, i, k:k+4] = torch.cat([norm_xy, wh])
+                    # transformed_targets[b, j, i, k+4] = 1.0
                     
                 # print(transformed_targets[b, j, i, :10])
                 indices = torch.as_tensor(target['labels'][box_id], dtype=torch.int64).view(-1, 1)
@@ -207,14 +221,14 @@ class Yolov1Loss(nn.Module):
 
         loss_xy = F.mse_loss(
             response_boxes_preds[:, :2], 
-            response_boxes_targets[:, :2], reduction='sum') + 0.0001
+            response_boxes_targets[:, :2], reduction='sum')
 
         # loss_xy = torch.sum(torch.pow(response_boxes_targets[:, 0] - response_boxes_preds[:, 0], 2) \
         # + torch.pow(response_boxes_targets[:, 1] - response_boxes_preds[:, 1], 2))
 
         loss_wh = F.mse_loss(
             torch.sqrt(response_boxes_preds[:, 2:4]), 
-            torch.sqrt(response_boxes_targets[:, 2:4]), reduction='sum') + 0.0001
+            torch.sqrt(response_boxes_targets[:, 2:4]), reduction='sum')
 
         # loss_wh = torch.sum(torch.pow(torch.sqrt(response_boxes_targets[:, 3]) - torch.sqrt(response_boxes_preds[:, 3]), 2) \
         # + torch.pow(torch.sqrt(response_boxes_targets[:, 4]) - torch.sqrt(response_boxes_preds[:, 4]), 2))

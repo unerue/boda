@@ -18,13 +18,13 @@ from torchvision.models.detection import FasterRCNN
 from torchvision.models.detection.rpn import AnchorGenerator
 from torchsummary import summary
 
-import albumentations as A
-from albumentations.pytorch.transforms import ToTensorV2, ToTensor
+# import albumentations as A
+# from albumentations.pytorch.transforms import ToTensorV2, ToTensor
 
 sys.path.append('../')
 from benchmark_base import parser_txt, PascalVocDataset
 from detection import yolov1_base_config, PASCAL_CLASSES
-from detection import darknet9, Yolov1Model, Yolov1Loss
+from detection import Yolov1Model, Yolov1Loss
 from detection.utils import AverageMeter
 
 
@@ -89,29 +89,97 @@ from detection.utils import AverageMeter
 # sys.exit(0)
 
 
-def get_transforms(is_train=True):
-    return transforms.Compose([
-        transforms.Resize((448,448)),
-        transforms.ToTensor()
-    ])
+
+
+# def get_transforms(is_train=True):
+#     if is_train:
+#         return A.Compose([
+#             A.Resize(448, 448),
+#             # A.Normalize(mean=(122.67891434, 116.66876762, 104.00698793)),
+#             # A.HueSaturationValue(),
+#             # A.Rotate(p=0.2),
+#             # A.VerticalFlip(p=0.4),
+#             # A.HorizontalFlip(p=0.4),
+#             ToTensor()], 
+#             bbox_params={'format': 'pascal_voc', 'label_fields': ['category_ids']})
+#     else:
+#         return A.Compose([
+#             A.Resize(448, 448),
+#             # A.Normalize(mean=(122.67891434, 116.66876762, 104.00698793)),
+#             ToTensor()], 
+#             bbox_params={'format': 'pascal_voc', 'label_fields': ['category_ids']})
+
+class Compose:
+    """Composes several augmentations together.
+    Args:
+        transforms (List[Transform]): list of transforms to compose.
+    Example:
+        >>> augmentations.Compose([
+        >>>     transforms.CenterCrop(10),
+        >>>     transforms.ToTensor(),
+        >>> ])
+    """
+
+    def __init__(self, transforms):
+        self.transforms = transforms
+
+    def __call__(self, image, boxes=None, labels=None):
+        for t in self.transforms:
+            image, boxes, labels = t(image, boxes, labels)
+        return image, boxes, labels
+
+
+class Resize:
+    def __init__(self, size):
+        self.size = size
+
+    def __call__(self, image, boxes, labels=None):
+        w, h = image.size
+
+        image = image.resize(self.size)
+        boxes[:, [0, 2]] *= self.size[0] / w
+        boxes[:, [1, 3]] *= self.size[1] / h
+
+        return image, boxes, labels
+
+
+class Normalize:
+    def __init__(self, mean, std):
+        self.mean = np.array(mean, dtype=np.float32)
+        self.std = np.array(std,  dtype=np.float32)
+
+    def __call__(self, image, boxes, labels=None):
+        image = np.asarray(image, dtype=np.float32)
+        
+
+        # if self.transform.normalize:
+        image = (image - self.mean) / self.std
+        # elif self.transform.subtract_means:
+        # image = (image - self.mean)
+        # elif self.transform.to_float:
+        image = image / 255
+
+
+        return image, boxes, labels 
+
+
+MEANS = (103.94, 116.78, 123.68)
+STD   = (57.38, 57.12, 58.40)
+
+class ToTensor:
+    def __call__(self, image, boxes=None, labels=None):
+        image = torch.from_numpy(image.transpose(2, 0, 1))
+        boxes = torch.from_numpy(boxes)
+        return image, boxes, labels
 
 def get_transforms(is_train=True):
-    if is_train:
-        return A.Compose([
-            A.Resize(448, 448),
-            # A.Normalize(mean=(122.67891434, 116.66876762, 104.00698793)),
-            # A.HueSaturationValue(),
-            # A.Rotate(p=0.2),
-            # A.VerticalFlip(p=0.4),
-            # A.HorizontalFlip(p=0.4),
-            ToTensor()], 
-            bbox_params={'format': 'pascal_voc', 'label_fields': ['category_ids']})
-    else:
-        return A.Compose([
-            A.Resize(448, 448),
-            # A.Normalize(mean=(122.67891434, 116.66876762, 104.00698793)),
-            ToTensor()], 
-            bbox_params={'format': 'pascal_voc', 'label_fields': ['category_ids']})
+    return Compose([
+        Resize((448,448)),
+        Normalize(MEANS, STD),
+        ToTensor(),
+    ])
+
+
 
 trainset = PascalVocDataset(yolov1_base_config, get_transforms())
 # testset = PascalVocDataset(yolov1_base_config, get_transform(False))
@@ -122,7 +190,7 @@ def collate_fn(batch):
 
 train_loader = DataLoader(
     trainset,
-    batch_size=16,
+    batch_size=32,
     shuffle=True,
     num_workers=2,
     collate_fn=collate_fn)
@@ -140,7 +208,7 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 from torch.optim.lr_scheduler import StepLR
 
 model = Yolov1Model(yolov1_base_config).to(device)
-optimizer = torch.optim.SGD(model.parameters(), 0.01, momentum=0.9, weight_decay=0.0005)
+optimizer = torch.optim.SGD(model.parameters(), 0.0005, momentum=0.9, weight_decay=0.0005)
 criterion = Yolov1Loss()
 scheduler = StepLR(optimizer, step_size=1, gamma=0.1)
 
@@ -168,11 +236,13 @@ for epoch in range(num_epochs):
         # if (i+1) > 200:
         #     scheduler.step()
 
-        if (i+1) % 200 == 0:
-            break
+        # if (i+1) % 200 == 0:
+        #     break
     
     if (epoch+1) in [3, 5, 50, 100]:
         scheduler.step()
+    
+    if epoch in [40, 50, 80, 100]:
         print('#'*100)
         torch.save(model.state_dict(), f'./data/yolov1-{epoch}-1.pth')
 

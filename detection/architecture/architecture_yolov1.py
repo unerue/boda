@@ -8,7 +8,7 @@ import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 
-from ..backbone import darknet9, darknet21
+from ..backbone import darknet21
 from .architecture_base import _check_inputs
 
 
@@ -27,7 +27,7 @@ for p in backbone1.parameters():
 
 
 class Yolov1PredictionHead(nn.Module):
-    def __init__(self, config: Dict, backbone: nn.Module = darknet9()):
+    def __init__(self, config: Dict, backbone: nn.Module = None):
         super().__init__()
         self.num_classes = config.dataset.num_classes
         self.grid_size = config.grid_size
@@ -38,23 +38,43 @@ class Yolov1PredictionHead(nn.Module):
         
         self.out_channels = 5 * self.num_boxes + self.num_classes
         # self.fc = nn.Linear(256*3*3, 1470)
+
+    
         self.fc = nn.Sequential(
             nn.Conv2d(2048, 1024, 3, padding=1),
-            nn.LeakyReLU(0.1),
+            nn.ReLU(),
             nn.Conv2d(1024, 1024, 3, stride=2, padding=1),
-            nn.LeakyReLU(0.1),
+            nn.ReLU(),
 
             nn.Conv2d(1024, 1024, 3, padding=1),
-            nn.LeakyReLU(0.1),
+            nn.ReLU(),
             nn.Conv2d(1024, 1024, 3, padding=1),
-            nn.LeakyReLU(0.1))
+            nn.ReLU())
 
         self.classifier = nn.Sequential(
             nn.Linear(7 * 7 * 1024, 4096),
-            nn.LeakyReLU(0.1),
-            nn.Linear(4096, self.grid_size * self.grid_size * self.out_channels)
-            # nn.Sigmoid()
+            nn.ReLU(),
+            nn.Linear(4096, self.grid_size * self.grid_size * self.out_channels),
+            nn.Sigmoid(),
         )
+        # else:
+        #     self.fc = nn.Sequential(
+        #         nn.Conv2d(2048, 1024, 3, padding=1),
+        #         nn.LeakyReLU(0.1),
+        #         nn.Conv2d(1024, 1024, 3, stride=2, padding=1),
+        #         nn.LeakyReLU(0.1),
+
+        #         nn.Conv2d(1024, 1024, 3, padding=1),
+        #         nn.LeakyReLU(0.1),
+        #         nn.Conv2d(1024, 1024, 3, padding=1),
+        #         nn.LeakyReLU(0.1))
+
+        #     self.classifier = nn.Sequential(
+        #         nn.Linear(7 * 7 * 1024, 4096),
+        #         nn.LeakyReLU(0.1),
+        #         nn.Linear(4096, self.grid_size * self.grid_size * self.out_channels)
+        #         # nn.Sigmoid()
+        #     )
         self._initialize_weights()
 
     def forward(self, x: List[Tensor]) -> Tensor:
@@ -93,7 +113,7 @@ class Yolov1PredictionHead(nn.Module):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
             elif isinstance(m, nn.Linear):
-                nn.init.normal_(m.weight, 0, 0.05)
+                nn.init.normal_(m.weight, 0, 0.01)
                 nn.init.constant_(m.bias, 0)
 
 
@@ -188,7 +208,7 @@ class Yolov1Model(nn.Module):
                         # print(boxes)
                         # labels.append(label)
                         # print(labels)
-                print(len(boxes))
+                # print(len(boxes))
                 # sys.exit(0)
                 if len(boxes) > 0:
                     preds.append({

@@ -24,19 +24,27 @@ class VGG(nn.Module):
 
         return outputs
 
-    def _make_layers(self, config, batch_norm=False):
+    def _make_layers(self, config, bn=False):
         in_channels = 3
         for v in config:
             if v == 'M':
-                self.layers.append([nn.MaxPool2d(kernel_size=2, stride=2)])
+                self.layers.append([
+                    nn.MaxPool2d(kernel_size=2, stride=2)])
             elif v == 'C':
-                self.layers.append([nn.MaxPool2d(kernel_size=2, stride=2, ceil_mode=True)])
+                self.layers.append([
+                    nn.MaxPool2d(kernel_size=2, stride=2, ceil_mode=True)])
             else:
-                conv2d = nn.Conv2d(in_channels, v, kernel_size=3, padding=1)
-                if batch_norm:
-                    self.layers.append([conv2d, nn.BatchNorm2d(v), nn.ReLU()])
+                conv2d = nn.Conv2d(
+                    in_channels=in_channels, 
+                    out_channels=v, 
+                    kernel_size=3, 
+                    padding=1)
+                if bn:
+                    self.layers.append([
+                        conv2d, nn.BatchNorm2d(v), nn.ReLU()])
                 else:
-                    self.layers.append([conv2d, nn.ReLU()])
+                    self.layers.append([
+                        conv2d, nn.ReLU()])
 
                 in_channels = v
 
