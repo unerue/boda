@@ -114,9 +114,14 @@ class Darknet(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
 
-def darknet21():
-    return Darknet()
+def darknet(config: Dict = None):
+    model = Darknet()
 
+    if isinstance(config, dict):
+        if config.backbone.pretrained:
+            model.load_state_dict(torch.load(config.backbone.path))
+
+    return model
 
 
 

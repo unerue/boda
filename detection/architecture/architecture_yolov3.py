@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ..backbone import darknet53, Shortcut
+# from ..backbone import darknet53, Shortcut
 # from ..configuration import yolov3_base_darknet_pascal
 from .architecture_base import Conv2d1x1, Upsample
 # from .loss_yolov3 import Yolov3Loss
@@ -24,7 +24,7 @@ class Yolov3PredictionHead(nn.Module):
         super().__init__()
         # TODO: 모든 constant -> config 처리
         self.config = config
-        self.backbone = darknet53()  # self.config.backbone
+        # self.backbone = darknet53()  # self.config.backbone
         
         out_channels = self.backbone.channels[-self.config.selected_layers:]  
         # B = 3, C = 20

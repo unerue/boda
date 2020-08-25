@@ -8,7 +8,7 @@ import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 
-from ..backbone import darknet21
+from ..backbone import darknet
 from .architecture_base import _check_inputs
 
 
@@ -32,31 +32,27 @@ class Yolov1PredictionHead(nn.Module):
         self.num_classes = config.dataset.num_classes
         self.grid_size = config.grid_size
         self.num_boxes = config.num_boxes
-        # self.backbone = backbone
-        # self.backbone = darknet21()
-        self.backbone = backbone1
-        
         self.out_channels = 5 * self.num_boxes + self.num_classes
-        # self.fc = nn.Linear(256*3*3, 1470)
-
     
+        self.backbone = backbone1
+        # self.fc = nn.Linear(256*3*3, 1470)
+        
         self.fc = nn.Sequential(
-            nn.Conv2d(2048, 1024, 3, padding=1),
+            nn.Conv2d(2048, 1024, kernel_size=3, padding=1),
             nn.ReLU(),
-            nn.Conv2d(1024, 1024, 3, stride=2, padding=1),
+            nn.Conv2d(1024, 1024, kernel_size=3, stride=2, padding=1),
             nn.ReLU(),
 
-            nn.Conv2d(1024, 1024, 3, padding=1),
+            nn.Conv2d(1024, 1024, kernel_size=3, padding=1),
             nn.ReLU(),
-            nn.Conv2d(1024, 1024, 3, padding=1),
+            nn.Conv2d(1024, 1024, kernel_size=3, padding=1),
             nn.ReLU())
 
         self.classifier = nn.Sequential(
-            nn.Linear(7 * 7 * 1024, 4096),
+            nn.Linear(self.grid_size * self.grid_size * 1024, 4096),
             nn.ReLU(),
             nn.Linear(4096, self.grid_size * self.grid_size * self.out_channels),
-            nn.Sigmoid(),
-        )
+            nn.Sigmoid())
         # else:
         #     self.fc = nn.Sequential(
         #         nn.Conv2d(2048, 1024, 3, padding=1),

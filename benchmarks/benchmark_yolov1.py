@@ -212,6 +212,9 @@ optimizer = torch.optim.SGD(model.parameters(), 0.0005, momentum=0.9, weight_dec
 criterion = Yolov1Loss()
 scheduler = StepLR(optimizer, step_size=1, gamma=0.1)
 
+
+iteration = 0
+flag = 0
 num_epochs = 150
 for epoch in range(num_epochs):
     model.train()
@@ -232,19 +235,22 @@ for epoch in range(num_epochs):
         # sys.exit()
         losses.backward()
         optimizer.step()
-    
+
         # if (i+1) > 200:
         #     scheduler.step()
 
         # if (i+1) % 200 == 0:
         #     break
+        
     
-    if (epoch+1) in [3, 5, 50, 100]:
-        scheduler.step()
+        if iteration in (200, 400, 600, 20000, 30000):
+            scheduler.step()
     
     if epoch in [40, 50, 80, 100]:
         print('#'*100)
         torch.save(model.state_dict(), f'./data/yolov1-{epoch}-1.pth')
+
+        i += 1
 
 torch.save(model.state_dict(), './data/yolov1-1.pth')
 
@@ -293,7 +299,7 @@ def convert(targets):
 
 
 model = Yolov1Model(yolov1_base_config).to(device)
-model.load_state_dict(torch.load('./data/yolov1.pth'))
+model.load_state_dict(torch.load('./data/yolov1-40-1.pth'))
 model.eval()
 for (images, targets) in test_loader:
     images = [image.to(device) for image in images]
@@ -404,6 +410,9 @@ fig, axes = plt.subplots(1, 4, figsize=(16, 8), dpi=300)
 # boxes2 = targets[0]['boxes'].numpy()
 # image = image.permute(1, 2, 0).detach().cpu().numpy()
 for i, (image, out1, out2) in enumerate(zip(images, outputs, targets)):
+    # print(image.shape)
+    # sys.exit(0)
+    # image = image.permute(1, 2, 0).detach().cpu().numpy()
     image = image.permute(1, 2, 0).detach().cpu().numpy()
     # for box, box2 in zip(outputs[0]['boxes'], targets[0]['boxes']):
     # print(out1)

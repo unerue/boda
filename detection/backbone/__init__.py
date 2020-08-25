@@ -1,14 +1,10 @@
-from .backbone_yolov1 import darknet21
-from .backbone_yolov3 import Yolov3Backbone, Darknet, darknet53, darknet21, Shortcut
+from .backbone_yolov1 import darknet
+from .backbone_ssd import vgg
+# from .backbone_yolov3 import Yolov3Backbone, Darknet, darknet53, darknet21, Shortcut
 
 
 
 __all__ = [
-    # 'darknet9',
-    'darknet21',
-    'Yolov3Backbone',
-    'Darknet',
-    'darknet53',
-    'darknet21',
-    'Shortcut'
+    'darknet', 'vgg'
+    # 'Yolov3Backbone', 'Darknet', 'darknet53', 'darknet21', 'Shortcut'
 ]
