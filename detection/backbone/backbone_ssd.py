@@ -45,7 +45,7 @@ class VGG(nn.Module):
             if isinstance(v, tuple):
                 kwargs = v[1]
                 v = v[0]
-            
+                
             if v == 'M':
                 if kwargs is None:
                     kwargs = {'kernel_size': 2, 'stride': 2}
