@@ -17,7 +17,12 @@ vgg16_backbone = backbone_base.copy({
     'name': 'vgg16',
     'pretrained': False, 
     'path': 'path/to/pretrained/weights',
-    'backbone_layers': [(64, 64), 'M', 128, 128, 'M', 256, 256, 256, 'C', 512, 512, 512, 'M', 512, 512, 512],
+    'backbone_layers': [
+        [64, 64],
+        ['M', 128, 128],
+        ['M', 256, 256, 256],
+        [('M', {'kernel_size': 2, 'stride': 2, 'ceil_mode': True}), 512, 512, 512],
+        ['M', 512, 512, 512]]
 })
 
 ssd_voc_vgg = model_base.copy({
