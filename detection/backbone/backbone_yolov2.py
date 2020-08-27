@@ -36,7 +36,7 @@ class Darknet19(nn.Module):
             else:
                 if kwargs is None:
                     kwargs = {'kernel_size': 3, 'padding': 1}
-
+                print(v, kwargs)
                 layers += [
                     nn.Conv2d(
                         self.in_channels, 

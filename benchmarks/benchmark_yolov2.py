@@ -30,9 +30,17 @@ backbone_layers = [
     [512, (256, {'kernel_size': 1}), 512, (256, {'kernel_size': 1}), 512, 'M'],
     [1024, (512, {'kernel_size': 1}), 1024, (512, {'kernel_size': 1}), 1024]]
 
+backbone_layers = [
+    [32],
+    ['M', 64],
+    ['M', 128, (64, {'kernel_size': 1}), 128],
+    ['M', 256, (128, {'kernel_size': 1}), 256],
+    ['M', 512, (256, {'kernel_size': 1}), 512, (256, {'kernel_size': 1}), 512],
+    ['M', 1024, (512, {'kernel_size': 1}), 1024, (512, {'kernel_size': 1}), 1024]]
+
 
 model = darknet19(backbone_layers).to('cuda')
-print(summary(model, input_data=(3, 416, 416), depth=3, verbose=0))
+print(summary(model, input_data=(3, 224, 224), depth=3, verbose=0))
 
 
 # model = SsdPredictionHead()
