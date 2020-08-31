@@ -1,7 +1,7 @@
 import math
 from typing import List
 import torch
-import torch.nn as nn
+from torch import nn, Tensor
 import torch.nn.functional as F
 
 
@@ -14,18 +14,18 @@ class Shortcut(nn.Module):
         super().__init__()
         self.residual = residual
         self.conv1 = nn.Conv2d(
-            in_channels, 
-            out_channels[0], 
+            in_channels=in_channels, 
+            out_channels=out_channels[0], 
             kernel_size=1,
             stride=1, 
             padding=0,
             bias=False)
-        self.bn1 = nn.BatchNorm2d(out_channels[0])
-        self.relu1 = nn.LeakyReLU(0.1)
+        self.bn1 = nn.BatchNorm2d(num_features=out_channels[0])
+        self.relu1 = nn.LeakyReLU(negative_slope=0.1)
         
         self.conv2 = nn.Conv2d(
-            out_channels[0], 
-            out_channels[1], 
+            in_channels=out_channels[0], 
+            out_channels=out_channels[1], 
             kernel_size=3,
             stride=1, 
             padding=1, 
@@ -118,10 +118,7 @@ class Darknet(nn.Module):
         return outs
 
 
-class Yolov3Backbone:
-    def __init__(self):
-        raise NotImplementedError
-    
+   
 
 def darknet21(pretrained=False, **kwargs):
     """Constructs a darknet-21.
@@ -142,6 +139,9 @@ def darknet53(pretrained=False, **kwargs):
         
     return model
 
+class Yolov3Backbone:
+    def __init__(self):
+        raise NotImplementedError
 
 
 # def parse_model_config(path):

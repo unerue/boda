@@ -34,8 +34,19 @@ class Yolov3PredictionHead(nn.Module):
         # 마지막 고정 레이어
         self.detect_layers = nn.ModuleList()
         for in_channels in out_channels:
-            self.detect_layers.append(Conv2d1x1(in_channels, num_features))
-
+            self.detect_layers.append(
+                # Conv2d1x1(in_channels, num_features)
+                nn.Sequential(
+                    nn.Conv2d(
+                        in_channels, 
+                        num_features, 
+                        kernel_size=1, 
+                        stride=1, 
+                        padding=0, 
+                        bias=False), 
+                    nn.BatchNorm2d(num_features), 
+                    nn.LeakyReLU(0.1)))
+        
         # 업샘플링
         self.upsample_layers = nn.ModuleList()
         for in_channels in out_channels[1:]:
@@ -70,7 +81,7 @@ class Yolov3PredictionHead(nn.Module):
                 residual = self.upsample_layers[j-1](feature)
                 # print(residual.size(), j, '** UPSAMPLE!!')
             outs.append(out)
-            
+    
         return outs
 
 

@@ -15,6 +15,89 @@ from layers.interpolate import InterpolateModule
 
 
 
+class InterpolateModule(nn.Module):
+	"""
+	This is a module version of F.interpolate (rip nn.Upsampling).
+	Any arguments you give it just get passed along for the ride.
+	"""
+
+	def __init__(self, *args, **kwdargs):
+		super().__init__()
+
+		self.args = args
+		self.kwdargs = kwdargs
+
+	def forward(self, x):
+		return F.interpolate(x, *self.args, **self.kwdargs)
+
+############### Proto Network ###############
+'''
+Use P3 which is deepest feature map and has highest resolution
+'''
+mask_proto_net = [
+    (256, {'kernel_size': 3, 'padding': 1}), 
+    (256, {'kernel_size': 3, 'padding': 1}), 
+    (256, {'kernel_size': 3, 'padding': 1}),
+    (None, {'scale_factor': -2, 'mode': 'bilinear', 'align_corners': False}), 
+    (256, {'kernel_size': 3, 'padding': 1}), 
+    (32, {'kernel_size': 1})]
+
+class Protonet(nn.Module) :
+    def __init__(self, mask_proto_net, include_last_relu=True) :
+        super().__init__()
+
+        self.in_channels = 256
+        self.channels = []
+        self.layers = nn.ModuleList()
+
+        # self.mask_proto_net = mask_proto_net
+        # self.conv1 = nn.Conv2d(self.inplanes, mask_proto_net[0][0], kernel_size=mask_proto_net[0][1], **mask_proto_net[0][2])
+        # self.conv2 = nn.Conv2d(self.inplanes, mask_proto_net[1][0], kernel_size=mask_proto_net[1][1], **mask_proto_net[1][2])
+        # self.conv3 = nn.Conv2d(self.inplanes, mask_proto_net[2][0], kernel_size=mask_proto_net[2][1], **mask_proto_net[2][2])
+        # self.conv4 = nn.Conv2d(self.inplanes, mask_proto_net[4][0], kernel_size=mask_proto_net[4][1], **mask_proto_net[4][2])
+        # self.conv5 = nn.Conv2d(self.inplanes, mask_proto_net[5][0], kernel_size=mask_proto_net[5][1], **mask_proto_net[5][2])
+        # self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, x):
+        out = self.conv1(x)
+        out = self.relu(out)
+        out = self.conv2(out)
+        out = self.relu(out)
+        out = self.conv3(out)
+        out = self.relu(out)
+        out = F.interpolate(out, scale_factor = -self.mask_proto_net[3][1], mode='bilinear', align_corners=False, **self.mask_proto_net[3][2])
+        out = self.relu(out)
+        out = self.conv4(out)
+        out = self.relu(out)
+        out = self.conv5(out)
+
+        return out
+        
+    def _make_layer(self, config):
+        layers = []
+        for v in config:
+            kwargs = None
+            if isinstance(v, tuple):
+                kwargs = v[1]
+                v = v[0]
+                
+            if v is None:
+                layers += [
+                    InterpolateModule(kwargs), 
+                    nn.ReLU()]
+            else:
+                layers += [nn.Conv2d(
+                    in_channels=self.in_channels, 
+                    out_channels=v, 
+                    **kwargs), nn.ReLU()]
+
+            self.in_channels = v
+        
+        self.channels.append(self.in_channels)
+        self.layers.append(nn.Sequential(*layers))
+        
+        
+
 def make_net(in_channels, conf, include_last_relu=True):
     """
     A helper function to take a config setting and turn it into a network.
