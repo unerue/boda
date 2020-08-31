@@ -16,10 +16,11 @@ from torchsummary import summary
 
 sys.path.append('../')
 from benchmark_base import parser_txt, PascalVocDataset
-from detection import PASCAL_CLASSES
-from detection import vgg, SsdPredictionHead
+from moeuda.arch.ssd import vgg16
+# from moeuda.arch.ssd import PASCAL_CLASSES
+# from detection import vgg, SsdPredictionHead
 # from detection import Yolov1Model, Yolov1Loss
-from detection.utils import AverageMeter
+# from detection.utils import AverageMeter
 
 
 config = [
@@ -33,12 +34,12 @@ config = [
     #  (1024, {'kernel_size': 1})]
 ]
 
-model = vgg(config).to('cuda')
+model = vgg16(config).to('cuda')
 print(summary(model, input_data=(3, 300, 300), verbose=0))
 
 
-model = SsdPredictionHead()
-print(summary(model, input_data=(3, 300, 300), depth=2, verbose=0))
+# model = SsdPredictionHead()
+# print(summary(model, input_data=(3, 300, 300), depth=2, verbose=0))
 
 
 # class Compose:
