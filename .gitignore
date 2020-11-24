@@ -1,7 +1,19 @@
 .ipynb_checkpoints
 .vscode
+.gitignore
 __pycache__
-misc/
+
+misc/yolov1/testimg/
+misc/yolov2/demo/
+misc/yolov3/data/custom/
+misc/yolov3/data/samples/
+misc/yolov3/assets/
+misc/ssd500/img/
+misc/ssd300/doc/
+misc/retinanet/images/
+
 benchmarks/data/
 benchmarks/*pth
+doc/img/
+
 
