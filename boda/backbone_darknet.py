@@ -1,11 +1,13 @@
+
 import math
 from typing import List
+
 import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 
 
-__all__ = ['darknet21', 'darknet53']
+# __all__ = ['darknet21', 'darknet53']
 
 
 class Shortcut(nn.Module):
@@ -33,7 +35,7 @@ class Shortcut(nn.Module):
         self.bn2 = nn.BatchNorm2d(out_channels[1])
         self.relu2 = nn.LeakyReLU(0.1)
 
-    def forward(self, inputs: torch.Tensor):
+    def forward(self, inputs: Tensor):
         residual = inputs
 
         out = self.conv1(inputs)
@@ -50,7 +52,7 @@ class Shortcut(nn.Module):
         return out
 
 
-class Darknet(nn.Module):
+class DarkNet(nn.Module):
     """
     References:
         https://github.com/pytorch/vision/blob/master/torchvision/models/resnet.py
@@ -105,42 +107,61 @@ class Darknet(nn.Module):
         self.layers.append(nn.Sequential(*layers))
         self.channels.append(out_channles[1])
 
-    def forward(self, inputs: torch.Tensor):
+    def forward(self, inputs: List[Tensor]):
         inputs = self.conv(inputs)
         inputs = self.bn(inputs)
         inputs = self.relu(inputs)
 
-        outs = []
+        outputs = []
         for layer in self.layers:
             inputs = layer(inputs)
-            outs.append(inputs)
+            outputs.append(inputs)
              
-        return outs
+        return outputs
+
+    def initialize_weights(self, path):
+        state_dict = torch.load(path)
+        keys = list(state_dict)
+        for key in keys:
+            if key.startswith('layer'):
+                idx = int(key[5])
+                new_key = 'layers.' + str(idx-1) + key[6:]
+                state_dict[new_key] = state_dict.pop(key)
+        
+        self.load_state_dict(state_dict, strict=False)
+
+
+class CspDarkNet(nn.Module):
+    def __init__(self) -> None:
+        raise NotImplementedError
+
+    def forward(self, inputs):
+        raise NotImplementedError
 
 
 def darknet21(pretrained=False, **kwargs):
     """Constructs a darknet-21.
     """
-    model = Darknet([1, 1, 2, 2, 1])
+    backbone = DarkNet([1, 1, 2, 2, 1])
     if pretrained:
-        model.load_state_dict(torch.load(pretrained))
+        backbone.load_state_dict(torch.load(pretrained))
 
-    return model
+    return backbone
 
 
 def darknet53(pretrained=False, **kwargs):
     """Constructs a darknet-53.
     """
-    model = Darknet([1, 2, 8, 8, 4])
+    backbone = DarkNet([1, 2, 8, 8, 4])
     if pretrained:
-        model.load_state_dict(torch.load(pretrained))
+        backbone.load_state_dict(torch.load(pretrained))
         
-    return model
+    return backbone
 
 
-class Yolov3Backbone:
-    def __init__(self):
-        raise NotImplementedError
+# class Yolov3Backbone:
+#     def __init__(self):
+#         raise NotImplementedError
 
 
 # def parse_model_config(path):

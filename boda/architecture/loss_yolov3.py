@@ -23,7 +23,7 @@ def bbox_iou(box1, box2, x1y1x2y2=True):
     # get the corrdinates of the intersection rectangle
     # print(b1_x1.dtype, b2_x1.dtype)
     # print(b1_x1.dtype, b2_x1.dtype)
-    print(b1_x1.size(), b2_x1.size())
+    # print(b1_x1.size(), b2_x1.size())
     inter_rect_x1 = torch.max(b1_x1, b2_x1)
     inter_rect_y1 = torch.max(b1_y1, b2_y1)
     inter_rect_x2 = torch.min(b1_x2, b2_x2)

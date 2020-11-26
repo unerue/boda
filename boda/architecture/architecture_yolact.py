@@ -1,18 +1,14 @@
-from typing import Tuple, List, Dict
+import os
+import math
+from collections import deque
+from pathlib import Path
+from typing import Tuple, List, Dict, Any, Optional
 
 import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 
-
-import torch
-import torch.nn as nn
-import os
-import math
-from collections import deque
-from pathlib import Path
 from layers.interpolate import InterpolateModule
-
 
 
 class InterpolateModule(nn.Module):
@@ -233,7 +229,20 @@ class FPN(nn.Module):
 
 
 class YolactPredictionHead(nn.Module):
-    def __init__(self, config, in_channels, out_channels=1024, aspect_ratios=[[1]], scales=[1], parent=None, index=0):
+    """Prediction Head for Yolact 
+
+    Arguments:
+        in_channels ():
+        out_channels ():
+        aspect_ratios ():
+        scales ():
+        parent ():
+        index ():
+
+    """
+    def __init__(
+        self, config, in_channels: int, out_channels: int = 1024, aspect_ratios: List[float] = [[1]], 
+        scales: List[float] = [1], parent=None, index=0):
         super().__init__()
         
         self.num_classes = 20 # cfg.num_classes
@@ -410,7 +419,11 @@ class YolactPredictionHead(nn.Module):
         return preds
 
     def make_priors(self, conv_h, conv_w, device):
-        """ Note that priors are [x,y,width,height] where (x,y) is the center of the box. """
+        """ Note that priors are [x, y, w, h] where (x, y) is the center of the box. 
+        TODO: 
+        split class????
+
+        """
         global prior_cache
         size = (conv_h, conv_w)
 
