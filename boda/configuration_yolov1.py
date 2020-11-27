@@ -1,7 +1,65 @@
 from typing import Tuple, List, Dict
-from .configuration_base import Config
-from .configuration_base import PASCAL_CLASSES, COCO_CLASSES
+from urllib.parse import MAX_CACHE_SIZE
+from .configuration_base import PretrainedConfig
 
+
+YOLOV1_PRETRAINED_CONFIG = {
+    'yolov1-base': None,
+    'yolov1-tiny': None,
+}
+
+
+class Yolov1Config(PretrainedConfig):
+    def __init__(
+        self, 
+        selected_layers,
+        grid_size=7, 
+        num_boxes=2,
+        max_size=448,
+        num_classes=20,
+        **kwargs):
+        super().__init__(**kwargs)
+        self.selected_layers = selected_layers
+        self.grid_size = grid_size
+        self.num_boxes = num_boxes
+        self.max_size = max_size
+        self.num_classes = num_classes
+        self.obj_scale = 1
+        self.noobj_scale = 0.5
+        self.class_scale = 1
+        self.coord_scale = 5
+        self.jitter = 0.2
+        self.lambda_coord = 5.0
+        self.lambda_noobj = 0.5
+        self.sqrt = 1
+
+
+        
+
+#    'name': 'yolov1 base',
+#     'dataset': pascal_voc_datset,
+#     'backbone': darknet9_backbone,
+#     'augmentation': None,
+#     'max_size': (448, 448),  # width, height
+#     'batch_size': 32,  # train batch size 64
+#     'max_iter': 40000,  # max_batches
+#     'lr': 0.0005,
+#     'momentum': 0.9,
+#     'decay': 0.0005,
+#     'lr_steps': (200, 400, 600, 20000, 30000),
+#     'lr_scales': (2.5, 2.0, 2.0, 0.1, 0.1),
+#     'num_boxes': 2,
+#     'grid_size': 7,
+#     'object_scale': 1,
+#     'noobject_scale': 0.5, 
+#     'class_scale': 1,
+#     'coord_scale': 5,
+#     'jitter': 0.2, 
+#     'rescore': 1,
+#     'sqrt': 1,
+#     'num': 3,  # ????
+#     'lambda_coord': 5.0,
+#     'lambda_noobj': 0.5,
 
 cfg = [
     (7, 64, 2), 'M', 
@@ -12,19 +70,6 @@ cfg = [
     (3, 1024), (3, 1024),
 ]
 
-
-dataset_base = Config({
-    'name': 'base dataset',
-
-    'train_images': './path/to/images',
-    'valid_images': './path/to/images',
-    
-    'train_labels': './path/to/labels/',
-    'valid_labels': './path/to/labels/',
-
-    'class_names': Tuple[str],
-    'num_classes': int,
-})
 
 backbone_base = Config({
     'name': 'base backbone',
@@ -42,55 +87,6 @@ model_base = Config({
     'lr': float,
 })
 
-pascal_voc_datset = dataset_base.copy({
-    'name': 'pascal voc 2007',
-    'train_images': './data/pascal_voc/VOC2012/train/JPEGImages',
-    'test_images': './data/pasca_voc/VOC2012/test/JPEGImages',
-    'train_labels': './data/pascal_voc/VOC2012/train_labels.txt',
-    'test_labels': './data/pascal_voc/VOC2012/test_labels.txt',
-    'class_names': PASCAL_CLASSES,
-    'num_classes': 20,
-})
-
-darknet9_backbone = backbone_base.copy({
-    'name': 'darknet9',
-    'pretrained': False, 
-    'path': 'path/to/pretrained/weights',
-})
-
-yolov1_base_config = model_base.copy({
-    'name': 'yolov1 base',
-    'dataset': pascal_voc_datset,
-    'backbone': darknet9_backbone,
-    'augmentation': None,
-    'max_size': (448, 448),  # width, height
-    'batch_size': 32,  # train batch size 64
-    'max_iter': 40000,  # max_batches
-    'lr': 0.0005,
-    'momentum': 0.9,
-    'decay': 0.0005,
-    'lr_steps': (200, 400, 600, 20000, 30000),
-    'lr_scales': (2.5, 2.0, 2.0, 0.1, 0.1),
-    'num_boxes': 2,
-    'grid_size': 7,
-    'object_scale': 1,
-    'noobject_scale': 0.5, 
-    'class_scale': 1,
-    'coord_scale': 5,
-    'jitter': 0.2, 
-    'rescore': 1,
-    'sqrt': 1,
-    'num': 3,  # ????
-    'lambda_coord': 5.0,
-    'lambda_noobj': 0.5,
-})
-
-yolov1_config = yolov1_base_config.copy()
-
-class Yolov1Config(Config):
-    def __init__(self, config):
-        global yolov1_config
-        yolov1_config.replace(eval(config))
 
 
 

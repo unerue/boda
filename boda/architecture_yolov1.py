@@ -8,6 +8,23 @@ from .architecture_base import PreTrainedModel
 
 
 class Yolov1PredictNeck(nn.Module):
+    def __init__(self, config, **kwargs) -> None:
+        self.config = config
+        self.neck_layers = nn.Sequential(
+            nn.Conv2d(2048, 1024, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(1024, 1024, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(1024, 1024, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(1024, 1024, kernel_size=3, padding=1),
+            nn.ReLU())
+    
+    def forward(self, inputs) -> None:
+        raise NotImplementedError
+
+
+class Yolov1PredictHead(nn.Module):
     """Prediction Neck for Yolov4
     Arguments:
         selected_layers (List[float]):
@@ -16,42 +33,23 @@ class Yolov1PredictNeck(nn.Module):
         List[Tensor]
     """
     def __init__(self, config, **kwargs) -> None:
-        self.selected_layers = kwargs.get('selected_layers')
-        self.scales = kwargs.get('scales')
-        raise NotImplementedError
-    
-    def forward(self, inputs) -> List[Tensor]:
-        outputs = inputs
-        return outputs
-
-
-class Yolov1PredictHead(nn.Module):
-    def __init__(self, config, **kwargs) -> None:
         self.config = config
         self.out_channles = 5 * config.num_boxes + config.num_classes
-        
-        self.fc = nn.Sequential(
-            nn.Conv2d(2048, 1024, kernel_size=3, padding=1),
+        self.head_layers = nn.Sequential(
+            nn.Linear(config.grid_size * config.grid_size * 1024, 4096),
             nn.ReLU(),
-            nn.Conv2d(1024, 1024, kernel_size=3, stride=2, padding=1),
-            nn.ReLU(),
-
-            nn.Conv2d(1024, 1024, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(1024, 1024, kernel_size=3, padding=1),
-            nn.ReLU())
-
-        self.classifier = nn.Sequential(
-            nn.Linear(self.grid_size * self.grid_size * 1024, 4096),
-            nn.ReLU(),
-            nn.Linear(4096, self.grid_size * self.grid_size * self.out_channels),
+            nn.Linear(4096, config.grid_size * config.grid_size * self.out_channels),
             nn.Sigmoid())
-        )
         self._initialize_weights()
 
     def forward(self, inputs: List[Tensor]) -> List[Tensor]:
         
         outputs = inputs
+        pred = {
+            'boxes': None,
+            'scores': None,
+        }
+
         return outputs
 
 
@@ -97,17 +95,14 @@ class Yolov1Model(Yolov1PreTrainedModel):
     """
     def __init__(self, config, backbone=None) -> None:
         self.config = config
-        if isinstance(config.max_size, tuple):
-            self.max_size = config.max_size
-        else:
-            self.max_size = (config.max_size, config.max_size)
         if backbone is None:
             self.backbone = DarkNetBackbone(config)
-        self.head = Yolov1PredictHead(config)
+        if neck is None:
+            self.neck = Yolov1PredictNeck(config)
+        if head is None:
+            self.head = Yolov1PredictHead(config)
 
         self._init_weights()
-
-        raise NotImplementedError
 
     def forward(self, inputs: List[Tensor]) -> List[Tensor]:
         if self.head.training:

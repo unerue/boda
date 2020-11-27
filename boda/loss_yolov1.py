@@ -5,21 +5,20 @@ from torch import nn, Tensor
 import torch.nn.functional as F
 from typing import Tuple, List, Dict, Any, Optional
 
-from .loss_base import _check_targets
-from ..configuration import yolov1_config
+from .loss_base import LoseFunction
 from ..utils import jaccard
-# from torch.jit.annotations import Tuple, List, Dict, Any, Optional
 
 
-class Yolov1Loss(nn.Module):
-    def __init__(self):
+
+class Yolov1Loss(LoseFunction):
+    def __init__(self, config):
         super().__init__()
-        self.num_boxes = yolov1_config.num_boxes
-        self.num_classes = yolov1_config.dataset.num_classes
-        self.grid_size = yolov1_config.grid_size
+        self.num_boxes = config.num_boxes
+        self.num_classes = config.num_classes
+        self.grid_size = config.grid_size
 
-        self.lambda_coord = yolov1_config.lambda_coord
-        self.lambda_noobj = yolov1_config.lambda_noobj
+        self.lambda_coord = config.lambda_coord
+        self.lambda_noobj = config.lambda_noobj
 
     def _transform_targets(self, targets):
         """
@@ -29,17 +28,8 @@ class Yolov1Loss(nn.Module):
         make a copy of targets to avoid modifying it in-place
         targets = [{k: v for k,v in t.items()} for t in targets]
         """
-        _check_targets(targets)
-
-        if targets is not None:
-            targets_copy: List[Dict[str, Tensor]] = []
-            for t in targets:
-                target: Dict[str, Tensor] = {}
-                for k, v in t.items():
-                    target[k] = v
-                targets_copy.append(target)
-            targets = targets_copy
-
+        self._check_targets(targets)
+        targets = self._copy_target(targets)
         # STEP 1. Normalized between 0 and 1, 
         # STEP 2. encode a target (boxes, labels)
         # Center x, y, w h는 데이터셋에서 변환해라
@@ -47,10 +37,10 @@ class Yolov1Loss(nn.Module):
         # boxes: Tensor
         # labels: Tensor   
         nb = self.num_boxes
-        gs = self.grid_size  # grid size
+        gs = self.grid_size
         nc = self.num_classes
         cell_size = 1.0 / gs
-        w, h = yolov1_config.max_size  # Tuple[int, int]
+        w, h = self.config.max_size  # Tuple[int, int]
         # 모형에서 나온 아웃풋과 동일한 모양으로 변환
         # x1, y1, x2, y2를 center x, center y, w, h로 변환하고
         # 모든 0~1사이로 변환, cx, cy는 each cell안에서의 비율
@@ -60,20 +50,11 @@ class Yolov1Loss(nn.Module):
         
         for b, target in enumerate(targets):
             boxes = target['boxes']
-
-            
-
-
-            
             norm_boxes = boxes / torch.Tensor([[w, h, w, h]]).expand_as(boxes).to(self.device)
             # 데이터셋에서 변환해서 들어오기
             # center x, y, width and height
-
-
             xys = (norm_boxes[:, 2:] + norm_boxes[:, :2]) / 2.0
             whs = norm_boxes[:, 2:] - norm_boxes[:, :2]
-
-
             for box_id in range(boxes.size(0)):
                 xy = xys[box_id]
                 wh = whs[box_id]
@@ -81,11 +62,8 @@ class Yolov1Loss(nn.Module):
                 ij = (xy / cell_size).ceil() - 1.0
                 i, j = int(ij[0]), int(ij[1])
                 
-
                 x0y0 = ij * cell_size
-                norm_xy = (xy - x0y0) / cell_size
-
-                
+                norm_xy = (xy - x0y0) / cell_size                
                 for k in range(0, 5*nb, 5):
                     if transformed_targets[b, j, i, k+4] == 1.0:
                         transformed_targets[b, j, i, k+5:k+5+4] = torch.cat([norm_xy, wh])
@@ -94,7 +72,6 @@ class Yolov1Loss(nn.Module):
                         transformed_targets[b, j, i, k+4] = 1.0
                     # transformed_targets[b, j, i, k:k+4] = torch.cat([norm_xy, wh])
                     # transformed_targets[b, j, i, k+4] = 1.0
-                    
                 # print(transformed_targets[b, j, i, :10])
                 indices = torch.as_tensor(target['labels'][box_id], dtype=torch.int64).view(-1, 1)
                 labels = torch.zeros(indices.size(0), self.num_classes).scatter_(1, indices, 1)
@@ -102,7 +79,6 @@ class Yolov1Loss(nn.Module):
         
         return transformed_targets
     
-
     def forward(self, inputs: List[Tensor], targets: List[Dict[str, Tensor]]) -> Tensor:
         """
         S * S * (B * 5 + C) Tensor
@@ -111,8 +87,6 @@ class Yolov1Loss(nn.Module):
         """
         if self.training and targets is None:
             raise ValueError
-        
-        
         
         self.device = inputs.device
         bs = inputs.size(0)  # batch size
