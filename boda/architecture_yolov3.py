@@ -22,27 +22,6 @@ class Yolov3PredictHead(nn.Module):
         raise NotImplementedError
 
 
-class Yolov3PredictionNeck(nn.Module):
-    """Prediction Neck for Yolov3
-    """
-    def __init__(self, backbone) -> None:
-        if backbone is None:
-            out_channles = backbone.channels[:]
-        raise NotImplementedError
-
-    def forward(self) -> List[Tensor]:
-        return NotImplementedError
-
-
-class Yolov3PredictionHead(nn.Module):
-    def __init__(self) -> None:
-        raise NotImplementedError
-
-    def forward(self) -> List[Tensor]:
-        raise NotImplementedError
-
-
-
 
 class Yolov3Model(nn.Module):
     """

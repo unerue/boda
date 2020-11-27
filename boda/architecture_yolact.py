@@ -16,6 +16,26 @@ from .prediction_head_yolact import FeaturePyramidNet, YolactPredictionHead
 from .backbone_yolact import ResNet
 
 
+class PriorBox:
+    def __init__(self) -> None:
+        raise NotImplementedError
+
+
+class ProtoNet:
+    def __init__(self) -> None:
+        raise NotImplementedError
+
+
+
+class YolactPredictNeck():
+    def __init__(self) -> None:
+        raise NotImplementedError
+
+
+class YolactPredictHead():
+    def __init__(self) -> None:
+        raise NotImplementedError
+
 class YolactModel(BaseModel):
     def __init__(self, backbone=None):
         super().__init__()

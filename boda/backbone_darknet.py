@@ -8,6 +8,11 @@ import torch.nn.functional as F
 
 
 # __all__ = ['darknet21', 'darknet53']
+DARKNET_PRETRAINED_CONFIG = {
+    'darknet-base': None,
+    'darknet21': None,
+    'darknet53': None,
+}
 
 
 class Shortcut(nn.Module):
@@ -130,6 +135,9 @@ class DarkNet(nn.Module):
         
         self.load_state_dict(state_dict, strict=False)
 
+    def add_layer(self):
+        self._make_layer(block)
+
 
 class CspDarkNet(nn.Module):
     def __init__(self) -> None:
@@ -157,6 +165,15 @@ def darknet53(pretrained=False, **kwargs):
         backbone.load_state_dict(torch.load(pretrained))
         
     return backbone
+
+from .backbone_base import PreTrainedBackbone
+
+
+class BackboneDarkNet(PreTrainedBackbone):
+    def __init__(self, config):
+        self.config = config
+
+
 
 
 # class Yolov3Backbone:
