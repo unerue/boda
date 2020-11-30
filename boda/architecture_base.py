@@ -29,7 +29,7 @@ def require_pytorch(obj):
         raise ImportError(PYTORCH_IMPORT_ERROR.foramt(name))
 
 
-class PreTrainedModel:
+class BaseModel(nn.Module):
     def __init__(self, *args, **kwargs):
         require_pytorch(self)
     

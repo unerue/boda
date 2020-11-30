@@ -9,6 +9,13 @@ from .loss_base import LoseFunction
 from ..utils import jaccard
 
 
+class Match:
+    def __init__(self, thresh) -> None:
+        self.thresh
+
+    def __call__(self, *args: Any, **kwds: Any) -> Any:
+        raise NotImplementedError
+
 
 class Yolov1Loss(LoseFunction):
     def __init__(self, config):

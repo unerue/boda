@@ -7,20 +7,20 @@ class LoseFunction(nn.Module):
         raise NotImplementedError
 
     @classmethod
-    def _copy_target(cls, targets):
+    def copy_targets(cls, targets):
         if targets is not None:
             targets_copy: List[Dict[str, Tensor]] = []
-            for t in targets:
-                target: Dict[str, Tensor] = {}
-                for k, v in t.items():
-                    target[k] = v
-                targets_copy.append(target)
+            for target in targets:
+                _target: Dict[str, Tensor] = {}
+                for key, value in target.items():
+                    _target[key] = value
+                targets_copy.append(_target)
             targets = targets_copy
 
         return targets
-
+        
     @classmethod
-    def _check_target(cls, targets: List[Dict[str, Tensor]]):
+    def check_target(cls, targets: List[Dict[str, Tensor]]):
         for target in targets:
             if isinstance(target['boxes'], Tensor):
                 if target['boxes'].dim() != 2 or target['boxes'].size(1) != 4:

@@ -13,7 +13,7 @@ class PretrainedConfig:
     model_type: str = ''
     def __init__(self, **kwargs):
         self.use_amp = kwargs.pop('use_amp'. False)
-        self.torchscript = kwargs.pop('torchscript', False)
+        # self.torchscript = kwargs.pop('torchscript', False)
 
         # backbone
         self.backbone = kwargs.pop('backbone', None)
