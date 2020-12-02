@@ -4,14 +4,18 @@ from typing import Tuple, List, Dict, Any
 import numpy as np
 from torch import nn, Tensor
 
-from .architecture_base import PreTrainedModel
-
+from .architecture_base import BaseModel
+from .backbone_darknet import darknet21
 
 class Yolov1PredictNeck(nn.Module):
-    def __init__(self, config, **kwargs) -> None:
+    def __init__(self, config, backbone=None, **kwargs) -> None:
         self.config = config
-        self.neck_layers = nn.Sequential(
-            nn.Conv2d(2048, 1024, kernel_size=3, padding=1),
+        if backbone is None:
+            backbone = darknet21()
+
+        self.layers = nn.Sequential(
+            # nn.Conv2d(2048, 1024, kernel_size=3, padding=1),
+            nn.Conv2d(bacbone.out_channles[-1], 1024, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.Conv2d(1024, 1024, kernel_size=3, stride=2, padding=1),
             nn.ReLU(),
@@ -20,9 +24,9 @@ class Yolov1PredictNeck(nn.Module):
             nn.Conv2d(1024, 1024, kernel_size=3, padding=1),
             nn.ReLU())
     
-    def forward(self, inputs) -> None:
-        raise NotImplementedError
-
+    def forward(self, inputs):
+        return self.layers(inputs)
+    
 
 class Yolov1PredictHead(nn.Module):
     """Prediction Neck for Yolov4
@@ -35,7 +39,7 @@ class Yolov1PredictHead(nn.Module):
     def __init__(self, config, **kwargs) -> None:
         self.config = config
         self.out_channles = 5 * config.num_boxes + config.num_classes
-        self.head_layers = nn.Sequential(
+        self.layers = nn.Sequential(
             nn.Linear(config.grid_size * config.grid_size * 1024, 4096),
             nn.ReLU(),
             nn.Linear(4096, config.grid_size * config.grid_size * self.out_channels),
@@ -53,7 +57,7 @@ class Yolov1PredictHead(nn.Module):
         return outputs
 
 
-class Yolov1PreTrainedModel(PreTrainedModel):
+class Yolov1PreTrainedModel(BaseModel):
     def _init_weights(self, module):
         """ Initialize the weights """
         if isinstance(module, (nn.Linear, nn.Embedding)):
