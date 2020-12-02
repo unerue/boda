@@ -24,6 +24,21 @@ class Yolov1PredictNeck(nn.Module):
         raise NotImplementedError
 
 
+class BoxHead:
+    def __init__(self) -> None:
+        raise NotImplementedError
+
+
+class ClassHead:
+    def __init__(self) -> None:
+        raise NotImplementedError
+
+
+class MaskHead:
+    def __init__(self) -> None:
+        raise NotImplementedError
+
+
 class Yolov1PredictHead(nn.Module):
     """Prediction Neck for Yolov4
     Arguments:
@@ -69,12 +84,12 @@ class Yolov1PreTrainedModel(PreTrainedModel):
 
 class Yolov1Model(Yolov1PreTrainedModel):
     """
-    ██╗   ██╗ ██████╗ ██╗      ██████╗ 
-    ╚██╗ ██╔╝██╔═══██╗██║     ██╔═══██╗
-     ╚████╔╝ ██║   ██║██║     ██║   ██║██╗   ██╗
-      ╚██╔╝  ██║   ██║██║     ██║   ██║╚██╗ ██╔╝ 
-       ██║   ╚██████╔╝███████╗╚██████╔╝ ╚████╔╝    
-       ╚═╝    ╚═════╝ ╚══════╝ ╚═════╝   ╚═══╝
+    ██╗   ██╗ ██████╗ ██╗      ██████╗           ████╗ 
+    ╚██╗ ██╔╝██╔═══██╗██║     ██╔═══██╗            ██║
+     ╚████╔╝ ██║   ██║██║     ██║   ██║██╗   ██╗   ██║
+      ╚██╔╝  ██║   ██║██║     ██║   ██║╚██╗ ██╔╝   ██║
+       ██║   ╚██████╔╝███████╗╚██████╔╝ ╚████╔╝  ██████╗
+       ╚═╝    ╚═════╝ ╚══════╝ ╚═════╝   ╚═══╝   ╚═════╝
 
     The only specificity that we require is that the dataset 
     __getitem__ should return:
@@ -105,6 +120,12 @@ class Yolov1Model(Yolov1PreTrainedModel):
         self._init_weights()
 
     def forward(self, inputs: List[Tensor]) -> List[Tensor]:
+        """
+        Argument:
+            inputs (List(FloatTensor[C, H, W]): Number of batch size Size([B, C, H, W]))
+        Return:
+            outputs
+        """
         if self.head.training:
             inputs = self.check_inputs(inputs)
             return inputs

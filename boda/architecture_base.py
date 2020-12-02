@@ -39,6 +39,12 @@ class BaseModel(nn.Module):
 
     @classmethod
     def check_inputs(cls, inputs):
+        """
+        Argument:
+            inputs (List[Tensor]): Size([C, H, W])
+        Return:
+            outputs (Tensor): Size([B, C, H, W])
+        """
         for image in inputs:
             if isinstance(image, Tensor):
                 if image.dim() != 3:
