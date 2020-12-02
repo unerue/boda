@@ -8,14 +8,11 @@ from .architecture_base import BaseModel
 from .backbone_darknet import darknet21
 
 class Yolov1PredictNeck(nn.Module):
-    def __init__(self, config, backbone=None, **kwargs) -> None:
+    def __init__(self, config, out_channels=2048, **kwargs) -> None:
         self.config = config
-        if backbone is None:
-            backbone = darknet21()
-
         self.layers = nn.Sequential(
             # nn.Conv2d(2048, 1024, kernel_size=3, padding=1),
-            nn.Conv2d(bacbone.out_channles[-1], 1024, kernel_size=3, padding=1),
+            nn.Conv2d(out_channels, 1024, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.Conv2d(1024, 1024, kernel_size=3, stride=2, padding=1),
             nn.ReLU(),
@@ -57,7 +54,7 @@ class Yolov1PredictHead(nn.Module):
         return outputs
 
 
-class Yolov1PreTrainedModel(BaseModel):
+class Yolov1Pretrained(BaseModel):
     def _init_weights(self, module):
         """ Initialize the weights """
         if isinstance(module, (nn.Linear, nn.Embedding)):
@@ -71,7 +68,7 @@ class Yolov1PreTrainedModel(BaseModel):
             module.bias.data.zero_()
 
 
-class Yolov1Model(Yolov1PreTrainedModel):
+class Yolov1Model(Yolov1Pretrained):
     """
     ██╗   ██╗ ██████╗ ██╗      ██████╗ 
     ╚██╗ ██╔╝██╔═══██╗██║     ██╔═══██╗
@@ -97,29 +94,28 @@ class Yolov1Model(Yolov1PreTrainedModel):
             iscrowd (UInt8Tensor[N]): instances with iscrowd=True will be ignored 
                 during evaluation.
     """
-    def __init__(self, config, backbone=None) -> None:
+    def __init__(self, config, backbone=None, neck=None, head=None, **kwargs) -> None:
         self.config = config
         if backbone is None:
-            self.backbone = DarkNetBackbone(config)
+            self.backbone = darknet21(config)
         if neck is None:
-            self.neck = Yolov1PredictNeck(config)
+            self.neck = Yolov1PredictNeck(config, self.backbone.out_channels[-1])
         if head is None:
             self.head = Yolov1PredictHead(config)
 
         self._init_weights()
 
     def forward(self, inputs: List[Tensor]) -> List[Tensor]:
-        if self.head.training:
+        if self.training:
             inputs = self.check_inputs(inputs)
-            return inputs
-        
-        
+            outputs = self.backbone(inputs)
+            outputs = self.neck(outputs)
+            outputs = self.head(outputs)
 
-        outputs = inputs
-        return outputs
-
-    def initialize_weights(self, path):
-        raise NotImplementedError
+            return outputs
+        else:
+            outputs = inputs
+            return outputs
 
     
 
