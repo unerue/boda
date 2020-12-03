@@ -15,9 +15,34 @@ class Match:
     def __init__(self, thresh) -> None:
         self.thresh = thresh
 
-    def __call__(self, preds, targets) -> Any:
+    def __call__(self, preds, targets, confs) -> Any:
         overlaps = jaccard(preds, targets)
+        print('Overlaps')
+        print(overlaps)
+        print()
         best_truth_overlap, best_truth_idx = overlaps.max(0, keepdim=True)
+        best_neg_overlap, best_neg_idx = overlaps.max(1, keepdim=True)
+        print(best_truth_idx)
+        print(best_neg_idx)
+        best_truth_idx = best_truth_idx.squeeze(0)
+        best_truth_overlap = best_truth_overlap.squeeze(0)
+        print(best_truth_idx)
+        print(best_truth_overlap)
+        best_neg_idx = best_neg_idx.squeeze(1)
+        print(best_neg_idx)
+        print()
+        print('best_truth_overlap', best_truth_overlap)
+        print(best_neg_idx)
+        print(preds)
+        print(preds[best_neg_idx])
+        print(preds[best_truth_idx])
+        print(best_truth_overlap.index_fill(0, best_neg_idx, 1))
+        print(confs)
+        for i in range(best_neg_idx.size(0)):
+            print(best_truth_idx[best_neg_idx[i]], i)
+            # best_truth_idx
+        print(confs[best_truth_overlap < 0.2])
+        # print(best_neg_idx, best_neg_overlap)
         return best_truth_overlap, best_truth_idx
 
 
@@ -54,7 +79,7 @@ class Yolov1Loss(LoseFunction):
         targets = self.encode(targets)
 
         gs = self.config.grid_size
-        for pred, target in zip(inputs['boxes'], targets):
+        for pred, score, target in zip(inputs['boxes'], inputs['scores'], targets):
             pred_xyxy = torch.FloatTensor(pred.size())
             pred_xyxy[:, :2] = pred[:, :2] / gs - 0.5 * pred[:, 2:]
             pred_xyxy[:, 2:] = pred[:, :2] / gs + 0.5 * pred[:, 2:]
@@ -68,14 +93,20 @@ class Yolov1Loss(LoseFunction):
             print(pred)
             print(true)
             print()
-            best_true, best_idx = Match(0.2)(pred_xyxy, true_xyxy)
+            best_true, best_idx = Match(0.2)(pred_xyxy, true_xyxy, score)
             print(best_true, best_idx)
             print()
+            print('Positive')
             print(pred[best_idx])
             print()
-            pred = pred[best_idx].squeeze(0)
+            t_pred = pred[best_idx].squeeze(0)
+            print('Negative')
+            print(pred[best_idx])
             # print(pred.squeeze(0))
-            print(F.mse_loss(pred[:,:2], true[:,:2], reduction='sum'))
+            print(best_true.index_fill(0, best_idx, 2))
+
+            print(F.mse_loss(t_pred[:,:2], true[:,:2], reduction='sum'))
+            
 
 
         
