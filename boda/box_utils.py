@@ -11,7 +11,7 @@ def point_form(boxes: Tensor) -> Tensor:
         boxes: (Tensor) Converted [[xmin, ymin, xmax, ymax]] form of boxes.
     """
     return torch.cat(
-        (boxes[:, :2] - boxes[:, 2:]/2, boxes[:, :2] + boxes[:, 2:]/2), 1)
+        (boxes[:, :2]-boxes[:, 2:] / 2, boxes[:, :2]+boxes[:, 2:] / 2), dim=1)
 
 
 def xyxy_to_cxywh(boxes: Tensor):

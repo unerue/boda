@@ -8,14 +8,17 @@ from typing import Tuple, List, Dict, Any, Optional
 from .loss_base import LoseFunction
 # from ..utils import jaccard
 from .box_utils import xyxy_to_cxywh
+from .box_utils import jaccard
 
 
 class Match:
     def __init__(self, thresh) -> None:
         self.thresh = thresh
 
-    def __call__(self, *args: Any, **kwds: Any) -> Any:
-        raise NotImplementedError
+    def __call__(self, preds, targets) -> Any:
+        overlaps = jaccard(preds, targets)
+        best_truth_overlap, best_truth_idx = overlaps.max(0, keepdim=True)
+        return best_truth_overlap, best_truth_idx
 
 
 class Yolov1Loss(LoseFunction):
@@ -47,8 +50,22 @@ class Yolov1Loss(LoseFunction):
         targets = self.encode(targets)
 
         for pred, target in zip(inputs['boxes'], targets):
+            pred_xyxy = torch.FloatTensor(pred.size())
+            pred_xyxy[:, :2] = pred[:, :2] / 7.0 - 0.5 * pred[:, 2:]
+            pred_xyxy[:, 2:] = pred[:, :2] / 7.0 + 0.5 * pred[:, 2:]
+
+            true = target['boxes']
+            true_xyxy = torch.FloatTensor(true.size())
+            true_xyxy[:, :2] = true[:, :2] / 7.0 - 0.5 * true[:, 2:]
+            true_xyxy[:, 2:] = true[:, :2] / 7.0 + 0.5 * true[:, 2:]
+            
             print(pred)
-            print(target['boxes'])
+            print(true)
+            print()
+            best_true, best_idx = Match(0.2)(pred_xyxy, true_xyxy)
+            print(best_true, best_idx)
+            print()
+            print(pred[best_idx])
             print()
 
 
