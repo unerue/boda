@@ -12,7 +12,7 @@ YOLOV1_PRETRAINED_CONFIG = {
 class Yolov1Config(PretrainedConfig):
     def __init__(
         self, 
-        selected_layers,
+        selected_layers=[1, 2, 3],
         grid_size=7, 
         num_boxes=2,
         max_size=448,
@@ -61,31 +61,31 @@ class Yolov1Config(PretrainedConfig):
 #     'lambda_coord': 5.0,
 #     'lambda_noobj': 0.5,
 
-cfg = [
-    (7, 64, 2), 'M', 
-    (3, 192), 'M',
-    (1, 128), (3, 256), (1, 256), (3, 512), 'M',
-    [(1, 256), (3, 512), 4], (1, 512), (3, 1024), 'M',
-    [(1, 512), (3, 1024), 2], (3, 1024), (3, 1024), 
-    (3, 1024), (3, 1024),
-]
+# cfg = [
+#     (7, 64, 2), 'M', 
+#     (3, 192), 'M',
+#     (1, 128), (3, 256), (1, 256), (3, 512), 'M',
+#     [(1, 256), (3, 512), 4], (1, 512), (3, 1024), 'M',
+#     [(1, 512), (3, 1024), 2], (3, 1024), (3, 1024), 
+#     (3, 1024), (3, 1024),
+# ]
 
 
-backbone_base = Config({
-    'name': 'base backbone',
-    'pretrained': bool,
-    'path': 'path/to/pretrained/weights',
-})
+# backbone_base = Config({
+#     'name': 'base backbone',
+#     'pretrained': bool,
+#     'path': 'path/to/pretrained/weights',
+# })
 
-model_base = Config({
-    'name': 'base model',
-    'path': 'path/to/pretrained/weights',
-    'dataset': dataset_base,
-    'backbone': backbone_base,
-    'batch_size': int,
-    'max_size': Tuple[int, int],
-    'lr': float,
-})
+# model_base = Config({
+#     'name': 'base model',
+#     'path': 'path/to/pretrained/weights',
+#     'dataset': dataset_base,
+#     'backbone': backbone_base,
+#     'batch_size': int,
+#     'max_size': Tuple[int, int],
+#     'lr': float,
+# })
 
 
 

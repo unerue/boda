@@ -112,7 +112,7 @@ class DarkNet(nn.Module):
         self.layers.append(nn.Sequential(*layers))
         self.channels.append(out_channles[1])
 
-    def forward(self, inputs: List[Tensor]):
+    def forward(self, inputs: Tensor) -> List[Tensor]:
         inputs = self.conv(inputs)
         inputs = self.bn(inputs)
         inputs = self.relu(inputs)
@@ -135,16 +135,16 @@ class DarkNet(nn.Module):
         
         self.load_state_dict(state_dict, strict=False)
 
-    def add_layer(self):
-        self._make_layer(block)
+    # def add_layer(self):
+    #     self._make_layer(block)
 
 
-class CspDarkNet(nn.Module):
-    def __init__(self) -> None:
-        raise NotImplementedError
+# class CspDarkNet(nn.Module):
+#     def __init__(self) -> None:
+#         raise NotImplementedError
 
-    def forward(self, inputs):
-        raise NotImplementedError
+#     def forward(self, inputs):
+#         raise NotImplementedError
 
 
 def darknet21(pretrained=False, **kwargs):
@@ -153,7 +153,7 @@ def darknet21(pretrained=False, **kwargs):
     backbone = DarkNet([1, 1, 2, 2, 1])
     if pretrained:
         backbone.load_state_dict(torch.load(pretrained))
-
+    # print(backbone)
     return backbone
 
 
@@ -166,12 +166,12 @@ def darknet53(pretrained=False, **kwargs):
         
     return backbone
 
-from .backbone_base import PreTrainedBackbone
+# from .backbone_base import PreTrainedBackbone
 
 
-class BackboneDarkNet(PreTrainedBackbone):
-    def __init__(self, config):
-        self.config = config
+# class BackboneDarkNet(PreTrainedBackbone):
+#     def __init__(self, config):
+#         self.config = config
 
 
 
