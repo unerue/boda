@@ -36,10 +36,12 @@ class Match:
         print(preds)
         print(preds[best_neg_idx])
         print(preds[best_truth_idx])
-        print(best_truth_overlap.index_fill(0, best_neg_idx, 1))
+        print(best_truth_overlap.index_fill(0, best_neg_idx, 2))
         print(confs)
-        for i in range(best_neg_idx.size(0)):
+        for i in range(best_truth_idx.size(0)):
             print(best_truth_idx[best_neg_idx[i]], i)
+            best_truth_idx[best_neg_idx[i]] = i
+        print(best_truth_idx)
             # best_truth_idx
         print(confs[best_truth_overlap < 0.2])
         # print(best_neg_idx, best_neg_overlap)
