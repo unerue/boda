@@ -2,7 +2,7 @@ import torch
 from torch import nn, Tensor
 
 
-def point_form(boxes: Tensor) -> Tensor:
+def cxywh_to_xyxy(boxes: Tensor) -> Tensor:
     """Convert prior_boxes to (xmin, ymin, xmax, ymax)
     representation for comparison to point form ground truth data.
     Argument:
@@ -14,7 +14,7 @@ def point_form(boxes: Tensor) -> Tensor:
         (boxes[:, :2]-boxes[:, 2:] / 2, boxes[:, :2]+boxes[:, 2:] / 2), dim=1)
 
 
-def xyxy_to_cxywh(boxes: Tensor):
+def xyxy_to_cxywh(boxes: Tensor) -> Tensor:
     """Convert prior_boxes to (cx, cy, w, h)
     representation for comparison to center-size form ground truth data.
     Argument:
@@ -24,6 +24,18 @@ def xyxy_to_cxywh(boxes: Tensor):
     """
     return torch.cat(
         ((boxes[:, 2:] + boxes[:, :2])/2, boxes[:, 2:] - boxes[:, :2]), dim=1)
+
+
+def gxywh_to_xyxy(boxes: Tensor) -> Tensor:
+    """Convert grid center point to 
+    Argument:
+        boxes (Tensor): [gcx, gcy, w, h]
+    Return:
+    """
+    xyxy = torch.zeros_like(boxes)
+    xyxy[:, :2] = boxes
+    return xyxy
+
 
 
 def intersect(box_a: Tensor, box_b: Tensor) -> Tensor:
