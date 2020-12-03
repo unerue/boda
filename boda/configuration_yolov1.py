@@ -12,7 +12,7 @@ YOLOV1_PRETRAINED_CONFIG = {
 class Yolov1Config(PretrainedConfig):
     def __init__(
         self, 
-        selected_layers=[1, 2, 3],
+        selected_layers=-1,
         grid_size=7, 
         num_boxes=2,
         max_size=448,

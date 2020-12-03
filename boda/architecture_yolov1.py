@@ -10,7 +10,13 @@ from .backbone_darknet import darknet21
 
 
 class Yolov1PredictNeck(nn.Module):
-    def __init__(self, config, in_channels, **kwargs) -> None:
+    """Prediction Neck for YOLOv1
+    Arguments:
+        in_channels (int): 
+    """
+    def __init__(self, config, in_channels: int, **kwargs) -> None:
+        """
+        """
         super().__init__()
         self.config = config
         self.layers = nn.Sequential(
@@ -23,20 +29,21 @@ class Yolov1PredictNeck(nn.Module):
             nn.Conv2d(1024, 1024, kernel_size=3, padding=1),
             nn.ReLU())
     
-    def forward(self, inputs: List[Tensor]):
-        return self.layers(inputs[-1])
+    def forward(self, inputs: List[Tensor]) -> Tensor:
+        """
+            inputs (List[Tensor]): 
+        
+        Return:
+            (Tensor): Size([])
+        """
+        return self.layers(inputs[self.config.selected_layers])
     
 
 class Yolov1PredictHead(nn.Module):
-    """Prediction Neck for Yolov4
+    """Prediction Neck for YOLOv1
     Arguments:
         selected_layers (List[float]):
         scales (List[float]):
-    Returns:
-        Dict[str, Tensor]:
-            boxes: Size([batch_size, num_boxes, 4])
-            scores: Size([batch_size, num_boxes])
-            labels: Size([batch_size, num_boxes, 20])
     """
     def __init__(self, config, **kwargs) -> None:
         super().__init__()
@@ -49,13 +56,20 @@ class Yolov1PredictHead(nn.Module):
             nn.Sigmoid())
         # self._initialize_weights()
 
-    def forward(self, inputs: Tensor) -> Dict[Tensor]:
+    def forward(self, inputs: Tensor) -> Dict[str, Tensor]:
         """
+        Argument:
+            inputs (Tensor): Size([])
+        Return:
+            Dict[str, Tensor]:
+                boxes: Size([batch_size, num_boxes, 4])
+                scores: Size([batch_size, num_boxes])
+                labels: Size([batch_size, num_boxes, 20])
         """
         bs = inputs.size(0)
-        inputs = inputs.view(inputs.size(0), -1)
+        inputs = inputs.view(bs, -1)
         outputs = self.layers(inputs)
-        print('outputs', outputs.size())
+        
         outputs = outputs.view(-1, self.config.grid_size, self.config.grid_size, self.out_channels)
         print('predict head', outputs.size())
 
@@ -66,7 +80,7 @@ class Yolov1PredictHead(nn.Module):
         print('after', boxes.size())
         scores = boxes[..., 4]
         boxes = boxes[..., :4]
-        labels = outputs[..., 5*2:]
+        labels = outputs[..., 5*self.config.num_boxes:]
         print(labels[0][0])
         labels = labels.repeat(1, 2, 1)
         print(labels[0][0])
@@ -79,9 +93,6 @@ class Yolov1PredictHead(nn.Module):
             'boxes': boxes,
             'scores': scores,
             'labels': labels}
-        # print(preds['boxes'])
-        # print(preds['boxes'][0].size())
-        # print(preds['boxes'][1].size())
         
         return preds
         
