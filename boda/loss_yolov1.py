@@ -37,7 +37,11 @@ class Yolov1Loss(LoseFunction):
             x0y0 = ij * cell_size
             boxes[:, :2] = (boxes[:, :2] - x0y0) / cell_size
             target['boxes'] = boxes
-    
+
+        print('CAT!!')
+        print(torch.cat([t['boxes'] for t in targets], dim=0))
+        print()
+
         return targets
 
     def forward(self, inputs, targets):
@@ -49,16 +53,18 @@ class Yolov1Loss(LoseFunction):
         targets = self.copy_targets(targets)
         targets = self.encode(targets)
 
+        gs = self.config.grid_size
         for pred, target in zip(inputs['boxes'], targets):
             pred_xyxy = torch.FloatTensor(pred.size())
-            pred_xyxy[:, :2] = pred[:, :2] / 7.0 - 0.5 * pred[:, 2:]
-            pred_xyxy[:, 2:] = pred[:, :2] / 7.0 + 0.5 * pred[:, 2:]
+            pred_xyxy[:, :2] = pred[:, :2] / gs - 0.5 * pred[:, 2:]
+            pred_xyxy[:, 2:] = pred[:, :2] / gs + 0.5 * pred[:, 2:]
 
             true = target['boxes']
             true_xyxy = torch.FloatTensor(true.size())
-            true_xyxy[:, :2] = true[:, :2] / 7.0 - 0.5 * true[:, 2:]
-            true_xyxy[:, 2:] = true[:, :2] / 7.0 + 0.5 * true[:, 2:]
+            true_xyxy[:, :2] = true[:, :2] / gs - 0.5 * true[:, 2:]
+            true_xyxy[:, 2:] = true[:, :2] / gs + 0.5 * true[:, 2:]
             
+
             print(pred)
             print(true)
             print()
@@ -67,7 +73,9 @@ class Yolov1Loss(LoseFunction):
             print()
             print(pred[best_idx])
             print()
-
+            pred = pred[best_idx].squeeze(0)
+            # print(pred.squeeze(0))
+            print(F.mse_loss(pred[:,:2], true[:,:2], reduction='sum'))
 
 
         
