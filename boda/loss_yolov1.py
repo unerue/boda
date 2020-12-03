@@ -11,11 +11,28 @@ from ..utils import jaccard
 
 class Match:
     def __init__(self, thresh) -> None:
-        self.thresh
+        self.thresh = thresh
 
     def __call__(self, *args: Any, **kwds: Any) -> Any:
         raise NotImplementedError
 
+
+class Yolov1Loss(LoseFunction):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+
+    def forward(self, inputs, targets):
+        """
+            inputs (Dict[str, Tensor])
+            targets (Dict[str, Tensor])
+        """
+        self.check_target(targets)
+        targets = self.copy_targets(targets)
+
+        
+
+        
 
 class Yolov1Loss(LoseFunction):
     def __init__(self, config):
