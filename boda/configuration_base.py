@@ -29,8 +29,10 @@ class PretrainedConfig:
         
         # fine-tuning train arguments
         self.architectures = kwargs.pop('architectures', None)
-        self.num_classes = kwargs.get('num_classes', 80)
-        self.max_size = kwargs.get('max_size', 550)
+        self.num_classes = kwargs.pop('num_classes', 80)
+        self.max_size = kwargs.pop('max_size', None)
+        if not isinstance(self.max_size, tuple):
+            self.max_size = (self.max_size, self.max_size)
         # if self.idx2labels is not None:
         #     kwargs.pop()
         #     self.idx2labels = None

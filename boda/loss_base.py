@@ -4,7 +4,7 @@ from torch import nn, Tensor
 
 class LoseFunction(nn.Module):
     def __init__(self) -> None:
-        raise NotImplementedError
+        super().__init__()
 
     @classmethod
     def copy_targets(cls, targets):
@@ -20,7 +20,7 @@ class LoseFunction(nn.Module):
         return targets
         
     @classmethod
-    def check_target(cls, targets: List[Dict[str, Tensor]]):
+    def check_targets(cls, targets: List[Dict[str, Tensor]]):
         for target in targets:
             if isinstance(target['boxes'], Tensor):
                 if target['boxes'].dim() != 2 or target['boxes'].size(1) != 4:

@@ -18,11 +18,11 @@ class Yolov1Config(PretrainedConfig):
         max_size=448,
         num_classes=20,
         **kwargs):
-        super().__init__(**kwargs)
+        super().__init__(max_size=max_size, **kwargs)
         self.selected_layers = selected_layers
         self.grid_size = grid_size
         self.num_boxes = num_boxes
-        self.max_size = max_size
+        # self.max_size = max_size
         self.num_classes = num_classes
         self.obj_scale = 1
         self.noobj_scale = 0.5

@@ -14,7 +14,7 @@ def point_form(boxes: Tensor) -> Tensor:
         (boxes[:, :2] - boxes[:, 2:]/2, boxes[:, :2] + boxes[:, 2:]/2), 1)
 
 
-def center_size(boxes: Tensor):
+def xyxy_to_cxywh(boxes: Tensor):
     """Convert prior_boxes to (cx, cy, w, h)
     representation for comparison to center-size form ground truth data.
     Argument:
@@ -23,7 +23,7 @@ def center_size(boxes: Tensor):
         boxes (Tensor): Converted [cx, cy, w, h] form of boxes.
     """
     return torch.cat(
-        ((boxes[:, 2:] + boxes[:, :2])/2, boxes[:, 2:] - boxes[:, :2]  ), dim=1)
+        ((boxes[:, 2:] + boxes[:, :2])/2, boxes[:, 2:] - boxes[:, :2]), dim=1)
 
 
 def intersect(box_a: Tensor, box_b: Tensor) -> Tensor:
