@@ -68,27 +68,16 @@ class Yolov1PredictHead(nn.Module):
         """
         bs = inputs.size(0)
         inputs = inputs.view(bs, -1)
-        outputs = self.layers(inputs)
-        
+        outputs = self.layers(inputs)        
         outputs = outputs.view(-1, self.config.grid_size, self.config.grid_size, self.out_channels)
-        print('predict head', outputs.size())
+        outputs = outputs.view(bs, -1, 5*self.config.num_boxes+self.config.num_classes)
 
-        outputs = outputs.view(outputs.size(0), -1, 5*2+20)
-        print('before', outputs.size())
-
-        boxes = outputs[..., :5*2].contiguous().view(outputs.size(0), -1, 5)
-        print('after', boxes.size())
+        boxes = outputs[..., :5*self.config.num_boxes].contiguous().view(bs, -1, 5)        
         scores = boxes[..., 4]
         boxes = boxes[..., :4]
         labels = outputs[..., 5*self.config.num_boxes:]
-        print(labels[0][0])
         labels = labels.repeat(1, 2, 1)
-        print(labels[0][0])
-        print(labels[1][0])
-        print(boxes[0][0])
-        print(boxes[1][0])
-        print(boxes.size(), scores.size(), labels.size())
-        
+    
         preds = {
             'boxes': boxes,
             'scores': scores,
@@ -159,28 +148,15 @@ class Yolov1Model(Yolov1Pretrained):
         Return:
             outputs
         """
-        print(inputs.size())
         if self.training:
             inputs = self.check_inputs(inputs)
-            print(inputs.size())
             outputs = self.backbone(inputs)
-            for out in outputs:
-                print(out.size())
-            # print(outputs)
-            print('Passed backbone!')
             outputs = self.neck(outputs)
-            print(outputs.size())
-            # outputs = outputs.view(outputs.size(0), -1)
-            
-            print('Pass neck!')
             outputs = self.head(outputs)
-            print('Pass head!')
-            # print(outputs.size())
 
             return outputs
         else:
-            outputs = inputs
-            return outputs
+            return inputs
 
     
 
