@@ -2,6 +2,7 @@ import sys
 
 import torch
 from torch import nn, Tensor
+from torch._C import device
 import torch.nn.functional as F
 from typing import Tuple, List, Dict, Any, Optional
 
@@ -49,27 +50,47 @@ class Match:
 
 
 class Yolov1Loss(LoseFunction):
-    def __init__(self, config):
+    def __init__(self, config, lambda_coord=None, lambda_noobj=None):
         super().__init__()
         self.config = config
+        self.lambda_noobj = lambda_noobj
+        if self.lambda_noobj is None:
+            self.lambda_noobj = self.config.lambda_noobj
+        self.lambda_coord = lambda_coord
+        if self.lambda_coord is None:
+            self.lambda_coord = self.config.lambda_coord
 
     def encode(self, targets):
-        cell_size = 1.0 / self.config.grid_size
+        bs = len(targets)
+        self.config.device = 'cuda'
+        gs = self.config.grid_size
+        nb = self.config.num_boxes
+        nc = self.config.num_classes
+        cell_size = 1.0 / gs
         w, h = self.config.max_size
-        for target in targets:
+        converted = torch.zeros(bs, gs, gs, 5*nb+nc, device='cuda')
+        for batch, target in enumerate(targets):
             boxes = target['boxes']
-            boxes /= torch.Tensor([[w, h, w, h]]).expand_as(boxes)
+            boxes /= torch.FloatTensor([[w, h, w, h]]).expand_as(boxes).to('cuda')
             boxes = xyxy_to_cxywh(boxes)
-            ij = (boxes[:, :2] / cell_size).ceil() - 1.0
-            x0y0 = ij * cell_size
-            boxes[:, :2] = (boxes[:, :2] - x0y0) / cell_size
-            target['boxes'] = boxes
+            for l, box in enumerate(boxes):
+                ij = (box[:2] / cell_size).ceil() - 1.0
+                i, j = int(ij[0]), int(ij[1])
+                x0y0 = ij * cell_size
+                box[:2] = (box[:2] - x0y0) / cell_size
+                for k in range(0, 5*nb, 5):
+                    converted[batch, j, i, k:k+4] = box
+                    converted[batch, j, i, k+4] = 1.0
+            
+                labels = target['labels'][l].view(-1, 1)
+                labels = torch.zeros(labels.size(0), nc, device='cuda').scatter(1, labels, 1)
+                converted[batch, j, i, 5*nb:] = labels.squeeze(0)
 
-        print('CAT!!')
-        print(torch.cat([t['boxes'] for t in targets], dim=0))
-        print()
+        # print('CAT!!')
+        # print(torch.cat([t['boxes'] for t in targets], dim=0))
+        # print()
 
-        return targets
+        return converted
 
     def forward(self, inputs, targets):
         """
@@ -81,33 +102,171 @@ class Yolov1Loss(LoseFunction):
         targets = self.encode(targets)
 
         gs = self.config.grid_size
-        for pred, score, target in zip(inputs['boxes'], inputs['scores'], targets):
-            pred_xyxy = torch.FloatTensor(pred.size())
-            pred_xyxy[:, :2] = pred[:, :2] / gs - 0.5 * pred[:, 2:]
-            pred_xyxy[:, 2:] = pred[:, :2] / gs + 0.5 * pred[:, 2:]
 
-            true = target['boxes']
-            true_xyxy = torch.FloatTensor(true.size())
-            true_xyxy[:, :2] = true[:, :2] / gs - 0.5 * true[:, 2:]
-            true_xyxy[:, 2:] = true[:, :2] / gs + 0.5 * true[:, 2:]
+        bs = inputs.size(0)  # batch size
+        nb = self.config.num_boxes  # B
+        gs = self.config.grid_size  # S
+        nc = self.config.num_classes
+        device = inputs.device
+        # -> torch.Size([batch_size, S, S, 5*B+C])
+        
+        # print(inputs.size(), targets.size())
+        # print(inputs.device, targets.device)
+        
+        # -> torch.Size([batch_size, S, S, 5*B+C])
+        coord_mask = targets[..., 4] > 0
+        noobj_mask = targets[..., 4] == 0
+        coord_mask = coord_mask.unsqueeze(-1).expand_as(targets)#.to(self.device)
+        noobj_mask = noobj_mask.unsqueeze(-1).expand_as(targets)#.to(self.device)
+        # print(coord_mask.size(), noobj_mask.size())
+        # print(coord_mask.dtype, noobj_mask.dtype)
+        # print(coord_mask.device, noobj_mask.device)
+        
+        # Covert predicted outputs
+        # N: num_bboxes in targets (ground truth) // num_boxes
+        # Example: 총 박스 개수에서 좌표가 중복된 거 제외하고 나머지, 
+        # 좌표가 중복된건 두번째 박스에 집어넣음. github의 다른 코드들은 그렇게 처리하지 않음...
+        # coord_preds -> torch.Size([N, 30]) 
+        # boxes_preds -> torch.Size([N*nb, 5]), [N*nb, [cx, cy, w, h, conf]]
+        # class_preds -> torch.Size([N, 20])
+        coord_preds = inputs[coord_mask].view(-1, 5*nb+nc)
+        boxes_preds = coord_preds[:, :5*nb].contiguous().view(-1, 5) 
+        class_preds = coord_preds[:, 5*nb:]
+        # print(coord_preds.size(), boxes_preds.size(), class_preds.size())
+        # print(coord_preds.dtype, boxes_preds.dtype, class_preds.dtype)
+        # print(coord_preds.device, boxes_preds.device, class_preds.device)
+        print(boxes_preds[:5])
+        coord_targets = targets[coord_mask].view(-1, 5*nb+nc)
+        boxes_targets = coord_targets[:, :5*nb].contiguous().view(-1, 5)
+        class_targets = coord_targets[:, 5*nb:]
+        # print(coord_targets.size(), boxes_targets.size(), class_targets.size())
+        # print(coord_targets.dtype, boxes_targets.dtype, class_targets.dtype)
+        # print(coord_targets.device, boxes_targets.device, class_targets.device)
+        print(boxes_targets[:5])
+        # N = 전체 박스에서 물체가 있는 것을 제외한 나머지들
+        # noobj_preds: torch.Size([N, 1])
+        # noobj_preds = [0.534, 0.512, 0.312,...,0.123]
+        # noobj_targets = [0., 0., 0.,...,0.]
+        noobj_preds = inputs[noobj_mask].view(-1, 5*nb+nc)
+        noobj_targets = targets[noobj_mask].view(-1, 5*nb+nc)
+        noobj_conf_mask = torch.BoolTensor(noobj_preds.size()).fill_(0).to(device)
+        # print(noobj_preds.size(), noobj_targets.size(), noobj_conf_mask.size())
+        # print(noobj_preds.dtype, noobj_targets.dtype, noobj_conf_mask.dtype)
+        # print(noobj_preds.device, noobj_targets.device, noobj_conf_mask.device)
+        for b in range(nb):
+            noobj_conf_mask[:, 4+b*5] = 1
+        
+        noobj_conf_preds = noobj_preds[noobj_conf_mask]
+        noobj_conf_targets = noobj_targets[noobj_conf_mask]
+        # print(noobj_conf_preds.size(), noobj_conf_targets.size())
+        # print(noobj_conf_preds.dtype, noobj_conf_targets.dtype)
+        # Compute loss for the cells with objects.
+        loss_noobj = F.mse_loss(noobj_conf_preds, noobj_conf_targets, reduction='sum')
+                
+        coord_response_mask = torch.BoolTensor(boxes_targets.size()).fill_(0).to(device)
+        coord_not_response_mask = torch.BoolTensor(boxes_targets.size()).fill_(1).to(device)
+        # print(coord_response_mask.dtype, coord_not_response_mask.dtype)
+        # print(coord_response_mask.device, coord_not_response_mask.device)
+        # print(coord_response_mask.size(), coord_not_response_mask.size())
+
+        # torch.Size([N, 5]) only the last column is used
+        iou_targets = torch.zeros(boxes_targets.size(), device=device)
+        # Choose the predicted bbox having the highest IoU for each target bbox.
+        # 박스 두개씩 응답된 iou가 큰 박스는 1, 아니면 0, 두개씩 비교
+        # iou return [0.031, 0.512]
+        for i in range(0, boxes_targets.size(0), 2):
+            _preds = boxes_preds[i:i+nb]
+            xyxy_preds = torch.FloatTensor(_preds.size()).to(device)
+            # normalized for cell-size and image-size respectively,
+            # rescale (center_x,center_y) for the image-size to compute IoU correctly.
+            xyxy_preds[:, 0:2] = _preds[:, :2]/gs - 0.5 * _preds[:, 2:4]
+            xyxy_preds[:, 2:4] = _preds[:, :2]/gs + 0.5 * _preds[:, 2:4]
+            # target bbox at i-th cell. Because target boxes contained by each cell 
+            # are identical in current implementation, enough to extract the first one.
+            _targets = boxes_targets[i].view(-1, 5)
+            # return [x1, y1, x2, y2, conf]
+            xyxy_targets = torch.FloatTensor(_targets.size()).to(device)
+            # Because (center_x,center_y)=target[:, 2] and (w,h)=target[:,2:4] are normalized for 
+            # cell-size and image-size respectively,
+            # rescale (center_x,center_y) for the image-size to compute IoU correctly.
+            xyxy_targets[:, 0:2] = _targets[:, :2]/gs - 0.5 * _targets[:, 2:4]
+            xyxy_targets[:, 2:4] = _targets[:, :2]/gs + 0.5 * _targets[:, 2:4]
+            iou = jaccard(xyxy_preds[..., :4], xyxy_targets[..., :4]) # [B, 1]
+        #     iou = compute_iou(xyxy_preds[..., :4], xyxy_targets[..., :4])
+            max_iou, max_index = iou.max(0)
+            # print(max_iou.dtype, max_index.dtype)
+            # print(max_iou.device, max_index.device)
+            coord_response_mask[i+max_index] = 1
+            coord_not_response_mask[i+max_index] = 0
+            # "we want the confidence score to equal the intersection over union (IOU) between the predicted box and the ground truth"
+            # from the original paper of YOLO.
+            iou_targets[i+max_index, 4] = max_iou
+        
+        # BBox location/size and objectness loss for the response bboxes.
+        response_boxes_preds = boxes_preds[coord_response_mask].view(-1, 5)
+        response_boxes_targets = boxes_targets[coord_response_mask].view(-1, 5)
+        iou_targets = iou_targets[coord_response_mask].view(-1, 5)
+        # print(response_boxes_preds.size(), response_boxes_targets.size(), iou_targets.size())
+        # print(response_boxes_preds.dtype, response_boxes_targets.dtype, iou_targets.dtype)
+
+        loss_xy = F.mse_loss(
+            response_boxes_preds[:, :2], 
+            response_boxes_targets[:, :2], reduction='sum')
+
+        # loss_xy = torch.sum(torch.pow(response_boxes_targets[:, 0] - response_boxes_preds[:, 0], 2) \
+        # + torch.pow(response_boxes_targets[:, 1] - response_boxes_preds[:, 1], 2))
+
+        loss_wh = F.mse_loss(
+            torch.sqrt(response_boxes_preds[:, 2:4]), 
+            torch.sqrt(response_boxes_targets[:, 2:4]), reduction='sum')
+
+        # loss_wh = torch.sum(torch.pow(torch.sqrt(response_boxes_targets[:, 3]) - torch.sqrt(response_boxes_preds[:, 3]), 2) \
+        # + torch.pow(torch.sqrt(response_boxes_targets[:, 4]) - torch.sqrt(response_boxes_preds[:, 4]), 2))
+        
+        loss_boxes = (self.lambda_coord * (loss_xy + loss_wh)) / bs 
+        # loss_boxes = (self.lambda_coord * (loss_xy)) / bs 
+
+        loss_obj = F.mse_loss(
+            response_boxes_preds[:, 4], iou_targets[:, 4], reduction='sum')
+        loss_object = (loss_obj + (self.lambda_noobj * loss_noobj)) / bs
+        # Class probability loss for the cells which contain objects.
+        loss_class = F.mse_loss(class_preds, class_targets, reduction='sum') / bs
+
+        losses = {
+            'loss_boxes': loss_boxes,
+            'loss_object': loss_object,
+            'loss_class': loss_class,
+        }
+
+        return losses
+
+        # for pred, score, target in zip(inputs['boxes'], inputs['scores'], targets):
+        #     pred_xyxy = torch.FloatTensor(pred.size())
+        #     pred_xyxy[:, :2] = pred[:, :2] / gs - 0.5 * pred[:, 2:]
+        #     pred_xyxy[:, 2:] = pred[:, :2] / gs + 0.5 * pred[:, 2:]
+
+        #     true = target['boxes']
+        #     true_xyxy = torch.FloatTensor(true.size())
+        #     true_xyxy[:, :2] = true[:, :2] / gs - 0.5 * true[:, 2:]
+        #     true_xyxy[:, 2:] = true[:, :2] / gs + 0.5 * true[:, 2:]
             
 
-            print(pred)
-            print(true)
-            print()
-            best_true, best_idx = Match(0.2)(pred_xyxy, true_xyxy, score)
-            print(best_true, best_idx)
-            print()
-            print('Positive')
-            print(pred[best_idx])
-            print()
-            t_pred = pred[best_idx].squeeze(0)
-            print('Negative')
-            print(pred[best_idx])
-            # print(pred.squeeze(0))
-            print(best_true.index_fill(0, best_idx, 2))
+        #     print(pred)
+        #     print(true)
+        #     print()
+        #     best_true, best_idx = Match(0.2)(pred_xyxy, true_xyxy, score)
+        #     print(best_true, best_idx)
+        #     print()
+        #     print('Positive')
+        #     print(pred[best_idx])
+        #     print()
+        #     t_pred = pred[best_idx].squeeze(0)
+        #     print('Negative')
+        #     print(pred[best_idx])
+        #     # print(pred.squeeze(0))
+        #     print(best_true.index_fill(0, best_idx, 2))
 
-            print(F.mse_loss(t_pred[:,:2], true[:,:2], reduction='sum'))
+        #     print(F.mse_loss(t_pred[:,:2], true[:,:2], reduction='sum'))
             
 
 

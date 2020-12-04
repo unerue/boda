@@ -70,20 +70,20 @@ class Yolov1PredictHead(nn.Module):
         inputs = inputs.view(bs, -1)
         outputs = self.layers(inputs)        
         outputs = outputs.view(-1, self.config.grid_size, self.config.grid_size, self.out_channels)
-        outputs = outputs.view(bs, -1, 5*self.config.num_boxes+self.config.num_classes)
+        # outputs = outputs.view(bs, -1, 5*self.config.num_boxes+self.config.num_classes)
 
-        boxes = outputs[..., :5*self.config.num_boxes].contiguous().view(bs, -1, 5)        
-        scores = boxes[..., 4]
-        boxes = boxes[..., :4]
-        labels = outputs[..., 5*self.config.num_boxes:]
-        labels = labels.repeat(1, 2, 1)
+        # boxes = outputs[..., :5*self.config.num_boxes].contiguous().view(bs, -1, 5)        
+        # scores = boxes[..., 4]
+        # boxes = boxes[..., :4]
+        # labels = outputs[..., 5*self.config.num_boxes:]
+        # labels = labels.repeat(1, 2, 1)
     
-        preds = {
-            'boxes': boxes,
-            'scores': scores,
-            'labels': labels}
+        # preds = {
+        #     'boxes': boxes,
+        #     'scores': scores,
+        #     'labels': labels}
         
-        return preds
+        return outputs
         
 
 class Yolov1Pretrained(BaseModel):
@@ -148,6 +148,10 @@ class Yolov1Model(Yolov1Pretrained):
         Return:
             outputs
         """
+        self.config.device = 'cuda'
+        self.config.batch_size = len(inputs)
+
+
         if self.training:
             inputs = self.check_inputs(inputs)
             outputs = self.backbone(inputs)
