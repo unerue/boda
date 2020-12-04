@@ -13,7 +13,7 @@
 
 ## Deep learning-based Computer Vision Models for PyTorch 
 
-Boda stands for 보다(see) that is Korean word. This library was inspired by 🤗 Transformers.
+Boda (보다) means to see in Korean. This library was inspired by 🤗 Transformers.
 
 ## Get started
 
