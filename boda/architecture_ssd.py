@@ -11,9 +11,9 @@ from .backbone_vgg import vgg16
 
 
 extra_layers = [
-    [('M', {'kernel_size': 3, 'stride':  1, 'padding':  1}),
-     (1024, {'kernel_size': 3, 'padding': 6, 'dilation': 6}), 
-     (1024, {'kernel_size': 1})], 
+    # [('M', {'kernel_size': 3, 'stride':  1, 'padding':  1}),
+    #  (1024, {'kernel_size': 3, 'padding': 6, 'dilation': 6}), 
+    #  (1024, {'kernel_size': 1})], 
     [(256, {'kernel_size': 1}), 
      (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
     [(128, {'kernel_size': 1}), 
@@ -22,6 +22,17 @@ extra_layers = [
      (256, {'kernel_size': 3})], 
     [(128, {'kernel_size': 1}), 
      (256, {'kernel_size': 3})]]
+
+layers512 = [
+    [(256, {'kernel_size': 1}), 
+     (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
+    [(128, {'kernel_size': 1}), 
+     (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
+    [(128, {'kernel_size': 1}), 
+     (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
+    [(128, {'kernel_size': 1}), 
+     (256, {'kernel_size': 3, 'stride': 2, 'padding':  1})], 
+    [(128, {'kernel_size': 1})]]
 
 
 

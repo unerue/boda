@@ -2,7 +2,7 @@ import torch
 from torch import nn, Tensor
 
 
-def cxywh_to_xyxy(boxes: Tensor) -> Tensor:
+def cxcywh_to_xyxy(boxes: Tensor) -> Tensor:
     """Convert prior_boxes to (xmin, ymin, xmax, ymax)
     representation for comparison to point form ground truth data.
     Argument:
@@ -26,7 +26,7 @@ def xyxy_to_cxywh(boxes: Tensor) -> Tensor:
         ((boxes[:, 2:] + boxes[:, :2])/2, boxes[:, 2:] - boxes[:, :2]), dim=1)
 
 
-def gxywh_to_xyxy(boxes: Tensor) -> Tensor:
+def gcxywh_to_xyxy(boxes: Tensor) -> Tensor:
     """Convert grid center point to 
     Argument:
         boxes (Tensor): [gcx, gcy, w, h]
