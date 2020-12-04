@@ -22,7 +22,6 @@ class Yolov1Config(PretrainedConfig):
         self.selected_layers = selected_layers
         self.grid_size = grid_size
         self.num_boxes = num_boxes
-        # self.max_size = max_size
         self.num_classes = num_classes
         self.obj_scale = 1
         self.noobj_scale = 0.5

@@ -14,22 +14,21 @@ class SsdConfig(PretrainedConfig):
         self, 
         selected_layers=-1,
         grid_size=7, 
-        num_boxes=2,
-        max_size=448,
+        max_size=300,
         num_classes=20,
         **kwargs):
         super().__init__(max_size=max_size, **kwargs)
         self.selected_layers = selected_layers
-        self.grid_size = grid_size
-        self.num_boxes = num_boxes
-        # self.max_size = max_size
+        self.boxes = [4, 6, 6, 6, 4, 4]
         self.num_classes = num_classes
-        self.obj_scale = 1
-        self.noobj_scale = 0.5
-        self.class_scale = 1
-        self.coord_scale = 5
-        self.jitter = 0.2
-        self.lambda_coord = 5.0
-        self.lambda_noobj = 0.5
-        self.sqrt = 1
+        self.backbone_name = 'vgg16'
+        self.aspect_ratios = [[2], [2, 3], [2, 3], [2, 3], [2], [2]]
+        self.variance = [0.1, 0.2]
+        self.min_sizes = [30, 60, 111, 162, 213, 264]
+        self.max_sizes = [60, 111, 162, 213, 264, 315]
+        self.steps = [8, 16, 32, 64, 100, 300]
+        self.clip = True
+        
+        # self.grid_sizes = [38, 19, 10, 5, 3, 1]
+
 
