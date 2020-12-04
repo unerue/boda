@@ -19,6 +19,7 @@ class Yolov1PredictNeck(nn.Module):
         """
         super().__init__()
         self.config = config
+        self._in_channels = in_channels
         self.layers = nn.Sequential(
             nn.Conv2d(in_channels, 1024, kernel_size=3, padding=1),
             nn.LeakyReLU(0.1),
@@ -28,14 +29,29 @@ class Yolov1PredictNeck(nn.Module):
             nn.LeakyReLU(0.1),
             nn.Conv2d(1024, 1024, kernel_size=3, padding=1),
             nn.LeakyReLU(0.1))
+
+        # self._make_layer(1024)
+        # self._make_layer(1024)
+        # self._make_layer(1024)
+        # self._make_layer(1024)
     
-    def _make_layer(self, num_layers, in_channels, out_channels):
+    def _make_layer(self, out_channels, bn: bool = False, relu: bool = False, **kwargs):
         """TODO"""
         layers = []
         layers.append(
-            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1))
-        # for _ in range(num_layers):
-        #     layers.append()
+            nn.Conv2d(self._in_channels, out_channels, kernel_size=3, padding=1, **kwargs))
+        
+        if bn:
+            layers.append(nn.BatchNorm2d(out_channels))
+
+        if relu:
+            layers.append(nn.ReLU())
+        else:
+            layers.append(nn.LeakyReLU(0.1))
+        
+        self._in_channels = out_channels
+        self.layers.append(nn.Sequential(*layers))
+        self.channels.append(out_channels)
 
     def forward(self, inputs: List[Tensor]) -> Tensor:
         """
@@ -53,13 +69,13 @@ class Yolov1PredictHead(nn.Module):
         selected_layers (List[float]):
         scales (List[float]):
     """
-    def __init__(self, config, **kwargs) -> None:
+    def __init__(self, config, in_channels: int = 1024, relu: bool = False, **kwargs) -> None:
         super().__init__()
         self.config = config
         self.out_channels = 5 * config.num_boxes + config.num_classes
         self.layers = nn.Sequential(
-            nn.Linear(config.grid_size * config.grid_size * 1024, 4096),
-            nn.LeakyReLU(0.1),
+            nn.Linear(config.grid_size * config.grid_size * in_channels, 4096),
+            nn.LeakyReLU(0.1) if not relu else nn.ReLU(),
             nn.Linear(4096, config.grid_size * config.grid_size * self.out_channels),
             nn.Sigmoid())
         # self._initialize_weights()

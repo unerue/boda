@@ -17,10 +17,10 @@ class PretrainedConfig:
 
         # backbone
         self.backbone = kwargs.pop('backbone', None)
-    
+        
         # neck
         self.selected_layers = kwargs.pop('selected_layers', list(range(1, 4)))
-        self.pred_aspect_ratios = kwargs.pop('pred_aspect_ratios', [[[1/2, 1, 2]]]*5)
+        self.aspect_ratios = kwargs.pop('aspect_ratios', [[[1/2, 1, 2]]]*5)
         self.pred_scales = kwargs.pop('pred_scales', [[24], [48], [96], [192], [384]])
         self.num_features = kwargs.pop('num_features', None)
         self.score_thresh = kwargs.pop('score_thresh', 0.15)
@@ -46,9 +46,14 @@ class PretrainedConfig:
             except AttributeError as e:
                 print(k, v, e)
     
+    # def __repr__(self):
+    #     return f'{self.__class__.__name__} {self.to_dict()}'
     def __repr__(self):
-        return f'{self.__class__.__name__} {self.to_json()}'
+        return f'{self.__class__.__name__} {self.to_dict()}'
     
+    # def print_config(self):
+    #     for config in self.to_dict():
+    #         print(config)
     # @property
     # def num_classes(self):
     #     return len(self.idx2labels)

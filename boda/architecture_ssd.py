@@ -35,7 +35,6 @@ layers512 = [
     [(128, {'kernel_size': 1})]]
 
 
-
 class PriorBox:
     """Compute priorbox coordinates in center-offset form for each source
     feature map.
