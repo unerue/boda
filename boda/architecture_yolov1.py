@@ -21,14 +21,22 @@ class Yolov1PredictNeck(nn.Module):
         self.config = config
         self.layers = nn.Sequential(
             nn.Conv2d(in_channels, 1024, kernel_size=3, padding=1),
-            nn.ReLU(),
+            nn.LeakyReLU(0.1),
             nn.Conv2d(1024, 1024, kernel_size=3, stride=2, padding=1),
-            nn.ReLU(),
+            nn.LeakyReLU(0.1),
             nn.Conv2d(1024, 1024, kernel_size=3, padding=1),
-            nn.ReLU(),
+            nn.LeakyReLU(0.1),
             nn.Conv2d(1024, 1024, kernel_size=3, padding=1),
-            nn.ReLU())
+            nn.LeakyReLU(0.1))
     
+    def _make_layer(self, num_layers, in_channels, out_channels):
+        """TODO"""
+        layers = []
+        layers.append(
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1))
+        # for _ in range(num_layers):
+        #     layers.append()
+
     def forward(self, inputs: List[Tensor]) -> Tensor:
         """
             inputs (List[Tensor]): 
@@ -51,7 +59,7 @@ class Yolov1PredictHead(nn.Module):
         self.out_channels = 5 * config.num_boxes + config.num_classes
         self.layers = nn.Sequential(
             nn.Linear(config.grid_size * config.grid_size * 1024, 4096),
-            nn.ReLU(),
+            nn.LeakyReLU(0.1),
             nn.Linear(4096, config.grid_size * config.grid_size * self.out_channels),
             nn.Sigmoid())
         # self._initialize_weights()
@@ -89,7 +97,7 @@ class Yolov1PredictHead(nn.Module):
 class Yolov1Pretrained(BaseModel):
     def __init__(self):
         super().__init__()
-        pass
+        
     # def _init_weights(self, module):
     #     """ Initialize the weights """
     #     if isinstance(module, (nn.Linear, nn.Embedding)):
@@ -148,12 +156,11 @@ class Yolov1Model(Yolov1Pretrained):
         Return:
             outputs
         """
-        self.config.device = 'cuda'
-        self.config.batch_size = len(inputs)
-
+        inputs = self.check_inputs(inputs)
+        self.config.device = inputs.device
+        self.config.batch_size = inputs.size(0)
 
         if self.training:
-            inputs = self.check_inputs(inputs)
             outputs = self.backbone(inputs)
             outputs = self.neck(outputs)
             outputs = self.head(outputs)

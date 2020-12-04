@@ -93,24 +93,24 @@ class DarkNet(nn.Module):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
 
-    def _make_layer(self, block, out_channles: List[int], blocks: List[int]):
+    def _make_layer(self, block, out_channels: List[int], blocks: List[int]):
         layers = []
         layers.append(nn.Conv2d(
             self.in_channels, 
-            out_channles[1], 
+            out_channels[1], 
             kernel_size=3,
             stride=2, 
             padding=1, 
             bias=False))
-        layers.append(nn.BatchNorm2d(out_channles[1]))
+        layers.append(nn.BatchNorm2d(out_channels[1]))
         layers.append(nn.LeakyReLU(0.1))
         
-        self.in_channels = out_channles[1]
+        self.in_channels = out_channels[1]
         for _ in range(0, blocks):
-            layers.append(block(self.in_channels, out_channles))
+            layers.append(block(self.in_channels, out_channels))
         
         self.layers.append(nn.Sequential(*layers))
-        self.channels.append(out_channles[1])
+        self.channels.append(out_channels[1])
 
     def forward(self, inputs: Tensor) -> List[Tensor]:
         inputs = self.conv(inputs)

@@ -7,46 +7,8 @@ import torch.nn.functional as F
 from typing import Tuple, List, Dict, Any, Optional
 
 from .loss_base import LoseFunction
-# from ..utils import jaccard
 from .box_utils import xyxy_to_cxywh
 from .box_utils import jaccard
-
-
-class Match:
-    def __init__(self, thresh) -> None:
-        self.thresh = thresh
-
-    def __call__(self, preds, targets, confs) -> Any:
-        overlaps = jaccard(preds, targets)
-        print('Overlaps')
-        print(overlaps)
-        print()
-        best_truth_overlap, best_truth_idx = overlaps.max(0, keepdim=True)
-        best_neg_overlap, best_neg_idx = overlaps.max(1, keepdim=True)
-        print(best_truth_idx)
-        print(best_neg_idx)
-        best_truth_idx = best_truth_idx.squeeze(0)
-        best_truth_overlap = best_truth_overlap.squeeze(0)
-        print(best_truth_idx)
-        print(best_truth_overlap)
-        best_neg_idx = best_neg_idx.squeeze(1)
-        print(best_neg_idx)
-        print()
-        print('best_truth_overlap', best_truth_overlap)
-        print(best_neg_idx)
-        print(preds)
-        print(preds[best_neg_idx])
-        print(preds[best_truth_idx])
-        print(best_truth_overlap.index_fill(0, best_neg_idx, 2))
-        print(confs)
-        for i in range(best_truth_idx.size(0)):
-            print(best_truth_idx[best_neg_idx[i]], i)
-            best_truth_idx[best_neg_idx[i]] = i
-        print(best_truth_idx)
-            # best_truth_idx
-        print(confs[best_truth_overlap < 0.2])
-        # print(best_neg_idx, best_neg_overlap)
-        return best_truth_overlap, best_truth_idx
 
 
 class Yolov1Loss(LoseFunction):
@@ -85,10 +47,6 @@ class Yolov1Loss(LoseFunction):
                 labels = target['labels'][l].view(-1, 1)
                 labels = torch.zeros(labels.size(0), nc, device='cuda').scatter(1, labels, 1)
                 converted[batch, j, i, 5*nb:] = labels.squeeze(0)
-
-        # print('CAT!!')
-        # print(torch.cat([t['boxes'] for t in targets], dim=0))
-        # print()
 
         return converted
 
@@ -268,6 +226,43 @@ class Yolov1Loss(LoseFunction):
 
         #     print(F.mse_loss(t_pred[:,:2], true[:,:2], reduction='sum'))
             
+
+
+# class Match:
+#     def __init__(self, thresh) -> None:
+#         self.thresh = thresh
+
+#     def __call__(self, preds, targets, confs) -> Any:
+#         overlaps = jaccard(preds, targets)
+#         print('Overlaps')
+#         print(overlaps)
+#         print()
+#         best_truth_overlap, best_truth_idx = overlaps.max(0, keepdim=True)
+#         best_neg_overlap, best_neg_idx = overlaps.max(1, keepdim=True)
+#         print(best_truth_idx)
+#         print(best_neg_idx)
+#         best_truth_idx = best_truth_idx.squeeze(0)
+#         best_truth_overlap = best_truth_overlap.squeeze(0)
+#         print(best_truth_idx)
+#         print(best_truth_overlap)
+#         best_neg_idx = best_neg_idx.squeeze(1)
+#         print(best_neg_idx)
+#         print()
+#         print('best_truth_overlap', best_truth_overlap)
+#         print(best_neg_idx)
+#         print(preds)
+#         print(preds[best_neg_idx])
+#         print(preds[best_truth_idx])
+#         print(best_truth_overlap.index_fill(0, best_neg_idx, 2))
+#         print(confs)
+#         for i in range(best_truth_idx.size(0)):
+#             print(best_truth_idx[best_neg_idx[i]], i)
+#             best_truth_idx[best_neg_idx[i]] = i
+#         print(best_truth_idx)
+#             # best_truth_idx
+#         print(confs[best_truth_overlap < 0.2])
+#         # print(best_neg_idx, best_neg_overlap)
+#         return best_truth_overlap, best_truth_idx
 
 
         
