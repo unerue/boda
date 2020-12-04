@@ -7,7 +7,6 @@ from torch import nn, Tensor
 import torch.nn.functional as F
 
 
-# __all__ = ['darknet21', 'darknet53']
 DARKNET_PRETRAINED_CONFIG = {
     'darknet-base': None,
     'darknet21': None,
@@ -135,17 +134,6 @@ class DarkNet(nn.Module):
         
         self.load_state_dict(state_dict, strict=False)
 
-    # def add_layer(self):
-    #     self._make_layer(block)
-
-
-# class CspDarkNet(nn.Module):
-#     def __init__(self) -> None:
-#         raise NotImplementedError
-
-#     def forward(self, inputs):
-#         raise NotImplementedError
-
 
 def darknet21(pretrained=False, **kwargs):
     """Constructs a darknet-21.
@@ -153,7 +141,7 @@ def darknet21(pretrained=False, **kwargs):
     backbone = DarkNet([1, 1, 2, 2, 1])
     if pretrained:
         backbone.load_state_dict(torch.load(pretrained))
-    # print(backbone)
+
     return backbone
 
 
@@ -166,12 +154,6 @@ def darknet53(pretrained=False, **kwargs):
         
     return backbone
 
-# from .backbone_base import PreTrainedBackbone
-
-
-# class BackboneDarkNet(PreTrainedBackbone):
-#     def __init__(self, config):
-#         self.config = config
 
 
 
