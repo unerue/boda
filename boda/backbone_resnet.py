@@ -109,7 +109,7 @@ class ResNet(nn.Module):
 
         return outs
 
-    def init_backbone(self, path):
+    def init_weights(self, path):
         state_dict = torch.load(path)
 
         keys = list(state_dict)
@@ -126,10 +126,9 @@ class ResNet(nn.Module):
 
 
 def resnet50(layers=[3, 4, 6, 3]):
-    """ Constructs a backbone given a backbone config object (see config.py). """
-    # backbone = cfg.type(*cfg.args)
+    """Constructs a backbone given a backbone config object (see config.py). 
+    """
     backbone = ResNet(layers)
-
     # Add downsampling layers until we reach the number we need
     selected_layers = [1, 2, 3]
     # num_layers = max(cfg.selected_layers) + 1
