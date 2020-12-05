@@ -1,4 +1,5 @@
-from typing import Tuple, List, Dict
+from typing import Tuple, List, Dict, Any, Callable, TypeVar
+from collections import defaultdict
 
 import torch
 from torch import nn, Tensor
@@ -67,13 +68,63 @@ class YolactPredictNeck(nn.Module):
 
         return outputs
 
+
+F = TypeVar('F', bound=Callable[..., Any])
+
+def prior_cache(func: F) -> F:
+    cached_colors = defaultdict(lambda: None)
+    def wrapping_function(*args):
+        k, v = func(*args)
+        if k not in cached_colors:
+            cached_colors[k] = v
+        return k, cached_colors[k]
+    return wrapping_function
+
         
 class PriorBox:
-    def __init__(self) -> None:
+    def __init__(self, priors, device) -> None:
+        self.priors = priors
+        self.device = device
+        self.last_img_size = None
+        self.last_conv_size = None
         pass
+    
+    @prior_cache
+    def generate(self, conv_h, conv_w):
+        size = (conv_h, conv_w)
+        prior_data = []
+        # Iteration order is important (it has to sync up with the convout)
+        for j, i in product(range(conv_h), range(conv_w)):
+            # +0.5 because priors are in center-size notation
+            x = (i + 0.5) / conv_w
+            y = (j + 0.5) / conv_h
+            
+            for ars in self.aspect_ratios:
+                for scale in self.scales:
+                    for ar in ars:
+                        if not cfg.backbone.preapply_sqrt:
+                            ar = sqrt(ar)
 
-    def generate(self):
-        
+                        if cfg.backbone.use_pixel_scales:
+                            w = scale * ar / cfg.max_size
+                            h = scale / ar / cfg.max_size
+                        else:
+                            w = scale * ar / conv_w
+                            h = scale / ar / conv_h
+                        
+                        # This is for backward compatability with a bug where I made everything square by accident
+                        if cfg.backbone.use_square_anchors:
+                            h = w
+
+                        prior_data += [x, y, w, h]
+
+        self.priors = torch.Tensor(prior_data, device=device).view(-1, 4).detach()
+        self.priors.requires_grad = False
+        self.last_img_size = (cfg._tmp_img_w, cfg._tmp_img_h)
+        self.last_conv_size = (conv_w, conv_h)
+
+        return (conv_h, conv_w), prior_data
+        # prior_cache[size] = None
 
 
 class InterpolateModule(nn.Module):
