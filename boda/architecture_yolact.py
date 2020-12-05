@@ -44,6 +44,7 @@ class YolactPredictNeck(nn.Module):
     def forward(self, inputs: List[Tensor]):
         outputs = []
         x = torch.zeros(1, device=inputs[0].device)
+        # check_inputs() -> config.device
         for _ in range(len(inputs)):
             outputs.append(x)
 
@@ -71,8 +72,7 @@ class YolactPredictNeck(nn.Module):
         return outputs
 
 
-# F = TypeVar('F', bound=Callable[..., Any])
-
+# T = TypeVar('T', bound=Callable[..., Any])
 def prior_cache(func):
     cache = defaultdict()
     def wrapper(*args):
