@@ -104,8 +104,6 @@ class L2Norm(nn.Module):
         return out
 
 
-
-
 class SsdPredictNeck(nn.Module):
     def __init__(self, config, in_channels: int):
         super().__init__()

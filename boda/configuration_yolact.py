@@ -40,7 +40,7 @@ class YolactConfig(PretrainedConfig):
         self.mask_type = 1
         self.mask_alpha = 6.125
         self.proto_src = 0
-        self.mask_proto_net = [(256, 3, {'padding': 1})] * 3 + [(None, -2, {}), (256, 3, {'padding': 1})] + [(32, 1, {})]
+        self.proto_net = [(256, 3, {'padding': 1})] * 3 + [(None, -2, {}), (256, 3, {'padding': 1})] + [(32, 1, {})]
         self.mask_proto_prototypes_as_features = None
         self.mask_proto_prototypes_as_features_no_grad = None
         self.mask_proto_coef_activation = None
