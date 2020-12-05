@@ -7,7 +7,7 @@ import torch.nn.functional as F
 
 import os
 import math
-from collections import deque
+import itertools
 
 from .architecture_base import BaseModel
 from .backbone_resnet import resnet101
@@ -47,6 +47,8 @@ class YolactPredictNeck(nn.Module):
         for _ in range(len(inputs)):
             outputs.append(x)
 
+        outputs = [x for _ in range(len(inputs))]
+
         j = len(inputs)
         for lateral_layer in self.lateral_layers:
             j -= 1
@@ -69,16 +71,16 @@ class YolactPredictNeck(nn.Module):
         return outputs
 
 
-F = TypeVar('F', bound=Callable[..., Any])
+# F = TypeVar('F', bound=Callable[..., Any])
 
-def prior_cache(func: F) -> F:
-    cached_colors = defaultdict(lambda: None)
-    def wrapping_function(*args):
+def prior_cache(func):
+    cache = defaultdict()
+    def wrapper(*args):
         k, v = func(*args)
-        if k not in cached_colors:
-            cached_colors[k] = v
-        return k, cached_colors[k]
-    return wrapping_function
+        if k not in cache:
+            cache[k] = v
+        return k, cache[k]
+    return wrapper
 
         
 class PriorBox:
@@ -94,7 +96,7 @@ class PriorBox:
         size = (conv_h, conv_w)
         prior_data = []
         # Iteration order is important (it has to sync up with the convout)
-        for j, i in product(range(conv_h), range(conv_w)):
+        for j, i in itertools.product(range(conv_h), range(conv_w)):
             # +0.5 because priors are in center-size notation
             x = (i + 0.5) / conv_w
             y = (j + 0.5) / conv_h
@@ -255,20 +257,20 @@ class YolactModel(BaseModel):
         print(in_channels)
         self.proto_net = ProtoNet(config, in_channels, self.config.proto_net, include_last_relu=False)
 
-        self.head_layers = nn.ModuleList()
-        num_heads = len(self.config.selected_layers)
+        # self.head_layers = nn.ModuleList()
+        # num_heads = len(self.config.selected_layers)
 
-        for i, j in enumerate(self.config.selected_layers):
-            parent = None
-            head_layer = YolactPredictHead(
-                config, 
-                neck_channels[j], 
-                neck_channels[j],
-                aspect_ratios=self.config.aspect_ratios[i],
-                scales=self.config.scales[i],
-                parent=parent,
-                index=i)
-            self.head_layers.append(head_layer)
+        # for i, j in enumerate(self.config.selected_layers):
+        #     parent = None
+        #     head_layer = YolactPredictHead(
+        #         config, 
+        #         neck_channels[j], 
+        #         neck_channels[j],
+        #         aspect_ratios=self.config.aspect_ratios[i],
+        #         scales=self.config.scales[i],
+        #         parent=parent,
+        #         index=i)
+        #     self.head_layers.append(head_layer)
 
 
     def forward(self, inputs):
