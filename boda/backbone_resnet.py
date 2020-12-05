@@ -125,19 +125,26 @@ class ResNet(nn.Module):
         self._make_layer(block, conv_channels // block.expansion, blocks=depth, stride=downsample)
 
 
-def resnet50(layers=[3, 4, 6, 3]):
-    """Constructs a backbone given a backbone config object (see config.py). 
-    """
-    backbone = ResNet(layers)
+def resnet50():
+    backbone = ResNet([3, 4, 6, 3])
     # Add downsampling layers until we reach the number we need
     selected_layers = [1, 2, 3]
     # num_layers = max(cfg.selected_layers) + 1
     num_layers = max(selected_layers) + 1
-
     while len(backbone.layers) < num_layers:
         backbone.add_layer()
 
     return backbone
 
 
+def resnet101():
+    backbone = ResNet([3, 4, 23, 3])
+    # Add downsampling layers until we reach the number we need
+    selected_layers = [1, 2, 3]
+    # num_layers = max(cfg.selected_layers) + 1
+    num_layers = max(selected_layers) + 1
+    while len(backbone.layers) < num_layers:
+        backbone.add_layer()
+
+    return backbone
 

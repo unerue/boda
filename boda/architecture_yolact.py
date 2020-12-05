@@ -7,13 +7,9 @@ import torch.nn.functional as F
 import os
 import math
 from collections import deque
-from pathlib import Path
-# from layers.interpolate import InterpolateModule
 
 from .architecture_base import BaseModel
-from .configuration_yolact import config
-from .prediction_head_yolact import FeaturePyramidNet, YolactPredictionHead
-from .backbone_yolact import ResNet
+from .backbone_resnet import resnet101
 
 
 class PriorBox:
@@ -26,73 +22,118 @@ class ProtoNet:
         raise NotImplementedError
 
 
+class YolactPredictNeck(nn.Module):
+    def __init__(self, config, in_channels) -> None:
+        super().__init__()
+        self.config = config
 
-class YolactPredictNeck():
-    def __init__(self) -> None:
-        raise NotImplementedError
+        self.lateral_layers = nn.ModuleList([
+            nn.Conv2d(
+                x, 
+                self.config.num_features, 
+                kernel_size=1) for x in reversed(in_channels)])
 
+        self.predict_layers = nn.ModuleList([
+            nn.Conv2d(
+                self.config.num_features,
+                self.config.num_features,
+                kernel_size=3,
+                padding=self.config.padding) for _ in in_channels])
+        
+        self.downsample_layers = nn.ModuleList([
+            nn.Conv2d(
+                self.config.num_features,
+                self.config.num_features,
+                kernel_size=3,
+                stride=2,
+                padding=1) for _ in range(self.config.num_downsamples)])
 
+    def forward(self, inputs: List[Tensor]):
+        outputs = []
+        x = torch.zeros(1, device=inputs[0].device)
+        for _ in range(len(inputs)):
+            outputs.append(x)
+
+        j = len(inputs)
+        for lateral_layer in self.lateral_layers:
+            j -= 1
+            if j < len(inputs) - 1:
+                _, _, h, w = inputs[j].size()
+                x = F.interpolate(
+                    x, size=(h, w), mode=self.config.interpolate_mode, align_corners=False)
+            
+            x = x + lateral_layer(inputs[j])
+            outputs[j] = x
+
+        j = len(inputs)
+        for predict_layer in self.predict_layers:
+            j -= 1
+            outputs[j] = F.relu(predict_layer(outputs[j]))
+
+        for downsample_layer in self.downsample_layers:
+            outputs.append(downsample_layer(outputs[-1]))
+
+        return outputs
+
+        
 class YolactPredictHead():
     def __init__(self) -> None:
         raise NotImplementedError
 
+
 class YolactModel(BaseModel):
-    def __init__(self, backbone=None):
+    def __init__(self, config, backbone=None, neck=None):
         super().__init__()
-        if backbone is not None:
-            self.backbone = backbone
-        else:
-            self.backbone = backbone
+        self.config = config
+        if backbone is None:
+            self.backbone = resnet101()
 
-        config.train.freeze_bn = True
-        if config.train.freeze_bn:
-            self.freeze_bn()
+        # if self.config.freeze_bn:
+        #     self.freeze_bn()
 
-        mask_size = 16 # TODO: CONFIG
-        self.mask_dim = mask_size**2
+        self.config.mask_dim = self.config.mask_size**2
 
-        self.num_grids = 0
+        in_channels = self.backbone.channels[self.config.proto_src]
+        in_channels += self.config.num_grids
 
-        mask_proto_src = 0
-        self.proto_src = mask_proto_src
-        fpn = True
+        if neck is None:
+            self.neck = YolactPredictNeck(config, [self.backbone.channels[i] for i in self.config.selected_layers])
+            selected_layers = list(range(len(self.config.selected_layers) + self.config.num_downsamples))
+            backbone_channels = [self.config.num_features] * len(selected_layers)
 
-        if self.proto_src is None:
-            in_channels = 3
-        elif fpn is not None:
-            num_features = 256
-            in_channels = num_features
-        else:
-            in_channels = self.backbone.channels[self.proto_src]
-        in_channels += self.num_grids
+        print(backbone_channels)
 
-        # self.proto_net, mask_dim = make_net(in_channels, mask_proto_net, include_last_relu=False)
-        
-        self.selected_layers = config.neck.selected_layers
-        backbone_channels = self.backbone.channels
-        num_downsample = 2
-        if config.neck is not None:
-            self.neck = FeaturePyramidNet([backbone_channels[i] for i in self.selected_layers])
-            self.selected_layers = list(range(len(self.selected_layers) + num_downsample))
-            backbone_channels = [num_features] * len(self.selected_layers)
+    def forward(self, inputs):
+        outputs = self.backbone(inputs)
+        print(self.backbone.channels)
 
-        self.prediction_layers = nn.ModuleList()
-        # num_heads = len(self.selected_layers)
+        outputs = [outputs[i] for i in self.config.selected_layers]
+        outputs = self.neck(outputs)
+        print(len(outputs))
+        for o in outputs:
+            print(o.size())
 
-        for idx, layer_idx in enumerate(self.selected_layers):
-            # If we're sharing prediction module weights, have every module's parent be the first one
-            parent = None
-            # if config.share_prediction_module and idx > 0:
-            #     parent = self.prediction_layers[0]
+        return outputs
 
-            pred = YolactPredictionHead(
-                backbone_channels[layer_idx],
-                backbone_channels[layer_idx],
-                aspect_ratios=config.neck.pred_aspect_ratios[idx],
-                scales=config.neck.pred_scales[idx],
-                parent=parent,
-                index=idx)
-            self.prediction_layers.append(pred)
+
+    
+        # self.prediction_layers = nn.ModuleList()
+        # # num_heads = len(self.selected_layers)
+
+        # for idx, layer_idx in enumerate(self.selected_layers):
+        #     # If we're sharing prediction module weights, have every module's parent be the first one
+        #     parent = None
+        #     # if config.share_prediction_module and idx > 0:
+        #     #     parent = self.prediction_layers[0]
+
+        #     pred = YolactPredictionHead(
+        #         backbone_channels[layer_idx],
+        #         backbone_channels[layer_idx],
+        #         aspect_ratios=config.neck.pred_aspect_ratios[idx],
+        #         scales=config.neck.pred_scales[idx],
+        #         parent=parent,
+        #         index=idx)
+        #     self.prediction_layers.append(pred)
             
 
             # pred = PredictionModule(src_channels[layer_idx], src_channels[layer_idx],
@@ -101,43 +142,43 @@ class YolactModel(BaseModel):
             #                         parent        = parent,
             #                         index         = idx)
             # self.prediction_layers.append(pred)
-    def forward(self, x):
-        _, _, w, h = x.size()
-        config.train._h = w
-        config.train._w = h
+    # def forward(self, x):
+    #     _, _, w, h = x.size()
+    #     config.train._h = w
+    #     config.train._w = h
 
-        if config.neck is not None:
-            outputs = [outputs[i] for i in config.backbone.selected_layers]
-            outputs = self.neck(outputs)
+        # if config.neck is not None:
+        #     outputs = [outputs[i] for i in config.backbone.selected_layers]
+        #     outputs = self.neck(outputs)
         
-        proto_out = None
-        if config.proto_net.mask_type == mask_type.lincomb:
-            if self.proto_src is None:
-                proto_x = x
-            else:
-                outputs[self.proto_src]
+        # proto_out = None
+        # if config.proto_net.mask_type == mask_type.lincomb:
+        #     if self.proto_src is None:
+        #         proto_x = x
+        #     else:
+        #         outputs[self.proto_src]
             
-            if self.num_grids > 0:
-                grids = self.grid.repeat(proto_x.size(0), 1, 1, 1)
-                proto_x = torch.cat([proto_x, grids], dim=1)
+        #     if self.num_grids > 0:
+        #         grids = self.grid.repeat(proto_x.size(0), 1, 1, 1)
+        #         proto_x = torch.cat([proto_x, grids], dim=1)
 
-            proto_out = self.proto_net(proto_x)
-            proto_out = config.proto_net.mask_proto_prototype_activation(proto_out)
+        #     proto_out = self.proto_net(proto_x)
+        #     proto_out = config.proto_net.mask_proto_prototype_activation(proto_out)
 
-            if config.mask_proto_prototypes_as_features:
-                proto_downsampled = proto_out.clone()
+        #     if config.mask_proto_prototypes_as_features:
+        #         proto_downsampled = proto_out.clone()
 
-                if config.mask_proto_prototypes_as_features_no_grad:
-                    proto_downsampled = proto_out.detach()
+        #         if config.mask_proto_prototypes_as_features_no_grad:
+        #             proto_downsampled = proto_out.detach()
 
-            proto_out = proto_out.permute(0, 2, 3, 1).contiguous()
+        #     proto_out = proto_out.permute(0, 2, 3, 1).contiguous()
 
-            if config.mask_proto_bias:
-                bias_shape = [x for x in proto_out.size()]
-                bias_shape[-1] = 1
-                proto_out = torch.cat([proto_out, torch.ones(*bias_shape)], dim=-1)
+        #     if config.mask_proto_bias:
+        #         bias_shape = [x for x in proto_out.size()]
+        #         bias_shape[-1] = 1
+        #         proto_out = torch.cat([proto_out, torch.ones(*bias_shape)], dim=-1)
 
-        pred_outs = {'loc': [], 'conf': [], 'mask': [], 'priors': []}
+        # pred_outs = {'loc': [], 'conf': [], 'mask': [], 'priors': []}
 
 
     
