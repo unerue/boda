@@ -26,3 +26,11 @@ from boda import Yolov1Model
 
 model = Yolov1Model()
 ```
+
+|Model|Original|Ours|
+|:----|-------:|---:|
+|YOLOv1|||
+|SSD|||
+|Faster R-CNN|||
+|YOLOv3|||
+|YOLACT|||
