@@ -36,20 +36,20 @@ class Yolov1PredictNeck(nn.Module):
     
     def _make_layer(self, out_channels, bn: bool = False, relu: bool = False, **kwargs):
         """TODO"""
-        layers = []
-        layers.append(
+        _layers = []
+        _layers.append(
             nn.Conv2d(self._in_channels, out_channels, kernel_size=3, padding=1, **kwargs))
         
         if bn:
-            layers.append(nn.BatchNorm2d(out_channels))
+            _layers.append(nn.BatchNorm2d(out_channels))
 
         if relu:
-            layers.append(nn.ReLU())
+            _layers.append(nn.ReLU())
         else:
-            layers.append(nn.LeakyReLU(0.1))
+            _layers.append(nn.LeakyReLU(0.1))
         
         self._in_channels = out_channels
-        self.layers.append(nn.Sequential(*layers))
+        self.layers.append(nn.Sequential(*_layers))
         self.channels.append(out_channels)
 
     def forward(self, inputs: List[Tensor]) -> Tensor:

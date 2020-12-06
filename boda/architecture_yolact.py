@@ -1,13 +1,12 @@
-from typing import Tuple, List, Dict, Any, Callable, TypeVar
+import os
+import math
+import itertools
 from collections import defaultdict
+from typing import Tuple, List, Dict, Any, Callable, TypeVar
 
 import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
-
-import os
-import math
-import itertools
 
 from .architecture_base import BaseModel
 from .backbone_resnet import resnet101
@@ -159,7 +158,7 @@ class ProtoNet(nn.Sequential):
                     in_channels, v[0], kernel_size=v[1], **v[2])
 
             elif v[0] is None:
-                mask_layers[f'protonet{i}'] = InterpolateModule(
+                mask_layers[f'protonet{i}'] = nn.Upsample(
                     scale_factor=-v[1], mode='bilinear', align_corners=False, **v[2])
             
         if include_last_relu:
@@ -226,11 +225,17 @@ class YolactPredictHead(nn.Module):
         mask_outputs = self.mask_layers(inputs)
 
 
-
-        
-        
-
 class YolactModel(BaseModel):
+    """
+    ██╗   ██╗ ██████╗ ██╗      █████╗  ██████╗████████╗
+    ╚██╗ ██╔╝██╔═══██╗██║     ██╔══██╗██╔════╝╚══██╔══╝
+     ╚████╔╝ ██║   ██║██║     ███████║██║        ██║   
+      ╚██╔╝  ██║   ██║██║     ██╔══██║██║        ██║   
+       ██║   ╚██████╔╝███████╗██║  ██║╚██████╗   ██║   
+       ╚═╝    ╚═════╝ ╚══════╝╚═╝  ╚═╝ ╚═════╝   ╚═╝ 
+    
+
+    """
     def __init__(self, config, backbone=None, neck=None):
         super().__init__()
         self.config = config

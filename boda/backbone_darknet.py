@@ -8,10 +8,59 @@ import torch.nn.functional as F
 
 
 DARKNET_PRETRAINED_CONFIG = {
-    'darknet-base': None,
+    'darknet': None,
+    'darknet19': None,
     'darknet21': None,
     'darknet53': None,
 }
+
+
+class DarkNet19(nn.Module):
+    def __init__(self, config, layers: List):
+        super().__init__()
+        self.config = config
+        self.in_channels = 3
+        self.channels = []
+        self.layers = nn.ModuleList()
+
+        for layer in layers:
+            self._make_layers(layer)
+
+    def forward(self, inputs: Tensor):
+        outputs = []
+        for layer in self.layers:
+            inputs = layer(inputs)
+            outputs.append(inputs)
+        
+        return outputs
+
+    def _make_layers(self, layers: List):
+        _layers = []
+        for v in layers:
+            kwargs = None
+            if isinstance(v, tuple):
+                kwargs = v[1]
+                v = v[0]
+            
+            if v == 'M':
+                _layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
+            else:
+                if kwargs is None:
+                    kwargs = {'kernel_size': 3, 'padding': 1}
+                
+                _layers += [
+                    nn.Conv2d(
+                        in_channels=self.in_channels, 
+                        out_channels=v, 
+                        bias=False,
+                        **kwargs),
+                    nn.BatchNorm2d(v),
+                    nn.LeakyReLU(0.1)]
+    
+                self.in_channels = v
+        
+        self.channels.append(self.in_channels)
+        self.layers.append(nn.Sequential(*_layers))
 
 
 class Shortcut(nn.Module):
@@ -135,9 +184,21 @@ class DarkNet(nn.Module):
         self.load_state_dict(state_dict, strict=False)
 
 
+def darknet19(pretrained=False, **kwargs):
+    layers = [
+        [32],
+        ['M', 64],
+        ['M', 128, (64, {'kernel_size': 1}), 128],
+        ['M', 256, (128, {'kernel_size': 1}), 256],
+        ['M', 512, (256, {'kernel_size': 1}), 512, (256, {'kernel_size': 1}), 512],
+        ['M', 1024, (512, {'kernel_size': 1}), 1024, (512, {'kernel_size': 1}), 1024]]
+
+    backbone = DarkNet19(layers)
+
+    return backbone
+
+
 def darknet21(pretrained=False, **kwargs):
-    """Constructs a darknet-21.
-    """
     backbone = DarkNet([1, 1, 2, 2, 1])
     if pretrained:
         backbone.load_state_dict(torch.load(pretrained))
@@ -146,8 +207,6 @@ def darknet21(pretrained=False, **kwargs):
 
 
 def darknet53(pretrained=False, **kwargs):
-    """Constructs a darknet-53.
-    """
     backbone = DarkNet([1, 2, 8, 8, 4])
     if pretrained:
         backbone.load_state_dict(torch.load(pretrained))
