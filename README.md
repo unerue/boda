@@ -10,7 +10,6 @@
   <img src="https://badgen.net/badge/icon/terminal?icon=terminal&label" />
 </p>
 
-
 ## Deep learning-based Computer Vision Models for PyTorch 
 
 Boda (보다) means to see in Korean. This library was inspired by 🤗 Transformers.
@@ -29,8 +28,18 @@ model = Yolov1Model()
 
 |Model|Original|Ours|
 |:----|-------:|---:|
-|YOLOv1|||
+|FCN|||
+|YOLO|||
 |SSD|||
 |Faster R-CNN|||
+|RetinaNet|||
 |YOLOv3|||
 |YOLACT|||
+||||
+|YOLOv4|||
+|SOLO|||
+|CenterMask|||
+|EfficientDet|||
+|DETR|||
+||||
+
