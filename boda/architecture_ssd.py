@@ -10,29 +10,74 @@ from .architecture_base import BaseModel
 from .backbone_vgg import vgg16
 
 
-extra_layers = [
-    # [('M', {'kernel_size': 3, 'stride':  1, 'padding':  1}),
-    #  (1024, {'kernel_size': 3, 'padding': 6, 'dilation': 6}), 
-    #  (1024, {'kernel_size': 1})], 
-    [(256, {'kernel_size': 1}), 
-     (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
-    [(128, {'kernel_size': 1}), 
-     (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
-    [(128, {'kernel_size': 1}), 
-     (256, {'kernel_size': 3})], 
-    [(128, {'kernel_size': 1}), 
-     (256, {'kernel_size': 3})]]
+EXTRA_LAYER_STRUCTURES = {
+    'ssd300': [
+        [(256, {'kernel_size': 1}), (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
+        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
+        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3})], 
+        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3})]],
+    'ssd512': [
+        [(256, {'kernel_size': 1}), (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
+        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
+        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
+        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride': 2, 'padding':  1})], 
+        [(128, {'kernel_size': 1})]]
+}
 
-layers512 = [
-    [(256, {'kernel_size': 1}), 
-     (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
-    [(128, {'kernel_size': 1}), 
-     (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
-    [(128, {'kernel_size': 1}), 
-     (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
-    [(128, {'kernel_size': 1}), 
-     (256, {'kernel_size': 3, 'stride': 2, 'padding':  1})], 
-    [(128, {'kernel_size': 1})]]
+
+class SsdPredictNeck(nn.Module):
+    def __init__(self, config, in_channels: int):
+        super().__init__()
+        self.config = config
+        self.norm = L2Norm(512, 10)
+        self.selected_layers = [3, 4]
+        self.extra_channels = []
+        self.extra_channels.append(in_channels)
+        self.extra_layers = nn.ModuleList()
+        self.in_channels = in_channels
+        
+        for cfg in extra_layers:
+            self._add_extra_layer(cfg)
+        
+    def _add_extra_layer(self, config):
+        layers = []
+        for v in config:
+            kwargs = None
+            if isinstance(v, tuple):
+                kwargs = v[1]
+                v = v[0]
+            print(self.in_channels, v, kwargs)
+
+            if v == 'M':
+                layers.append(nn.MaxPool2d(**kwargs))
+            else:
+                if kwargs is None:
+                    kwargs = {'kernel_size': 1}
+
+                layers += [
+                    nn.Conv2d(
+                        in_channels=self.in_channels, 
+                        out_channels=v,
+                        **kwargs),
+                    nn.ReLU()]
+
+                self.in_channels = v
+
+        self.extra_channels.append(v)
+        self.extra_layers.append(nn.Sequential(*layers))
+
+    def forward(self, inputs: List[Tensor]):
+        extra_layers = []
+        extra_layers.append(self.norm(inputs[-2]))
+
+        output = inputs[-1]
+        for layer in self.extra_layers:
+            output = layer(output)
+            extra_layers.append(output)
+        
+        self.config.grid_sizes = [e.size(-1) for e in extra_layers]
+
+        return extra_layers
 
 
 class PriorBox:
@@ -104,59 +149,7 @@ class L2Norm(nn.Module):
         return out
 
 
-class SsdPredictNeck(nn.Module):
-    def __init__(self, config, in_channels: int):
-        super().__init__()
-        self.config = config
-        self.norm = L2Norm(512, 10)
-        self.selected_layers = [3, 4]
-        self.extra_channels = []
-        self.extra_channels.append(in_channels)
-        self.extra_layers = nn.ModuleList()
-        self.in_channels = in_channels
-        
-        for cfg in extra_layers:
-            self._add_extra_layer(cfg)
-        
-    def _add_extra_layer(self, config):
-        layers = []
-        for v in config:
-            kwargs = None
-            if isinstance(v, tuple):
-                kwargs = v[1]
-                v = v[0]
-            print(self.in_channels, v, kwargs)
 
-            if v == 'M':
-                layers.append(nn.MaxPool2d(**kwargs))
-            else:
-                if kwargs is None:
-                    kwargs = {'kernel_size': 1}
-
-                layers += [
-                    nn.Conv2d(
-                        in_channels=self.in_channels, 
-                        out_channels=v,
-                        **kwargs),
-                    nn.ReLU()]
-
-                self.in_channels = v
-
-        self.extra_channels.append(v)
-        self.extra_layers.append(nn.Sequential(*layers))
-
-    def forward(self, inputs: List[Tensor]):
-        extra_layers = []
-        extra_layers.append(self.norm(inputs[-2]))
-
-        output = inputs[-1]
-        for layer in self.extra_layers:
-            output = layer(output)
-            extra_layers.append(output)
-        
-        self.config.grid_sizes = [e.size(-1) for e in extra_layers]
-
-        return extra_layers
 
 
 class SsdPredictHead(nn.Module):
@@ -217,6 +210,15 @@ class SsdPredictHead(nn.Module):
 
 
 class SsdModel(BaseModel):
+    """
+     ██████╗  ██████╗ ███████╗ 
+    ██╔════╝ ██╔════╝ ██╔═══██╗
+    ╚██████╗ ╚██████╗ ██║   ██║
+     ╚════██╗ ╚════██╗██║   ██║
+     ██████╔╝ ██████╔╝███████╔╝
+     ╚═════╝  ╚═════╝ ╚══════╝
+
+    """
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -234,6 +236,37 @@ class SsdModel(BaseModel):
         print(len(outputs))
 
         # print(outputs[0][0])
+
+
+
+
+extra_layers = [
+    # [('M', {'kernel_size': 3, 'stride':  1, 'padding':  1}),
+    #  (1024, {'kernel_size': 3, 'padding': 6, 'dilation': 6}), 
+    #  (1024, {'kernel_size': 1})], 
+    [(256, {'kernel_size': 1}), 
+     (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
+    [(128, {'kernel_size': 1}), 
+     (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
+    [(128, {'kernel_size': 1}), 
+     (256, {'kernel_size': 3})], 
+    [(128, {'kernel_size': 1}), 
+     (256, {'kernel_size': 3})]]
+
+layers512 = [
+    [(256, {'kernel_size': 1}), 
+     (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
+    [(128, {'kernel_size': 1}), 
+     (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
+    [(128, {'kernel_size': 1}), 
+     (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
+    [(128, {'kernel_size': 1}), 
+     (256, {'kernel_size': 3, 'stride': 2, 'padding':  1})], 
+    [(128, {'kernel_size': 1})]]
+
+
+
+
 
 
 # class SsdPredictHead(nn.Module):

@@ -31,7 +31,7 @@ class YolactPredictNeck(nn.Module):
                 self.config.num_features,
                 kernel_size=3,
                 padding=self.config.padding) for _ in in_channels])
-        
+
         self.downsample_layers = nn.ModuleList([
             nn.Conv2d(
                 self.config.num_features,
@@ -206,7 +206,7 @@ class YolactPredictHead(nn.Module):
                 nn.Conv2d(
                     in_channels, 
                     in_channels, 
-                    kernel_size=3, 
+                    kernel_size=3,
                     padding=1),
                 nn.ReLU(inplace=True)] for _ in range(num_extra_layers)]
 
@@ -225,7 +225,12 @@ class YolactPredictHead(nn.Module):
         mask_outputs = self.mask_layers(inputs)
 
 
-class YolactModel(BaseModel):
+class YolactPretrained(BaseModel):
+    def __init__(self):
+        super().__init__()
+
+
+class YolactModel(YolactPretrained):
     """
     ██╗   ██╗ ██████╗ ██╗      █████╗  ██████╗████████╗
     ╚██╗ ██╔╝██╔═══██╗██║     ██╔══██╗██╔════╝╚══██╔══╝
@@ -233,8 +238,6 @@ class YolactModel(BaseModel):
       ╚██╔╝  ██║   ██║██║     ██╔══██║██║        ██║   
        ██║   ╚██████╔╝███████╗██║  ██║╚██████╗   ██║   
        ╚═╝    ╚═════╝ ╚══════╝╚═╝  ╚═╝ ╚═════╝   ╚═╝ 
-    
-
     """
     def __init__(self, config, backbone=None, neck=None):
         super().__init__()
@@ -285,6 +288,9 @@ class YolactModel(BaseModel):
 
 
     def forward(self, inputs):
+        inputs = self.check_inputs(inputs)
+        self.config.device = inputs.device
+
         outputs = self.backbone(inputs)
         print(self.backbone.channels)
 

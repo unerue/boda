@@ -135,9 +135,6 @@ class Yolov1Model(Yolov1Pretrained):
        ██║   ╚██████╔╝███████╗╚██████╔╝ ╚████╔╝  ██████╗
        ╚═╝    ╚═════╝ ╚══════╝ ╚═════╝   ╚═══╝   ╚═════╝
 
-    The only specificity that we require is that the dataset 
-    __getitem__ should return:
-
     Arguments:
         image: a PIL Image of size (H, W)
         target: a dict containing the following fields
