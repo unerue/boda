@@ -8,7 +8,6 @@ class BaseModel(nn.Module):
     def __init__(self, *args, **kwargs):
         super().__init__()
         # require_pytorch(self)
-        pass
     
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
