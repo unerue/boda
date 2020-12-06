@@ -21,9 +21,10 @@ git clone
 ```
 
 ```python
-from boda import Yolov1Model
+from boda import Yolov1Config, Yolov1Model
 
-model = Yolov1Model()
+config = Yolov1Config(num_classes=20)
+model = Yolov1Model(config)
 ```
 
 |Model|Original|Ours|
