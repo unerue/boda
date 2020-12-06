@@ -1,15 +1,19 @@
-from typing import Tuple, List, Dict
-from urllib.parse import MAX_CACHE_SIZE
-from .configuration_base import PretrainedConfig
+from .configuration_base import BaseConfig
 
 
-YOLOV1_PRETRAINED_CONFIG = {
-    'yolov1-base': None,
-    'yolov1-tiny': None,
+SSD_PRETRAINED_CONFIG = {
+    'ssd300': None,
+    'ssd500': None,
 }
 
 
-class SsdConfig(PretrainedConfig):
+class SsdConfig(BaseConfig):
+    """Configuration for SSD
+
+    Arguments:
+        max_size ():
+
+    """
     def __init__(
         self, 
         selected_layers=-1,

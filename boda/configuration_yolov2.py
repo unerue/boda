@@ -1,15 +1,14 @@
-from typing import Tuple, List, Dict
-from urllib.parse import MAX_CACHE_SIZE
-from .configuration_base import PretrainedConfig
+from .configuration_base import BaseConfig
 
 
-YOLOV1_PRETRAINED_CONFIG = {
-    'yolov1-base': None,
-    'yolov1-tiny': None,
+YOLOV2_PRETRAINED_CONFIG = {
+    'yolov2-base': None,
+    'yolov2-tiny': None,
 }
 
 
-class Yolov1Config(PretrainedConfig):
+class Yolov2Config(BaseConfig):
+    model_name = 'yolov2'
     def __init__(
         self, 
         selected_layers=-1,
@@ -31,62 +30,3 @@ class Yolov1Config(PretrainedConfig):
         self.lambda_coord = 5.0
         self.lambda_noobj = 0.5
         self.sqrt = 1
-
-
-        
-
-#    'name': 'yolov1 base',
-#     'dataset': pascal_voc_datset,
-#     'backbone': darknet9_backbone,
-#     'augmentation': None,
-#     'max_size': (448, 448),  # width, height
-#     'batch_size': 32,  # train batch size 64
-#     'max_iter': 40000,  # max_batches
-#     'lr': 0.0005,
-#     'momentum': 0.9,
-#     'decay': 0.0005,
-#     'lr_steps': (200, 400, 600, 20000, 30000),
-#     'lr_scales': (2.5, 2.0, 2.0, 0.1, 0.1),
-#     'num_boxes': 2,
-#     'grid_size': 7,
-#     'object_scale': 1,
-#     'noobject_scale': 0.5, 
-#     'class_scale': 1,
-#     'coord_scale': 5,
-#     'jitter': 0.2, 
-#     'rescore': 1,
-#     'sqrt': 1,
-#     'num': 3,  # ????
-#     'lambda_coord': 5.0,
-#     'lambda_noobj': 0.5,
-
-# cfg = [
-#     (7, 64, 2), 'M', 
-#     (3, 192), 'M',
-#     (1, 128), (3, 256), (1, 256), (3, 512), 'M',
-#     [(1, 256), (3, 512), 4], (1, 512), (3, 1024), 'M',
-#     [(1, 512), (3, 1024), 2], (3, 1024), (3, 1024), 
-#     (3, 1024), (3, 1024),
-# ]
-
-
-# backbone_base = Config({
-#     'name': 'base backbone',
-#     'pretrained': bool,
-#     'path': 'path/to/pretrained/weights',
-# })
-
-# model_base = Config({
-#     'name': 'base model',
-#     'path': 'path/to/pretrained/weights',
-#     'dataset': dataset_base,
-#     'backbone': backbone_base,
-#     'batch_size': int,
-#     'max_size': Tuple[int, int],
-#     'lr': float,
-# })
-
-
-
-
-

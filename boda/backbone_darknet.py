@@ -1,32 +1,61 @@
-
 import math
-from typing import List
+from typing import Tuple, List, Dict
 
 import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 
 
-DARKNET_PRETRAINED_CONFIG = {
-    'darknet': None,
-    'darknet19': None,
+DARKNET_PRETRAINED_CONFIG_MAP = {
+    'darknet-base': None,
+    'darknet19-base': None,
     'darknet21': None,
     'darknet53': None,
 }
 
+DARKNET_STRUCTURES = {
+    'darknet-base': [
+        [(64, {'kernel_size': 7, 'padding': 2}), 'M'],
+        [192, 'M'],
+        [(128, {'kernel_size': 1}), 256, (256, {'kernel_size': 1}), 512, 'M'],
+        [
+            (256, {'kernel_size': 1}), 512, 
+            (256, {'kernel_size': 1}), 512, 
+            (256, {'kernel_size': 1}), 512, 
+            (256, {'kernel_size': 1}), 512,
+            (512, {'kernel_size': 1}), 1024, 'M'],
+        [
+            (512, {'kernel_size': 1}), 1024, 
+            (512, {'kernel_size': 1}), 1024, 1024, 1024]],
+    'darknet-tiny': [],
+    'darknet19-base': [
+        [32],
+        ['M', 64],
+        ['M', 128, (64, {'kernel_size': 1}), 128],
+        ['M', 256, (128, {'kernel_size': 1}), 256],
+        ['M', 512, (256, {'kernel_size': 1}), 512, (256, {'kernel_size': 1}), 512],
+        ['M', 1024, (512, {'kernel_size': 1}), 1024, (512, {'kernel_size': 1}), 1024]],
+    'darknet19-tiny': [],
+}
+
 
 class DarkNet19(nn.Module):
-    def __init__(self, config, layers: List):
+    """DarkNet19 for YOLOv1, v2 backbone
+    """
+    def __init__(
+        self, backbone_structure: List, bn: bool = False, relu: bool = False):
         super().__init__()
-        self.config = config
+        self.bn = bn
+        self.relu = relu
+
         self.in_channels = 3
         self.channels = []
         self.layers = nn.ModuleList()
 
-        for layer in layers:
-            self._make_layers(layer)
+        for structure in backbone_structure:
+            self._make_layers(structure)
 
-    def forward(self, inputs: Tensor):
+    def forward(self, inputs: Tensor) -> List[Tensor]:
         outputs = []
         for layer in self.layers:
             inputs = layer(inputs)
@@ -53,9 +82,14 @@ class DarkNet19(nn.Module):
                         in_channels=self.in_channels, 
                         out_channels=v, 
                         bias=False,
-                        **kwargs),
-                    nn.BatchNorm2d(v),
-                    nn.LeakyReLU(0.1)]
+                        **kwargs)]
+                if self.bn:
+                    _layers += [
+                        nn.BatchNorm2d(v),
+                        nn.LeakyReLU(0.1) if not self.relu else nn.ReLU()]
+                else:
+                    _layers += [
+                        nn.LeakyReLU(0.1) if not self.relu else nn.ReLU()]
     
                 self.in_channels = v
         
@@ -184,17 +218,17 @@ class DarkNet(nn.Module):
         self.load_state_dict(state_dict, strict=False)
 
 
-def darknet19(pretrained=False, **kwargs):
-    layers = [
-        [32],
-        ['M', 64],
-        ['M', 128, (64, {'kernel_size': 1}), 128],
-        ['M', 256, (128, {'kernel_size': 1}), 256],
-        ['M', 512, (256, {'kernel_size': 1}), 512, (256, {'kernel_size': 1}), 512],
-        ['M', 1024, (512, {'kernel_size': 1}), 1024, (512, {'kernel_size': 1}), 1024]]
+def darknet(structure_or_name: str = 'darknet-base', pretrained: bool = False, **kwargs):
+    if isinstance(structure_or_name, str):
+        backbone = DarkNet19(DARKNET_STRUCTURES[structure_or_name], **kwargs)
 
-    backbone = DarkNet19(layers)
+    return backbone
 
+
+def darknet19(structure_or_name: str = 'darknet19-base', pretrained: bool = False, **kwargs):
+    if isinstance(structure_or_name, str):
+        backbone = DarkNet19(DARKNET_STRUCTURES[structure_or_name], **kwargs)
+        
     return backbone
 
 

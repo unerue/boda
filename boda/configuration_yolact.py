@@ -1,32 +1,46 @@
-from typing import Tuple, List, Dict
-from .configuration_base import PretrainedConfig
+from .configuration_base import BaseConfig
 
 
-YOLOV1_PRETRAINED_CONFIG = {
+YOLACT_PRETRAINED_CONFIG = {
     'yolact-base': None,
     'yolact-300': None,
     'yolact-700': None,
 }
 
 
-class YolactConfig(PretrainedConfig):
+class YolactConfig(BaseConfig):
+    """Configuration for YOLACT
+
+    Arguments:
+        max_size ():
+        padding ():
+        proto_net_structure (List):
+    """
+    model_name = 'yolact'
     def __init__(
-        self, *args,
-        selected_layers=-1,
+        self, 
         max_size=448,
-        num_classes=20,
+        padding=1,
+        use_conv_downsample=True,
+        num_features=256,
+        num_grids=0,
+        mask_size=16,
+        mask_dim=0,
+        proto_net_structure=None,
+        head_layer_params=None,
+        extra_layers=(0, 0, 0),
+        extra_net_structure=None,
         **kwargs):
         super().__init__(max_size=max_size, **kwargs)
-        self.backbone = 'resnet101'
-        self.selected_layers = list(range(1, 4))
-        self.num_boxes = None
-        self.num_classes = num_classes
+        # self.selected_layers = list(range(1, 4))
+        # self.num_boxes = None
+
         # neck
-        self.pad = 1
-        self.aspect_ratios = [[[1/2, 1, 2]]] * 5
-        self.pred_scales = [[24], [48], [96], [192], [384]]
+        self.padding = 1
+        # self.aspect_ratios = [[[1/2, 1, 2]]] * 5
+        # self.pred_scales = [[24], [48], [96], [192], [384]]
         self.num_features = 256
-        self.interpolate_mode = 'bilinear'
+        # self.interpolate_mode = 'bilinear'
         self.num_downsamples = 2
         self.use_conv_downsample = True
         # self.padding = True

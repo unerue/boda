@@ -1,15 +1,15 @@
 from typing import Tuple, List, Dict
 from urllib.parse import MAX_CACHE_SIZE
-from .configuration_base import PretrainedConfig
+from .configuration_base import BaseConfig
 
 
-YOLOV1_PRETRAINED_CONFIG = {
-    'yolov1-base': None,
-    'yolov1-tiny': None,
+FASTER_RCNN_PRETRAINED_CONFIG = {
+    'faster-rcnn-base': None,
 }
 
 
-class Yolov1Config(PretrainedConfig):
+class FasterRcnnConfig(BaseConfig):
+    """Configuration for Faster R-CNN"""
     def __init__(
         self, 
         selected_layers=-1,

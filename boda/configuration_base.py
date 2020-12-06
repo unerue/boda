@@ -1,81 +1,78 @@
 import os
-import json
-from typing import Tuple, List, Dict, Any
 import copy
+import json
+from typing import Tuple, List, Dict, Any, Union
 
-class PretrainedConfig:
+
+class BaseConfig:
     """
     Class attributes:
         model_type (str):
     Arguments:
         name_or_path (str):
     """
-    model_type: str = ''
+    model_name: str = ''
     def __init__(self, **kwargs):
         self.use_amp = kwargs.pop('use_amp', False)
-        # self.torchscript = kwargs.pop('torchscript', False)
+        self.use_jit = kwargs.pop('use_jit', False)
+        self.device = kwargs.pop('device', 'cpu')
+        self.freeze_bn = kwargs.pop('freeze_bn', False)
 
-        # backbone
-        self.backbone = kwargs.pop('backbone', None)
-        
-        # neck
-        self.selected_layers = kwargs.pop('selected_layers', list(range(1, 4)))
-        self.aspect_ratios = kwargs.pop('aspect_ratios', [[[1/2, 1, 2]]]*5)
-        self.pred_scales = kwargs.pop('pred_scales', [[24], [48], [96], [192], [384]])
-        self.num_features = kwargs.pop('num_features', None)
-        self.score_thresh = kwargs.pop('score_thresh', 0.15)
-
-        # head
-        
-        # fine-tuning train arguments
-        self.architectures = kwargs.pop('architectures', None)
+        self.structures = kwargs.pop('structures', [])
         self.num_classes = kwargs.pop('num_classes', 80)
+        self.min_size = kwargs.pop('min_size', None)
         self.max_size = kwargs.pop('max_size', None)
         if not isinstance(self.max_size, tuple):
             self.max_size = (self.max_size, self.max_size)
-        # if self.idx2labels is not None:
-        #     kwargs.pop()
-        #     self.idx2labels = None
-        # else:
-        #     self.num_classes = kwargs.pop('num_classes', 80)
 
+        self.top_k = kwargs.pop('top_k', 5)
+        self.score_thresh = kwargs.pop('score_thresh', 0.15)
 
+        # backbone
+        self.backbone_name = kwargs.pop('backbone_name', 'resnet101')
+        self.backbone_structure = kwargs.pop('backbone_structure', None)
+        
+        # neck
+        self.neck_name = kwargs.pop('neck_name', 'fpn')
+        self.selected_layers = kwargs.pop('selected_layers', [1, 2, 3])
+        self.aspect_ratios = kwargs.pop('aspect_ratios', [[[1/2, 1, 2]]]*5)
+        self.scales = kwargs.pop('scales', [[24], [48], [96], [192], [384]])
+        self.num_features = kwargs.pop('num_features', None)
+
+        # head
+        self.anchors = kwargs.pop('anchors', None)
+        
         for k, v in kwargs.items():
             try:
                 setattr(k, v)
             except AttributeError as e:
                 print(k, v, e)
     
-    # def __repr__(self):
-    #     return f'{self.__class__.__name__} {self.to_dict()}'
     def __repr__(self):
         return f'{self.__class__.__name__} {self.to_dict()}'
     
-    # def print_config(self):
-    #     for config in self.to_dict():
-    #         print(config)
-    # @property
-    # def num_classes(self):
-    #     return len(self.idx2labels)
-
-    # @num_classes.setter
-    # def num_classes(self, num_classes: int):
-    #     self.idx2labels = {}
-    #     self.labels2idx = {}
-
     def to_json(self):
         config_dict = self.to_dict()
         return json.dumps(config_dict, indent=2, sort_keys=True)
 
     def to_dict(self):
         output = copy.deepcopy(self.__dict__)
-        if hasattr(self.__class__, 'model_type'):
-            output['model_type'] = self.__class__.model_type
+        if hasattr(self.__class__, 'model_name'):
+            output['model_name'] = self.__class__.model_name
         return output
+
+    def save_json(self, path: str):
+        if os.path.isfile(path):
+            raise AssertionError
+
+        os.makedirs(path, exist_ok=True)
+        # config_file = os.path.join(path, CONFIG_NAME)
+        with open(path, 'w', encoding='utf-8') as writer:
+            writer.write(self.to_json())
     
-    # def update(self, config_dict):
-    #     for key, value in config_dict.items():
-    #         setattr(self, key, value)
+    def update(self, config_dict: Dict[str, Any]):
+        for key, value in config_dict.items():
+            setattr(self, key, value)
     
     # @classmethod
     # def from_json(cls, json_file: str):

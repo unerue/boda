@@ -55,7 +55,7 @@ class YolactPredictNeck(nn.Module):
             if j < len(inputs) - 1:
                 _, _, h, w = inputs[j].size()
                 x = F.interpolate(
-                    x, size=(h, w), mode=self.config.interpolate_mode, align_corners=False)
+                    x, size=(h, w), mode='bilinear', align_corners=False)
             
             x = x + lateral_layer(inputs[j])
             outputs[j] = x
@@ -241,6 +241,12 @@ class YolactModel(BaseModel):
         self.config = config
         if backbone is None:
             self.backbone = resnet101()
+            selected_layers = [1, 2, 3]
+            # num_layers = max(cfg.selected_layers) + 1
+            num_layers = max(selected_layers) + 1
+            while len(self.backbone.layers) < num_layers:
+                self.backbone.add_layer()
+
 
         # if self.config.freeze_bn:
         #     self.freeze_bn()
