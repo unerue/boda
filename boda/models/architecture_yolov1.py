@@ -9,7 +9,7 @@ from ..base import Neck, Head, Model
 from .backbone_darknet import darknet21
 
 
-class Yolov1PredictNeck(nn.Module):
+class Yolov1PredictNeck(Neck):
     """Prediction Neck for YOLOv1
     Arguments:
         in_channels (int): 
@@ -63,7 +63,7 @@ class Yolov1PredictNeck(nn.Module):
         return self.layers(inputs[self.config.selected_layers])
     
 
-class Yolov1PredictHead(nn.Module):
+class Yolov1PredictHead(Head):
     """Prediction Neck for YOLOv1
     Arguments:
         selected_layers (List[float]):
@@ -110,7 +110,7 @@ class Yolov1PredictHead(nn.Module):
         return outputs
         
 
-class Yolov1Pretrained(BaseModel):
+class Yolov1Base(Model):
     def __init__(self):
         super().__init__()
         
@@ -127,7 +127,7 @@ class Yolov1Pretrained(BaseModel):
     #         module.bias.data.zero_()
 
 
-class Yolov1Model(Yolov1Pretrained):
+class Yolov1Model(Yolov1Base):
     """
     ██╗   ██╗ ██████╗ ██╗      ██████╗           ████╗ 
     ╚██╗ ██╔╝██╔═══██╗██║     ██╔═══██╗          ╚═██║
