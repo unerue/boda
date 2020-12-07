@@ -24,7 +24,7 @@ python setup.py
 ```
 
 ```python
-from boda import Yolov1Config, Yolov1Model
+from boda.models import Yolov1Config, Yolov1Model, Yolov1Loss
 
 config = Yolov1Config(num_classes=20)
 model = Yolov1Model(config)
