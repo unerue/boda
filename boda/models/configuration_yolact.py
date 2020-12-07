@@ -1,4 +1,4 @@
-from .config import BaseConfig
+from ..configuration_base import BaseConfig
 
 
 YOLACT_PRETRAINED_CONFIG = {
@@ -16,9 +16,10 @@ class YolactConfig(BaseConfig):
         padding ():
         proto_net_structure (List):
     """
-    model_name = 'yolact'
+    config_name = 'yolact550-base'
+
     def __init__(
-        self, 
+        self,
         max_size=448,
         padding=1,
         use_conv_downsample=True,

@@ -2,7 +2,7 @@ import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 
-from ..base import Backbone
+from ..architecture_base import Backbone
 
 class Bottleneck(nn.Module):
     expansion = 4
@@ -10,23 +10,23 @@ class Bottleneck(nn.Module):
         super().__init__()
         self.conv1 = nn.Conv2d(
             in_planes,
-            planes, 
-            kernel_size=1, 
+            planes,
+            kernel_size=1,
             bias=False)
         self.bn1 = nn.BatchNorm2d(planes)
 
         self.conv2 = nn.Conv2d(
-            planes, 
-            planes, 
+            planes,
+            planes,
             kernel_size=3,
-            stride=stride, 
-            padding=1, 
+            stride=stride,
+            padding=1,
             bias=False)
         self.bn2 = nn.BatchNorm2d(planes)
 
         self.conv3 = nn.Conv2d(
-            planes, 
-            planes * self.expansion, 
+            planes,
+            planes * self.expansion,
             kernel_size=1,
             bias=False)
         self.bn3 = nn.BatchNorm2d(planes * self.expansion)
@@ -43,7 +43,7 @@ class Bottleneck(nn.Module):
 
         if self.downsample is not None:
             residual = self.downsample(inputs)
-        
+
         outputs += residual
         outputs = F.relu(outputs)
 
@@ -75,10 +75,10 @@ class ResNet(nn.Module):
         if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
                 nn.Conv2d(
-                    self.inplanes, 
-                    planes * block.expansion, 
-                    kernel_size=1, 
-                    stride=stride, 
+                    self.inplanes,
+                    planes * block.expansion,
+                    kernel_size=1,
+                    stride=stride,
                     bias=False),
                 nn.BatchNorm2d(planes * block.expansion))
 
@@ -96,18 +96,18 @@ class ResNet(nn.Module):
 
         return self
 
-    def forward(self, x):
-        x = self.conv(x)
-        x = self.bn(x)
-        x = self.relu(x)
-        x = self.maxpool(x)
+    def forward(self, inputs):
+        inputs = self.conv(inputs)
+        inputs = self.bn(inputs)
+        inputs = self.relu(inputs)
+        inputs = self.maxpool(inputs)
 
-        outs = []
+        outputs = []
         for layer in self.layers:
-            x = layer(x)
-            outs.append(x)
+            inputs = layer(inputs)
+            outputs.append(inputs)
 
-        return outs
+        return outputs
 
     def init_weights(self, path):
         state_dict = torch.load(path)

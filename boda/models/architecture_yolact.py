@@ -9,12 +9,8 @@ import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 
-from ..base import Neck, Head, Model
+from ..architecture_base import Neck, Head, Model
 from .backbone_resnet import resnet101
-
-
-# ScriptModuleWrapper = torch.jit.ScriptModule if use_jit else nn.Module
-# script_method_wrapper = torch.jit.script_method if use_jit else lambda fn, _rcn=None: fn
 
 
 class YolactPredictNeck(Neck):
@@ -224,9 +220,12 @@ class YolactModel(YolactBase):
        ██║   ╚██████╔╝███████╗██║  ██║╚██████╗   ██║
        ╚═╝    ╚═════╝ ╚══════╝╚═╝  ╚═╝ ╚═════╝   ╚═╝
     """
+    model_name = 'yolact'
+    
     def __init__(self, config, backbone=None, neck=None, head=None) -> None:
         super().__init__()
         self.config = config
+
         if backbone is None:
             self.backbone = resnet101()
             selected_layers = [1, 2, 3]

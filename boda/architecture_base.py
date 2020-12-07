@@ -5,31 +5,62 @@ import torch
 from torch import nn, Tensor
 
 
-CONFIG_NAME = {}
+BACKBONE_ARCHIVE_MAP = {
+    'resnet18': 'https://download.pytorch.org/models/resnet18-5c106cde.pth',
+    'resnet34': 'https://download.pytorch.org/models/resnet34-333f7ec4.pth',
+    'resnet50': 'https://download.pytorch.org/models/resnet50-19c8e357.pth',
+    'resnet101': 'https://download.pytorch.org/models/resnet101-5d3b4d8f.pth',
+}
 
 
 class Backbone(nn.Module):
+    backbone_name: str = ''
+
     def __init__(self):
         super().__init__()
+
+    @torch.jit.unused
+    def eager_outputs(self, *args):
+        raise NotImplementedError
+
+    def init_weights(self, *args):
+        raise NotImplementedError
+
+    def from_pretrained(self, backbone_name, **kwargs):
+        from torch.hub import load_state_dict_from_url
+
+        state_dict = load_state_dict_from_url(BACKBONE_ARCHIVE_MAP[backbone_name])
+        self.load_state_dict(state_dict)
+
+    def _from_state_dict(self, *args):
+        raise NotImplementedError
 
 
 class Neck(nn.Module):
     def __init__(self):
         super().__init__()
 
+    def eager_outputs(self, *args):
+        raise NotImplementedError
+
 
 class Head(nn.Module):
     def __init__(self):
         super().__init__()
 
+    def eager_outputs(self, *args):
+        raise NotImplementedError
+
 
 class Model(nn.Module):
-    """Base Model for 
+    """Base Model for
     """
+    model_name: str = ''
     checked_inputs = True
+
     def __init__(self, *args, **kwargs):
         super().__init__()
-    
+
     @classmethod
     def check_inputs(cls, inputs):
         """
@@ -54,25 +85,24 @@ class Model(nn.Module):
         return inputs
 
     @classmethod
-    def from_pretrained(cls, model_name_or_path: Union[str, os.PathLike], *args, **kwargs):
-        model_name_or_path = str(model_name_or_path)
-        if os.path.isdir(model_name_or_path):
-            config_file = os.path.join(model_name_or_path, CONFIG_NAME)
+    def from_pretrained(cls, model_name_or_path: Union[str, os.PathLike], **kwargs):
+        raise NotImplementedError
 
     def load_weights(self, path):
         raise NotImplementedError
 
     def _check_pretrained_model_is_valid(self, model_name_or_path):
         # if model_name_or_path not in 
-        pass
-        
+        raise NotImplementedError
+
     @classmethod
     def get_config_dict(cls, model_name_or_path, **kwargs):
-        pass
+        raise NotImplementedError
 
 
 class LoseFunction(nn.Module):
     checked_targets = True
+
     def __init__(self) -> None:
         super().__init__()
 
@@ -88,14 +118,14 @@ class LoseFunction(nn.Module):
             targets = targets_copy
 
         return targets
-        
+
     @classmethod
     def check_targets(cls, targets: List[Dict[str, Tensor]]):
         for target in targets:
             if isinstance(target['boxes'], Tensor):
                 if target['boxes'].dim() != 2 or target['boxes'].size(1) != 4:
                     raise ValueError('Expected target boxes to be a tensor of [N, 4].')
-                elif target['labels'].dim () != 1:
+                elif target['labels'].dim() != 1:
                     raise ValueError('Expected target boxes to be a tensor of [N].')
             else:
                 raise ValueError('Expected target boxes to be Tensor.')

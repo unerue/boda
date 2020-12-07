@@ -11,7 +11,8 @@ class BaseConfig:
     Arguments:
         name_or_path (str):
     """
-    model_name: str = ''
+    config_name: str = ''
+
     def __init__(self, **kwargs):
         self.use_amp = kwargs.pop('use_amp', False)
         self.use_jit = kwargs.pop('use_jit', False)
@@ -31,7 +32,7 @@ class BaseConfig:
         # backbone
         self.backbone_name = kwargs.pop('backbone_name', 'resnet101')
         self.backbone_structure = kwargs.pop('backbone_structure', None)
-        
+
         # neck
         self.neck_name = kwargs.pop('neck_name', 'fpn')
         self.selected_layers = kwargs.pop('selected_layers', [1, 2, 3])
@@ -41,16 +42,16 @@ class BaseConfig:
 
         # head
         self.anchors = kwargs.pop('anchors', None)
-        
+
         for k, v in kwargs.items():
             try:
                 setattr(k, v)
             except AttributeError as e:
                 print(k, v, e)
-    
+
     def __repr__(self):
         return f'{self.__class__.__name__} {self.to_dict()}'
-    
+
     def to_json(self):
         config_dict = self.to_dict()
         return json.dumps(config_dict, indent=2, sort_keys=True)
@@ -69,7 +70,7 @@ class BaseConfig:
         # config_file = os.path.join(path, CONFIG_NAME)
         with open(path, 'w', encoding='utf-8') as writer:
             writer.write(self.to_json())
-    
+
     def update(self, config_dict: Dict[str, Any]):
         for key, value in config_dict.items():
             setattr(self, key, value)
