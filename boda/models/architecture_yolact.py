@@ -15,6 +15,11 @@ from .backbone_resnet import resnet101
 
 
 class YolactPredictNeck(Neck):
+    """Prediction Neack for YOLACT
+
+    Arguments:
+        in_channels ():
+    """
     def __init__(self, config, in_channels: List[int]) -> None:
         super().__init__()
         self.config = config
@@ -42,12 +47,8 @@ class YolactPredictNeck(Neck):
                 stride=2,
                 padding=1) for _ in range(config.num_downsamples)])
 
-    def forward(self, inputs: List[Tensor]):
-        outputs = []
+    def forward(self, inputs: List[Tensor]) -> List[Tensor]:
         x = torch.zeros(1, device=self.config.device)
-        for _ in range(len(inputs)):
-            outputs.append(x)
-
         outputs = [x for _ in range(len(inputs))]
 
         j = len(inputs)
@@ -85,7 +86,7 @@ def prior_cache(func):
 
 
 class PriorBox:
-    def __init__(self, config, aspect_ratios, scales) -> None:
+    def __init__(self, config, aspect_ratios: List[int], scales: List[float]) -> None:
         self.config = config
         self.aspect_ratios = aspect_ratios
         self.scales = scales
@@ -123,8 +124,20 @@ class PriorBox:
 
 
 class ProtoNet(nn.Sequential):
+    """ProtoNet of YOLACT
+
+    Arguments:
+        config ()
+        in_channels ()
+        layers ()
+        include_last_relu ()        
+    """
     def __init__(
-        self, config, in_channels, layers, include_last_relu=True) -> None:
+        self,
+        config,
+        in_channels: int,
+        layers: List,
+        include_last_relu: bool = True) -> None:
         self.config = config
         self.channels = []
 
@@ -146,8 +159,26 @@ class ProtoNet(nn.Sequential):
 
 
 class YolactPredictHead(Head):
+    """Prediction Head for YOLACT
+
+    Arguments:
+        config
+        in_channles
+        out_channels
+        aspect_ratio
+        scales
+        parent
+        index
+    """
     def __init__(
-        self, config, in_channels, out_channels, aspect_ratios, scales, parent, index) -> None:
+        self,
+        config,
+        in_channels: int,
+        out_channels: int,
+        aspect_ratios: List[int],
+        scales: List[float],
+        parent,
+        index: int) -> None:
         super().__init__()
         self.config = config
         self.prior_box = PriorBox(config, aspect_ratios, scales)
@@ -177,7 +208,11 @@ class YolactPredictHead(Head):
                 out_channels,
                 self.num_priors * self.config.mask_dim)
 
-    def _add_predict_layer(self, num_extra_layers, in_channels, out_channels):
+    def _add_predict_layer(
+        self,
+        num_extra_layers: int,
+        in_channels: int,
+        out_channels: int) -> nn.Sequential:
         _predict_layers = []
         if num_extra_layers > 0:
             for _ in range(num_extra_layers):
@@ -194,7 +229,7 @@ class YolactPredictHead(Head):
 
         return nn.Sequential(*_predict_layers)
 
-    def forward(self, inputs):
+    def forward(self, inputs: Tensor) -> Dict(str, Tensor):
         pred = self if self.parent[0] is None else self.parent[0]
 
         h, w = inputs.size(2), inputs.size(3)
@@ -236,10 +271,22 @@ class YolactModel(YolactPretrained):
       ╚██╔╝  ██║   ██║██║     ██╔══██║██║        ██║
        ██║   ╚██████╔╝███████╗██║  ██║╚██████╗   ██║
        ╚═╝    ╚═════╝ ╚══════╝╚═╝  ╚═╝ ╚═════╝   ╚═╝
+
+    Arguments:
+        config ()
+        backbone ()
+        neck ()
+        head ()
+    
     """
     model_name = 'yolact'
 
-    def __init__(self, config, backbone=None, neck=None, head=None) -> None:
+    def __init__(
+        self,
+        config,
+        backbone=None,
+        neck=None,
+        head=None) -> None:
         super().__init__(config)
         self.config = config
 
