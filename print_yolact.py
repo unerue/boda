@@ -8,6 +8,15 @@ for key, value in state_dict.items():
     if key[:8] != 'backbone':
         print(key, value.size())
 
+state_dict = torch.load('yolact.pth')
+# print(state_dict.keys())
+print()
+for key, value in state_dict.items():
+    if key[:8] != 'backbone':
+        print(key, value.size())
+
+
+
 
 
 # fpn.lat_layers.0.weight torch.Size([256, 2048, 1, 1])

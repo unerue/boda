@@ -25,7 +25,7 @@ class Backbone(nn.Module):
 
     def init_weights(self, *args):
         raise NotImplementedError
-
+    
     def from_pretrained(self, backbone_name, **kwargs):
         from torch.hub import load_state_dict_from_url
 
@@ -52,14 +52,16 @@ class Head(nn.Module):
         raise NotImplementedError
 
 
-class Model(nn.Module):
+# class Model(nn.Module):
+class Model:
     """Base Model for
     """
     model_name: str = ''
-    checked_inputs = True
+    _checked_inputs: bool = True
 
-    def __init__(self, *args, **kwargs):
-        super().__init__()
+    def __init__(self, config, **kwargs):
+        # super().__init__()
+        pass
 
     @classmethod
     def check_inputs(cls, inputs):
@@ -69,7 +71,7 @@ class Model(nn.Module):
         Return:
             outputs (Tensor): Size([B, C, H, W])
         """
-        if cls.checked_inputs:
+        if cls._checked_inputs:
             print('Check!!')
             for image in inputs:
                 if isinstance(image, Tensor):
@@ -77,12 +79,26 @@ class Model(nn.Module):
                         raise ValueError(f'images is expected to be 3d tensors of shape [C, H, W] {image.size()}')
                 else:
                     raise ValueError('Expected image to be Tensor.')
-            cls.checked_inputs = False
+            cls._checked_inputs = False
 
         if isinstance(inputs, list):
             inputs = torch.stack(inputs)
 
         return inputs
+
+
+class PretrainedModel(nn.Module, Model):
+    config_class = None
+    base_model_prefix: str = ''
+
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__()
+        self.config = config
+        self.name_or_path = ''
+
+    @property
+    def base_model(self) -> nn.Module:
+        return getattr(self, self.base_model_prefix, self)
 
     @classmethod
     def from_pretrained(cls, model_name_or_path: Union[str, os.PathLike], **kwargs):
@@ -92,7 +108,7 @@ class Model(nn.Module):
         raise NotImplementedError
 
     def _check_pretrained_model_is_valid(self, model_name_or_path):
-        # if model_name_or_path not in 
+        # if model_name_or_path not in
         raise NotImplementedError
 
     @classmethod
@@ -101,13 +117,14 @@ class Model(nn.Module):
 
 
 class LoseFunction(nn.Module):
-    checked_targets = True
+    _checked_targets = True
 
-    def __init__(self) -> None:
+    def __init__(self, config, **kwargs) -> None:
         super().__init__()
+        self.config = config
 
     @classmethod
-    def copy_targets(cls, targets):
+    def copy_targets(cls, targets: List[Dict[str, Tensor]]) -> List[Dict[str, Tensor]]:
         if targets is not None:
             targets_copy: List[Dict[str, Tensor]] = []
             for target in targets:
@@ -120,13 +137,14 @@ class LoseFunction(nn.Module):
         return targets
 
     @classmethod
-    def check_targets(cls, targets: List[Dict[str, Tensor]]):
-        for target in targets:
-            if isinstance(target['boxes'], Tensor):
-                if target['boxes'].dim() != 2 or target['boxes'].size(1) != 4:
-                    raise ValueError('Expected target boxes to be a tensor of [N, 4].')
-                elif target['labels'].dim() != 1:
-                    raise ValueError('Expected target boxes to be a tensor of [N].')
-            else:
-                raise ValueError('Expected target boxes to be Tensor.')
-            break
+    def check_targets(cls, targets: List[Dict[str, Tensor]]) -> None:
+        if cls._checked_targets:
+            for target in targets:
+                if isinstance(target['boxes'], Tensor):
+                    if target['boxes'].dim() != 2 or target['boxes'].size(1) != 4:
+                        raise ValueError('Expected target boxes to be a tensor of [N, 4].')
+                    elif target['labels'].dim() != 1:
+                        raise ValueError('Expected target boxes to be a tensor of [N].')
+                else:
+                    raise ValueError('Expected target boxes to be Tensor.')
+            cls._checked_targets = False

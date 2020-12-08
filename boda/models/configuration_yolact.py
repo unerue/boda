@@ -1,3 +1,5 @@
+import os
+from typing import Union, Any
 from ..configuration_base import BaseConfig
 
 
@@ -20,7 +22,7 @@ class YolactConfig(BaseConfig):
 
     def __init__(
         self,
-        max_size=448,
+        max_size=550,
         padding=1,
         use_conv_downsample=True,
         num_features=256,
@@ -35,12 +37,13 @@ class YolactConfig(BaseConfig):
         super().__init__(max_size=max_size, **kwargs)
         # self.selected_layers = list(range(1, 4))
         # self.num_boxes = None
-
+        self.num_classes = 7
         # neck
         self.padding = 1
-        # self.aspect_ratios = [[[1/2, 1, 2]]] * 5
+        self.aspect_ratios = [[[0.66685089, 1.7073535, 0.87508774, 1.16524493, 0.49059086]]]*6
         # self.pred_scales = [[24], [48], [96], [192], [384]]
-        self.num_features = 256
+        # self.fpn_out_channels = 256
+        # self.predict_channels = 256
         # self.interpolate_mode = 'bilinear'
         self.num_downsamples = 2
         self.use_conv_downsample = True
@@ -66,4 +69,11 @@ class YolactConfig(BaseConfig):
         self.extra_layers = (0, 0, 0)
         self.eval_mask_branch = True
 
+        self.num_extra_bbox_layers = 0
+        self.num_extra_conf_layers = 0
+        self.num_extra_mask_layers = 0
         self.freeze_bn = True
+
+        self.preapply_sqrt = True
+        self.use_pixel_scales = True
+        self.use_square_anchors = True

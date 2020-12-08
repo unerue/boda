@@ -26,6 +26,7 @@ class BaseConfig:
         if not isinstance(self.max_size, tuple):
             self.max_size = (self.max_size, self.max_size)
 
+        self.num_grids = 0
         self.top_k = kwargs.pop('top_k', 5)
         self.score_thresh = kwargs.pop('score_thresh', 0.15)
 
@@ -38,7 +39,7 @@ class BaseConfig:
         self.selected_layers = kwargs.pop('selected_layers', [1, 2, 3])
         self.aspect_ratios = kwargs.pop('aspect_ratios', [[[1/2, 1, 2]]]*5)
         self.scales = kwargs.pop('scales', [[24], [48], [96], [192], [384]])
-        self.num_features = kwargs.pop('num_features', None)
+        self.fpn_out_channels = kwargs.pop('fpn_out_channels', 256)
 
         # head
         self.anchors = kwargs.pop('anchors', None)
@@ -74,7 +75,23 @@ class BaseConfig:
     def update(self, config_dict: Dict[str, Any]):
         for key, value in config_dict.items():
             setattr(self, key, value)
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_or_path: str, **kwargs):
+        config, model_kwargs = cls.get_config_dict('', test='test')
+        # raise NotImplementedError)
+        print('Load config!')
+        return config, model_kwargs
     
+    @classmethod
+    def _dict_from_json_file(self, model_name_or_path):
+        return model_name_or_path
+    
+    @classmethod
+    def get_config_dict(cls, model_name_or_path, **kwargs):
+        config_dict = cls._dict_from_json_file(model_name_or_path)
+        return config_dict, kwargs
+
     # @classmethod
     # def from_json(cls, json_file: str):
     #     with open(path, 'r') as json_file:
