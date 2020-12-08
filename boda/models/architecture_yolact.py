@@ -18,6 +18,9 @@ class YolactPredictNeck(Neck):
     def __init__(self, config, in_channels: List[int]) -> None:
         super().__init__()
         self.config = config
+        _selected_layers = list(range(len(config.selected_layers) + config.num_downsamples))
+        self.channels = [config.fpn_out_channels] * len(_selected_layers)
+        print(self.channels)
 
         self.lateral_layers = nn.ModuleList([
             nn.Conv2d(
@@ -92,9 +95,7 @@ class PriorBox:
     def generate(self, h, w):
         size = (h, w)
         prior_boxes = []
-        # Iteration order is important (it has to sync up with the convout)
         for j, i in itertools.product(range(h), range(w)):
-            # +0.5 because priors are in center-size notation
             x = (i + 0.5) / w
             y = (j + 0.5) / h
 
@@ -207,9 +208,8 @@ class YolactPredictHead(Head):
 
         bbox = bbox.permute(0, 2, 3, 1).contiguous().view(inputs.size(0), -1, 4)
         conf = conf.permute(0, 2, 3, 1).contiguous().view(inputs.size(0), -1, self.config.num_classes)
-        
+
         _, priors = self.prior_box.generate(h, w)
-        print(priors.size())
 
         return bbox, conf, mask, priors
 
@@ -259,9 +259,9 @@ class YolactModel(YolactPretrained):
             self.neck = YolactPredictNeck(
                 config, [self.backbone.channels[i] for i in config.selected_layers])
 
-            _selected_layers = list(range(len(config.selected_layers) + config.num_downsamples))
-            neck_channels = [config.fpn_out_channels] * len(_selected_layers)
-            print(neck_channels)
+            # _selected_layers = list(range(len(config.selected_layers) + config.num_downsamples))
+            # neck_channels = [config.fpn_out_channels] * len(_selected_layers)
+            # print('neck channels', neck_channels)
 
         in_channels = config.fpn_out_channels
         in_channels += config.num_grids
@@ -270,7 +270,6 @@ class YolactModel(YolactPretrained):
             config, in_channels, config.proto_net, include_last_relu=False)
 
         self.config.mask_dim = self.proto_net.channels[-1]
-
         self.head_layers = nn.ModuleList()
         self.config.num_heads = len(config.selected_layers)
         for i, j in enumerate(config.selected_layers):
@@ -280,14 +279,16 @@ class YolactModel(YolactPretrained):
 
             head_layer = YolactPredictHead(
                 config,
-                neck_channels[j],
-                neck_channels[j],
+                self.neck.channels[j],
+                self.neck.channels[j],
                 aspect_ratios=config.aspect_ratios[i],
                 scales=config.scales[i],
                 parent=parent,
                 index=i)
-            # print(config.aspect_ratios[i], config.scales[i])
+
             self.head_layers.append(head_layer)
+
+        self.semantic_layer = nn.Conv2d(self.neck.channels[0], config.num_classes-1, kernel_size=1)
 
     def forward(self, inputs):
         inputs = self.check_inputs(inputs)
@@ -305,6 +306,7 @@ class YolactModel(YolactPretrained):
         for o in outputs:
             print(o.size())
 
+        segout = self.semantic_layer(outputs[0])
         proto_input = outputs[0]
         # print(proto_input.size())
         proto_output = self.proto_net(proto_input)
@@ -312,5 +314,7 @@ class YolactModel(YolactPretrained):
             print(i, layer)
             print(outputs[i].size())
             output = layer(outputs[i])
+
+        
 
         return outputs
