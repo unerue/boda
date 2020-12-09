@@ -83,7 +83,7 @@ class Yolov1Loss(LoseFunction):
 
         bs = self.config.batch_size
         gs = self.config.num_grids
-        nb = self.config.num_boxes  # B
+        nb = self.config.num_boxes
         nc = self.config.num_classes
 
         coord_mask = targets['scores'] > 0
@@ -92,34 +92,20 @@ class Yolov1Loss(LoseFunction):
         pred_boxes = inputs['boxes'][coord_mask]
         pred_scores = inputs['scores'][coord_mask]
         pred_labels = inputs['labels'][coord_mask]
-        # print(pred_boxes.size(), pred_scores.size(), pred_labels.size())
 
         true_boxes = targets['boxes'][coord_mask]
         true_scores = targets['scores'][coord_mask]
         true_labels = targets['labels'][coord_mask]
-        # print(true_boxes.size(), true_scores.size(), true_labels.size())
 
         noobj_pred_scores = inputs['scores'][noobj_mask]
         noobj_true_scores = targets['scores'][noobj_mask]
-        # print(pred_noobj_scores.size(), true_noobj_scores.size())
+
         loss_noobj = F.mse_loss(noobj_pred_scores, noobj_true_scores, reduction='sum')
-        print(loss_noobj)
-        # loss_noobj = F.mse_loss(noobj_conf_preds, noobj_conf_targets, reduction='sum')
-        # print(true_boxes.size())
+
         coord_response_mask = torch.zeros_like(true_scores, dtype=torch.bool, device=self.config.device)
         coord_not_response_mask = torch.ones_like(true_scores, dtype=torch.bool, device=self.config.device)
-        # print(coord_response_mask)
-        # print(coord_response_mask.size())
-        # print(coord_not_response_mask)
-        # print(coord_response_mask.dtype, coord_not_response_mask.dtype)
-        # print(coord_response_mask.device, coord_not_response_mask.device)
-        # print(coord_response_mask.size(), coord_not_response_mask.size())
 
-        # torch.Size([N, 5]) only the last column is used
         iou_targets = torch.zeros_like(true_scores, device=self.config.device)
-        # Choose the predicted bbox having the highest IoU for each target bbox.
-        # 박스 두개씩 응답된 iou가 큰 박스는 1, 아니면 0, 두개씩 비교
-        # iou return [0.031, 0.512]
 
         _pred_boxes = torch.zeros_like(pred_boxes, device=self.config.device)
         _pred_boxes[:, :2] = pred_boxes[:, :2]/gs - 0.5*pred_boxes[:, 2:]
@@ -128,38 +114,24 @@ class Yolov1Loss(LoseFunction):
         _true_boxes = torch.zeros_like(true_boxes, device=self.config.device)
         _true_boxes[:, :2] = true_boxes[:, :2]/gs - 0.5*true_boxes[:, 2:]
         _true_boxes[:, 2:] = true_boxes[:, :2]/gs + 0.5*true_boxes[:, 2:]
-        print(_pred_boxes.size(), _true_boxes.size())
+
         iou = jaccard(_pred_boxes, _true_boxes)
         max_iou, max_index = iou.max(0)
-        # print(iou)
-        # print(max_iou, max_index)
-
-        print(max_iou.size())
-        print(coord_response_mask.size())
-        # max_iou = max_iou.unsqueeze()
-
+        print(max_iou)
         coord_response_mask[max_index] = 1
         coord_not_response_mask[max_index] = 0
-        print(coord_response_mask)
-        print(coord_not_response_mask)
 
-        
-        # BBox location/size and objectness loss for the response bboxes.
         response_boxes_preds = pred_boxes[coord_response_mask]
+        pred_response_scores = pred_scores[coord_response_mask]
         response_boxes_targets = true_boxes[coord_response_mask]
         iou_targets = max_iou[coord_response_mask]
-        print(response_boxes_preds)
-        print(response_boxes_targets)
         print(iou_targets)
-        # print(response_boxes_preds.size(), response_boxes_targets.size(), iou_targets.size())
-        # print(response_boxes_preds.dtype, response_boxes_targets.dtype, iou_targets.dtype)
+        print(response_boxes_preds)
 
+        # sys.exit()
         loss_xy = F.mse_loss(
             response_boxes_preds[:, :2], 
             response_boxes_targets[:, :2], reduction='sum')
-
-        # loss_xy = torch.sum(torch.pow(response_boxes_targets[:, 0] - response_boxes_preds[:, 0], 2) \
-        # + torch.pow(response_boxes_targets[:, 1] - response_boxes_preds[:, 1], 2))
 
         loss_wh = F.mse_loss(
             torch.sqrt(response_boxes_preds[:, 2:4]), 
@@ -169,23 +141,22 @@ class Yolov1Loss(LoseFunction):
 
         loss_class = F.mse_loss(pred_labels, true_labels, reduction='sum') / bs
 
-        print(loss_xy, loss_wh, loss_boxes, loss_class)
-        sys.exit()
         # loss_wh = torch.sum(torch.pow(torch.sqrt(response_boxes_targets[:, 3]) - torch.sqrt(response_boxes_preds[:, 3]), 2) \
         # + torch.pow(torch.sqrt(response_boxes_targets[:, 4]) - torch.sqrt(response_boxes_preds[:, 4]), 2))
         
         # loss_boxes = (self.lambda_coord * (loss_xy + loss_wh)) / bs 
         # # loss_boxes = (self.lambda_coord * (loss_xy)) / bs 
 
-        # loss_obj = F.mse_loss(
-        #     response_boxes_preds[:, 4], iou_targets[:, 4], reduction='sum')
-        # loss_object = (loss_obj + (self.lambda_noobj * loss_noobj)) / bs
+        loss_obj = F.mse_loss(
+            pred_response_scores, iou_targets, reduction='sum')
+
+        loss_scores = (loss_obj + (self.lambda_noobj * loss_noobj)) / bs
         # # Class probability loss for the cells which contain objects.
         # loss_class = F.mse_loss(class_preds, class_targets, reduction='sum') / bs
 
         losses = {
             'loss_boxes': loss_boxes,
-            'loss_object': loss_object,
+            'loss_scores': loss_scores,
             'loss_class': loss_class,
         }
 
