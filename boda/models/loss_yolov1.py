@@ -125,10 +125,7 @@ class Yolov1Loss(LoseFunction):
         pred_response_scores = pred_scores[coord_response_mask]
         response_boxes_targets = true_boxes[coord_response_mask]
         iou_targets = max_iou[coord_response_mask]
-        print(iou_targets)
-        print(response_boxes_preds)
 
-        # sys.exit()
         loss_xy = F.mse_loss(
             response_boxes_preds[:, :2], 
             response_boxes_targets[:, :2], reduction='sum')
