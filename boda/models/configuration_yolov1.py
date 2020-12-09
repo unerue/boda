@@ -1,4 +1,4 @@
-from ..config import BaseConfig
+from ..configuration_base import BaseConfig
 
 
 YOLOV1_PRETRAINED_CONFIG = {
@@ -33,7 +33,11 @@ class Yolov1Config(BaseConfig):
         self.backbone_structure = backbone_structure
         self.selected_layers = selected_layers
         self.num_boxes = num_boxes
+        self.num_grids = 7
         self.grid_size = grid_size
+
+        self.bn = True
+        self.relu = False
 
         self.obj_scale = 1
         self.noobj_scale = 0.5

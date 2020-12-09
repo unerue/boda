@@ -1,4 +1,5 @@
 import os
+from abc import ABC, abstractmethod, ABCMeta
 from typing import Tuple, List, Dict, Union
 
 import torch
@@ -52,8 +53,7 @@ class Head(nn.Module):
         raise NotImplementedError
 
 
-# class Model(nn.Module):
-class Model:
+class ModelMixin(ABC):
     """Base Model for
     """
     model_name: str = ''
@@ -62,6 +62,12 @@ class Model:
     def __init__(self, config, **kwargs):
         # super().__init__()
         pass
+
+    @classmethod
+    @abstractmethod
+    def from_pretrained(cls):
+        """Create from pretrained model weights """
+        ...
 
     @classmethod
     def check_inputs(cls, inputs):
@@ -87,7 +93,7 @@ class Model:
         return inputs
 
 
-class PretrainedModel(nn.Module, Model):
+class Model(nn.Module, ModelMixin):
     config_class = None
     base_model_prefix: str = ''
 
@@ -96,24 +102,24 @@ class PretrainedModel(nn.Module, Model):
         self.config = config
         self.name_or_path = ''
 
-    @property
-    def base_model(self) -> nn.Module:
-        return getattr(self, self.base_model_prefix, self)
+    # @property
+    # def base_model(self) -> nn.Module:
+    #     return getattr(self, self.base_model_prefix, self)
 
     @classmethod
     def from_pretrained(cls, model_name_or_path: Union[str, os.PathLike], **kwargs):
         raise NotImplementedError
 
-    def load_weights(self, path):
-        raise NotImplementedError
+    # def load_weights(self, path):
+    #     raise NotImplementedError
 
-    def _check_pretrained_model_is_valid(self, model_name_or_path):
-        # if model_name_or_path not in
-        raise NotImplementedError
+    # def _check_pretrained_model_is_valid(self, model_name_or_path):
+    #     # if model_name_or_path not in
+    #     raise NotImplementedError
 
-    @classmethod
-    def get_config_dict(cls, model_name_or_path, **kwargs):
-        raise NotImplementedError
+    # @classmethod
+    # def get_config_dict(cls, model_name_or_path, **kwargs):
+    #     raise NotImplementedError
 
 
 class LoseFunction(nn.Module):
@@ -148,3 +154,30 @@ class LoseFunction(nn.Module):
                 else:
                     raise ValueError('Expected target boxes to be Tensor.')
             cls._checked_targets = False
+
+
+# class Register(ABCMeta):
+#     registry = {}
+#     def __new__(cls):
+#         new_cls = type.__new__(cls, name, bases, attrs)
+#         if not hasattr(new_cls, '_registry_name'):
+#             raise Exception('Ay class')
+
+#         cls.register[new_cls._registry_name] = new_cls
+#         return ABCMeta.__new__(cls, name, bases, attrs)
+
+#     @classmethod
+#     def get_registry(cls):
+#         return dict(cls.registry)
+
+    # @classmethod
+    # def __subclasshook__(cls, subclass):
+    #     return hasattr(subclass, 'from_pretrained') or NotImplementedError
+
+
+# registry = []
+
+# def register(func):
+#     print(f'running register {func}')
+#     registry.append(func.__class__.__name__)
+#     return func

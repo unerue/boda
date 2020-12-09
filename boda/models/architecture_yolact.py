@@ -1,6 +1,7 @@
 import os
 import math
 import itertools
+import functools
 from collections import defaultdict
 from collections import OrderedDict
 from typing import Tuple, List, Dict, Any, Callable, TypeVar
@@ -12,6 +13,7 @@ import torch.nn.functional as F
 from ..architecture_base import Neck, Head, PretrainedModel
 from .configuration_yolact import YolactConfig
 from .backbone_resnet import resnet101
+from ..architecture_base import Register
 
 
 class YolactPredictNeck(Neck):
@@ -77,6 +79,7 @@ class YolactPredictNeck(Neck):
 def prior_cache(func):
     cache = defaultdict()
 
+    @functools.wraps(func)
     def wrapper(*args):
         k, v = func(*args)
         if k not in cache:
@@ -229,7 +232,8 @@ class YolactPredictHead(Head):
 
         return nn.Sequential(*_predict_layers)
 
-    def forward(self, inputs: Tensor) -> Dict(str, Tensor):
+    # def forward(self, inputs: Tensor) -> Dict(str, Tensor):
+    def forward(self, inputs: Tensor):
         pred = self if self.parent[0] is None else self.parent[0]
 
         h, w = inputs.size(2), inputs.size(3)
@@ -248,19 +252,20 @@ class YolactPredictHead(Head):
         return bbox, conf, mask, priors
 
 
-class YolactPretrained(PretrainedModel):
+@Register.register
+class YolactPretrained(Model):
     config_class = YolactConfig
     base_model_prefix = 'yolact'
 
-    @classmethod
-    def from_pretrained(cls, model_name_or_path):
-        print('Loading model!')
-        config, model_kwargs = cls.config_class.from_pretrained(model_name_or_path)
-        config = YolactConfig()
-        model = YolactModel(config)
-        model.state_dict(torch.load('yolact.pth'))
+    # @classmethod
+    # def from_pretrained(cls, model_name_or_path):
+    #     print('Loading model!')
+    #     config, model_kwargs = cls.config_class.from_pretrained(model_name_or_path)
+    #     config = YolactConfig()
+    #     model = YolactModel(config)
+    #     model.state_dict(torch.load('yolact.pth'))
 
-        return model
+    #     return model
 
 
 class YolactModel(YolactPretrained):

@@ -2,7 +2,6 @@ import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 
-from ..architecture_base import Backbone
 
 class Bottleneck(nn.Module):
     expansion = 4
