@@ -27,8 +27,8 @@ class Resize:
 class CocoParser:
     def __init__(self, info_file):
         self.coco = self._from_json(info_file)
-        self.image_ids = {c['id']: c['file_name'] for c in self.coco['images']}
-        self.annot_info = self._get_annots()
+        self.image_info = {c['id']: c['file_name'] for c in self.coco['images']}
+        self.annot_info = self._get_annot_info()
 
     def _from_json(self, info_file):
         with open(info_file, 'r', encoding='utf-8') as f:
@@ -36,10 +36,10 @@ class CocoParser:
 
         return info
 
-    def _get_annots(self):
+    def _get_annot_info(self):
         annot_info = defaultdict(list)
         for annot in self.coco['annotations']:
-            annot_info['image_id'].append({
+            annot_info[annot['image_id']].append({
                 'id': annot['id'],
                 'category_id': annot['category_id'],
                 'bbox': annot['bbox'],
@@ -49,8 +49,11 @@ class CocoParser:
 
         return annot_info
 
-    def get_annot_ids(self, image_id):
+    def get_annots(self, image_id):
         return self.annot_info.get(image_id)
+
+    def get_file_name(self, image_id):
+        return self.image_info.get(image_id)
 
 
 class CocoDataset(Dataset):
@@ -60,20 +63,17 @@ class CocoDataset(Dataset):
         # self.image_ids = list(self.coco.imgToAnns.keys())
         self.transforms = transforms
         self.coco = CocoParser(info_file)
-        self.image_ids = list(self.coco.image_ids.keys())
-        print(self.image_ids)
+        self.image_ids = list(self.coco.image_info.keys())
+        # print(self.image_ids)
 
     def __len__(self):
         return len(self.image_ids)
 
     def __getitem__(self, index):
         image_id = self.image_ids[index]
-        # annot_ids = self.coco.getAnnIds(imgIds=image_id)
-        # targets = [x for x in self.coco.loadAnns(annot_ids)]
-        targets = [x for x in self.coco.get_annot(image_id)]
-        print(targets)
+        targets = self.coco.get_annots(image_id)
 
-        # image = self.coco.loadImgs(image_id)[0]['file_name']
+        image = self.coco.get_file_name(image_id)
         image = Image.open(os.path.join(self.image_dir, image)).convert('RGB')
 
         boxes = []

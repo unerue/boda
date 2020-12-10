@@ -117,7 +117,7 @@ class Yolov1Pretrained(Model):
 
     # def __init__(self, config):
     #     super().__init__()
-        
+
     # def _init_weights(self, module):
     #     """ Initialize the weights """
     #     if isinstance(module, (nn.Linear, nn.Embedding)):
@@ -144,7 +144,7 @@ class Yolov1Model(Yolov1Pretrained):
         image: a PIL Image of size (H, W)
         target: a dict containing the following fields
             boxes (FloatTensor[N, 4]): the coordinates of the N bounding boxes 
-                in [x0, y0, x1, y1] format, ranging from 0 to W and 0 to H
+                in [xmin, ymin, xmax, ymax] format, ranging from 0 to W and 0 to H
             labels (Int64Tensor[N]): the label for each bounding box. 0 represents 
                 always the background class.
             image_id (Int64Tensor[1]): an image identifier. It should be unique 

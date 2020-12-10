@@ -282,7 +282,7 @@ class YolactModel(YolactPretrained):
         backbone ()
         neck ()
         head ()
-    
+
     """
     model_name = 'yolact'
 

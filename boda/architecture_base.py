@@ -147,8 +147,12 @@ class LoseFunction(nn.Module):
         if cls._checked_targets:
             for target in targets:
                 if isinstance(target['boxes'], Tensor):
-                    if target['boxes'].dim() != 2 or target['boxes'].size(1) != 4:
+                    boxes = target['boxes']
+                    check_boxes = boxes[:, :2] >= boxes[:, 2:]
+                    if boxes.dim() != 2 or boxes.size(1) != 4:
                         raise ValueError('Expected target boxes to be a tensor of [N, 4].')
+                    elif check_boxes.any():
+                        raise ValueError(f'{boxes}')
                     elif target['labels'].dim() != 1:
                         raise ValueError('Expected target boxes to be a tensor of [N].')
                 else:
