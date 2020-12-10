@@ -1,6 +1,8 @@
-import numpy as np
 import os
+import json
+from collections import defaultdict
 import torch
+import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
 from pycocotools.coco import COCO
@@ -22,22 +24,56 @@ class Resize:
         return image, targets
 
 
-class CocoParser(Dataset):
+class CocoParser:
+    def __init__(self, info_file):
+        self.coco = self._from_json(info_file)
+        self.image_ids = {c['id']: c['file_name'] for c in self.coco['images']}
+        self.annot_info = self._get_annots()
+
+    def _from_json(self, info_file):
+        with open(info_file, 'r', encoding='utf-8') as f:
+            info = json.load(f)
+
+        return info
+
+    def _get_annots(self):
+        annot_info = defaultdict(list)
+        for annot in self.coco['annotations']:
+            annot_info['image_id'].append({
+                'id': annot['id'],
+                'category_id': annot['category_id'],
+                'bbox': annot['bbox'],
+                'segmentation': annot['segmentation'],
+                'area': annot['area'],
+                'iscrowd': annot['iscrowd']})
+
+        return annot_info
+
+    def get_annot_ids(self, image_id):
+        return self.annot_info.get(image_id)
+
+
+class CocoDataset(Dataset):
     def __init__(self, image_dir, info_file, transforms=None):
         self.image_dir = image_dir
-        self.coco = COCO(info_file)
-        self.image_ids = list(self.coco.imgToAnns.keys())
+        # self.coco = COCO(info_file)
+        # self.image_ids = list(self.coco.imgToAnns.keys())
         self.transforms = transforms
+        self.coco = CocoParser(info_file)
+        self.image_ids = list(self.coco.image_ids.keys())
+        print(self.image_ids)
 
     def __len__(self):
         return len(self.image_ids)
 
     def __getitem__(self, index):
         image_id = self.image_ids[index]
-        annot_ids = self.coco.getAnnIds(imgIds=image_id)
-        targets = [x for x in self.coco.loadAnns(annot_ids)]
+        # annot_ids = self.coco.getAnnIds(imgIds=image_id)
+        # targets = [x for x in self.coco.loadAnns(annot_ids)]
+        targets = [x for x in self.coco.get_annot(image_id)]
+        print(targets)
 
-        image = self.coco.loadImgs(image_id)[0]['file_name']
+        # image = self.coco.loadImgs(image_id)[0]['file_name']
         image = Image.open(os.path.join(self.image_dir, image)).convert('RGB')
 
         boxes = []
@@ -65,6 +101,6 @@ class CocoParser(Dataset):
         return image, targets
 
 
-# if __name__ == '__main__':
-#     coco_dataset = CocoParser('./benchmarks/samples/', './benchmarks/samples/annotations.json')
-#     coco_dataset[0]
+if __name__ == '__main__':
+    coco_dataset = CocoDataset('./benchmarks/samples/', './benchmarks/samples/annotations.json')
+    coco_dataset[0]
