@@ -45,7 +45,7 @@ def run():
             losses = criterion(outputs, targets)
             loss = sum(value for value in losses.values())
             loss.backward()
-            
+
             optimizer.step()
         print(loss)
 
