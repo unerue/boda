@@ -3,67 +3,53 @@ from boda.models.configuration_yolov1 import Yolov1Config
 from boda.models.loss_yolov1 import Yolov1Loss
 from boda.models.backbone_darknet import darknet, darknet21
 from torchsummary import summary
-
+from boda.parser import CocoParser
 import torch
-
-# model = darknet()
-# print(summary(model, input_data=(3, 448, 448), verbose=0))
+import torch.optim as optim
+from torch.utils.data import DataLoader
 
 # model = darknet21()
 # print(summary(model, input_data=(3, 448, 448), verbose=0))
 
-
 config = Yolov1Config()
-# print(config)
-
-# model = Yolov1Model(config).to('cuda')
-# print(summary(model, input_data=(3, 448, 448), verbose=0))
-
-
-# train_loader = [[torch.rand((3, 448, 448)).to('cuda') for _ in range(16)]]
-# print(len(train_loader))
-# print(torch.rand((3, 448, 448)).size())
-# print(torch.rand((3, 448, 448)).dim())
-
-# num_epochs = 10
-# for epoch in range(num_epochs):
-#     for inputs in train_loader:
-#         print(epoch)
-#         model(inputs)
-
-# print(summary(model, input_data=(3, 448, 448), verbose=0))
-
-
-
-criterion = Yolov1Loss(config)
-
-
-targets = [{
-    'boxes': torch.tensor(
-        [[120.1, 200.1, 150.1, 250.1], [0.1, 50.1, 100.1, 300.1]]).to('cuda'),
-    'labels': torch.tensor([1, 2]).to('cuda'),
-}, {'boxes': torch.tensor(
-        [[80.1, 200.1, 150.1, 250.1], [20, 10, 40, 50], [5, 50.1, 150.1, 400.1]]).to('cuda'),
-    'labels': torch.tensor([1, 2, 10]).to('cuda')}]
-
-# preds = {
-#     'boxes': torch.tensor(
-#         [[[0.08, 0.03, 0.21, 0.55],
-#           [0.01, 0.02, 0.22, 0.55], 
-#           [0.5, 0.7, 0.50, 0.80], 
-#           [0.95, 0.5, 0.1, 0.1]], 
-#          [[0.01, 0.02, 0.22, 0.55], 
-#           [0.08, 0.03, 0.21, 0.55],
-#           [0.5, 0.7, 0.50, 0.80], 
-#           [0.95, 0.5, 0.1, 0.1]]]).to('cuda'),
-#     'scores': torch.tensor([
-#         [0.5, 0.1, 0.05, 0.6],
-#         [0.01, 0.05, 0.05, 0.7]
-#     ]).to('cuda')
-# }
-
-inputs = [torch.randn((3, 448, 448)).to('cuda') for _ in range(2)]
 model = Yolov1Model(config).to('cuda')
-preds = model(inputs)
-losses = criterion(preds, targets)
-print(losses)
+criterion = Yolov1Loss(config)
+optimizer = optim.SGD(model.parameters(), 0.001)
+
+
+def collate_fn(batch):
+    return tuple(zip(*batch))
+
+
+coco_dataset = CocoParser(
+    './benchmarks/samples/', './benchmarks/samples/annotations.json')
+train_loader = DataLoader(
+    coco_dataset,
+    batch_size=2,
+    shuffle=True,
+    num_workers=2,
+    collate_fn=collate_fn)
+
+
+def run():
+    model.train()
+    num_epochs = 10
+    for _ in range(num_epochs):
+        for images, targets in train_loader:
+            images = [image.to('cuda') for image in images]
+            targets = [{k: v.to('cuda') for k, v in t.items()} for t in targets]
+
+            optimizer.zero_grad()
+
+            outputs = model(images)
+            losses = criterion(outputs, targets)
+            loss = sum(value for value in losses.values())
+            loss.backward()
+            
+            optimizer.step()
+        print(loss)
+
+
+if __name__ == '__main__':
+    run()
+

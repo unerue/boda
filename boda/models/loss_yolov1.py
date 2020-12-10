@@ -117,7 +117,7 @@ class Yolov1Loss(LoseFunction):
 
         iou = jaccard(_pred_boxes, _true_boxes)
         max_iou, max_index = iou.max(0)
-        print(max_iou)
+        # print(max_iou)
         coord_response_mask[max_index] = 1
         coord_not_response_mask[max_index] = 0
 

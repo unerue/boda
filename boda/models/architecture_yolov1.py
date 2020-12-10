@@ -7,7 +7,7 @@ import torch
 from torch import nn, Tensor
 
 from ..architecture_base import Neck, Head, Model
-from .backbone_darknet import darknet
+from .backbone_darknet import darknet, darknet21
 from .configuration_yolov1 import Yolov1Config
 
 
@@ -159,10 +159,10 @@ class Yolov1Model(Yolov1Pretrained):
         self.config = config
         if backbone is None:
             self.backbone = darknet(pretrained=False)
+            # self.backbone = darknet21()
         if neck is None:
             self.neck = Yolov1PredictNeck(config, self.backbone.out_channels[-1])
         if head is None:
-            print(self.neck.out_channels)
             self.head = Yolov1PredictHead(config, self.neck.out_channels[-1])
 
         # self._init_weights()

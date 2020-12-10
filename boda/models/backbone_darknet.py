@@ -60,7 +60,7 @@ class DarkNet19(nn.Module):
         for layer in self.layers:
             inputs = layer(inputs)
             outputs.append(inputs)
-        
+
         return outputs
 
     def _make_layers(self, layers: List):
@@ -159,7 +159,7 @@ class DarkNet(nn.Module):
         self.relu = nn.LeakyReLU(0.1)
 
         self.layers = nn.ModuleList()
-        self.channels = []
+        self.out_channels = []
 
         self._make_layer(block, [32, 64], layers[0])
         self._make_layer(block, [64, 128], layers[1])
@@ -192,7 +192,7 @@ class DarkNet(nn.Module):
             layers.append(block(self.in_channels, out_channels))
         
         self.layers.append(nn.Sequential(*layers))
-        self.channels.append(out_channels[1])
+        self.out_channels.append(out_channels[1])
 
     def forward(self, inputs: Tensor) -> List[Tensor]:
         inputs = self.conv(inputs)
