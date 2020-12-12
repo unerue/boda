@@ -3,7 +3,7 @@ from ..config import BaseConfig
 
 SSD_PRETRAINED_CONFIG = {
     'ssd300': None,
-    'ssd500': None,
+    'ssd512': None,
 }
 
 
@@ -15,14 +15,15 @@ class SsdConfig(BaseConfig):
 
     """
     def __init__(
-        self, 
+        self,
         selected_layers=-1,
-        grid_size=7, 
+        num_grids=7,
         max_size=300,
         num_classes=20,
-        **kwargs):
+        **kwargs
+    ) -> None:
         super().__init__(max_size=max_size, **kwargs)
-        self.selected_layers = selected_layers
+        self.selected_layers = [3, 4]
         self.boxes = [4, 6, 6, 6, 4, 4]
         self.num_classes = num_classes
         self.backbone_name = 'vgg16'

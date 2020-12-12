@@ -211,6 +211,7 @@ class YolactPredictHead(Head):
                 out_channels,
                 self.num_priors * self.config.mask_dim)
 
+    # TODO: _add_predict_layer or _make_layer?
     def _add_predict_layer(
         self,
         num_extra_layers: int,

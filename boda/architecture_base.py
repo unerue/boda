@@ -6,19 +6,14 @@ import torch
 from torch import nn, Tensor
 
 
-BACKBONE_ARCHIVE_MAP = {
-    'resnet18': 'https://download.pytorch.org/models/resnet18-5c106cde.pth',
-    'resnet34': 'https://download.pytorch.org/models/resnet34-333f7ec4.pth',
-    'resnet50': 'https://download.pytorch.org/models/resnet50-19c8e357.pth',
-    'resnet101': 'https://download.pytorch.org/models/resnet101-5d3b4d8f.pth',
-}
-
-
 class Backbone(nn.Module):
     backbone_name: str = ''
 
     def __init__(self):
         super().__init__()
+
+    def forward(self, inputs: Tensor) -> List[Tensor]:
+        raise NotImplementedError
 
     @torch.jit.unused
     def eager_outputs(self, *args):
@@ -26,11 +21,11 @@ class Backbone(nn.Module):
 
     def init_weights(self, *args):
         raise NotImplementedError
-    
+
     def from_pretrained(self, backbone_name, **kwargs):
         from torch.hub import load_state_dict_from_url
 
-        state_dict = load_state_dict_from_url(BACKBONE_ARCHIVE_MAP[backbone_name])
+        # state_dict = load_state_dict_from_url(BACKBONE_ARCHIVE_MAP[backbone_name])
         self.load_state_dict(state_dict)
 
     def _from_state_dict(self, *args):
@@ -44,6 +39,9 @@ class Neck(nn.Module):
     def eager_outputs(self, *args):
         raise NotImplementedError
 
+    def forward(self, inputs: List[Tensor]) -> List[Tensor]:
+        raise NotImplementedError
+
 
 class Head(nn.Module):
     def __init__(self):
@@ -52,15 +50,21 @@ class Head(nn.Module):
     def eager_outputs(self, *args):
         raise NotImplementedError
 
+    def forward(self, inputs: Tensor) -> Dict[str, Tensor]:
+        raise NotImplementedError
+
 
 class ModelMixin(ABC):
-    """Base Model for
+    """Base Model for Computer Vision Models
     """
     model_name: str = ''
     _checked_inputs: bool = True
 
     def __init__(self, config, **kwargs):
         # super().__init__()
+        pass
+
+    def init_architecture(self, config):
         pass
 
     @classmethod
@@ -122,12 +126,30 @@ class Model(nn.Module, ModelMixin):
     #     raise NotImplementedError
 
 
-class LoseFunction(nn.Module):
+class Matcher(ABC):
+    def __init__(self):
+        pass
+
+    def encode(self):
+        pass
+
+    def deconde(self):
+        pass
+
+
+class LossFunction(nn.Module):
     _checked_targets = True
 
     def __init__(self, config, **kwargs) -> None:
         super().__init__()
         self.config = config
+
+    def forward(
+        self,
+        inputs: Dict[str, Tensor],
+        targets: List[Dict[str, Tensor]]
+    ) -> Dict[str, Tensor]:
+        raise NotImplementedError
 
     @classmethod
     def copy_targets(cls, targets: List[Dict[str, Tensor]]) -> List[Dict[str, Tensor]]:

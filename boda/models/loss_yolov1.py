@@ -5,12 +5,12 @@ import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 
-from ..architecture_base import LoseFunction
+from ..architecture_base import LossFunction
 from ..utils.bbox import xyxy_to_cxywh
 from ..utils.bbox import jaccard
 
 
-class Yolov1Loss(LoseFunction):
+class Yolov1Loss(LossFunction):
     """Loss Function for YOLOv1
 
     Arguments:

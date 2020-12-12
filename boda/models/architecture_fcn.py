@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from torch import nn, Tensor
 
-from ..base import Neck, Head, Model
+from ..architecture_base import Neck, Head, Model
 from .backbone_vgg import vgg16
 
 

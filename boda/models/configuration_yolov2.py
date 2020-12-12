@@ -9,17 +9,18 @@ YOLOV2_PRETRAINED_CONFIG = {
 
 class Yolov2Config(BaseConfig):
     model_name = 'yolov2'
+
     def __init__(
-        self, 
+        self,
         selected_layers=-1,
-        grid_size=7, 
+        num_grids=7,
         num_boxes=2,
         max_size=448,
         num_classes=20,
-        **kwargs):
+        **kwargs
+    ) -> None:
         super().__init__(max_size=max_size, **kwargs)
         self.selected_layers = selected_layers
-        self.grid_size = grid_size
         self.num_boxes = num_boxes
         self.num_classes = num_classes
         self.obj_scale = 1

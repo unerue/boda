@@ -3,6 +3,15 @@ from torch import nn, Tensor
 import torch.nn.functional as F
 
 
+# TODO: BACKBONE_ARCHIVE_MAP or _MAPS? or ARCHIVES?
+BACKBONE_ARCHIVE_MAP = {
+    'resnet18': 'https://download.pytorch.org/models/resnet18-5c106cde.pth',
+    'resnet34': 'https://download.pytorch.org/models/resnet34-333f7ec4.pth',
+    'resnet50': 'https://download.pytorch.org/models/resnet50-19c8e357.pth',
+    'resnet101': 'https://download.pytorch.org/models/resnet101-5d3b4d8f.pth',
+}
+
+
 class Bottleneck(nn.Module):
     expansion = 4
     def __init__(self, in_planes, planes, stride=1, downsample=None):

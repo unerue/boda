@@ -24,14 +24,14 @@ class Yolov1PredictNeck(Neck):
         self.out_channels = []
 
         self._in_channels = in_channels
-        self.layers = nn.ModuleList()
+        self.layers = nn.ModuleList()  # TODO: layers or extra_layers?
 
-        self._make_layer(1024, config.bn, config.relu)
-        self._make_layer(1024, config.bn, config.relu)
-        self._make_layer(1024, config.bn, config.relu)
-        self._make_layer(1024, config.bn, config.relu)
+        self._add_extra_layer(1024, config.bn, config.relu)
+        self._add_extra_layer(1024, config.bn, config.relu)
+        self._add_extra_layer(1024, config.bn, config.relu)
+        self._add_extra_layer(1024, config.bn, config.relu)
 
-    def _make_layer(self, out_channels, bn: bool = False, relu: bool = False, **kwargs):
+    def _add_extra_layer(self, out_channels, bn: bool = False, relu: bool = False, **kwargs):
         _layers = []
         _layers.append(
             nn.Conv2d(self._in_channels, out_channels, kernel_size=3, padding=1, **kwargs))
@@ -68,7 +68,13 @@ class Yolov1PredictHead(Head):
         selected_layers (List[float]):
         scales (List[float]):
     """
-    def __init__(self, config, in_channels: int = 1024, relu: bool = False, **kwargs) -> None:
+    def __init__(
+        self,
+        config,
+        in_channels: int = 1024,
+        relu: bool = False,
+        **kwargs
+    ) -> None:
         super().__init__()
         self.config = config
         self.out_channels = []
@@ -115,20 +121,22 @@ class Yolov1Pretrained(Model):
     config_class = Yolov1Config
     base_model_prefix = 'yolov1'
 
-    # def __init__(self, config):
-    #     super().__init__()
+    @classmethod
+    def from_pretrained(cls, name_or_path):
+        config = cls.config_class.from_pretrained(name_or_path)
+        model = Yolov1Model(config)
+        # model.state_dict(torch.load('yolact.pth'))
+        return model
 
-    # def _init_weights(self, module):
-    #     """ Initialize the weights """
-    #     if isinstance(module, (nn.Linear, nn.Embedding)):
-    #         # Slightly different from the TF version which uses truncated_normal for initialization
-    #         # cf https://github.com/pytorch/pytorch/pull/5617
-    #         module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-    #     elif isinstance(module, nn.LayerNorm):
-    #         module.bias.data.zero_()
-    #         module.weight.data.fill_(1.0)
-    #     if isinstance(module, nn.Linear) and module.bias is not None:
-    #         module.bias.data.zero_()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=0.1)
+        elif isinstance(module, nn.BatchNorm2d):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        if isinstance(module, nn.Linear) and module.bias is not None:
+            module.bias.data.zero_()
 
 
 class Yolov1Model(Yolov1Pretrained):
@@ -154,12 +162,18 @@ class Yolov1Model(Yolov1Pretrained):
             iscrowd (UInt8Tensor[N]): instances with iscrowd=True will be ignored 
                 during evaluation.
     """
-    def __init__(self, config, backbone=None, neck=None, head=None, **kwargs) -> None:
+    def __init__(
+        self,
+        config,
+        backbone=None,
+        neck=None,
+        head=None,
+        **kwargs
+    ) -> None:
         super().__init__(config)
         self.config = config
         if backbone is None:
             self.backbone = darknet(pretrained=False)
-            # self.backbone = darknet21()
         if neck is None:
             self.neck = Yolov1PredictNeck(config, self.backbone.out_channels[-1])
         if head is None:

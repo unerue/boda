@@ -3,22 +3,20 @@ from typing import Union, Any
 from ..configuration_base import BaseConfig
 
 
-YOLACT_PRETRAINED_CONFIG = {
-    'yolact550-base': None,
-    'yolact300': None,
-    'yolact700': None,
+SOLOV1_PRETRAINED_CONFIG = {
+    'solov1-base'
 }
 
 
-class YolactConfig(BaseConfig):
-    """Configuration for YOLACT
+class Solov1Config(BaseConfig):
+    """Configuration for SOLOv1
 
     Arguments:
         max_size ():
         padding ():
         proto_net_structure (List):
     """
-    config_name = 'yolact550-base'
+    config_name = 'solov1'
 
     def __init__(
         self,
@@ -36,11 +34,13 @@ class YolactConfig(BaseConfig):
         **kwargs
     ) -> None:
         super().__init__(max_size=max_size, **kwargs)
-        # self.selected_layers = list(range(1, 4))
+        self.selected_layers = list(range(4))
         # self.num_boxes = None
         self.num_classes = 7
         # neck
         self.padding = 1
+        self.scales = ((1, 96), (48, 192), (96, 384), (192, 768), (384, 2048))
+        self.num_grids=[40, 36, 24, 16, 12]
         self.aspect_ratios = [[[0.66685089, 1.7073535, 0.87508774, 1.16524493, 0.49059086]]]*6
         # self.pred_scales = [[24], [48], [96], [192], [384]]
         # self.fpn_out_channels = 256

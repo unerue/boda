@@ -1,13 +1,13 @@
 from ..config import BaseConfig
 
 
-YOLOV3_PRETRAINED_CONFIG = {
-    'yolov3-base': None,
-    'yolov3-tiny': None,
+YOLOV4_PRETRAINED_CONFIG = {
+    'yolov4-base': None,
+    'yolov4-tiny': None,
 }
 
 
-class Yolov3Config(BaseConfig):
+class Yolov4Config(BaseConfig):
     model_name = 'yolov3'
 
     def __init__(

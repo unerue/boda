@@ -1,6 +1,7 @@
 import os
 import copy
 import json
+from urllib.parse import urlparse
 from typing import Tuple, List, Dict, Any, Union
 
 
@@ -11,7 +12,8 @@ class BaseConfig:
     Arguments:
         name_or_path (str):
     """
-    config_name: str = ''
+    model_name: str = ''
+    cache_dir = 'cache'
 
     def __init__(self, **kwargs):
         self.use_amp = kwargs.pop('use_amp', False)
@@ -77,20 +79,39 @@ class BaseConfig:
             setattr(self, key, value)
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_or_path: str, **kwargs):
-        config, model_kwargs = cls.get_config_dict('', test='test')
-        # raise NotImplementedError)
-        print('Load config!')
-        return config, model_kwargs
-    
+    def from_pretrained(cls, name_or_path: str, **kwargs):
+        config_dict = cls._get_config_dict(name_or_path)
+        print(config_dict)
+        return cls(**config_dict)
+
     @classmethod
-    def _dict_from_json_file(self, model_name_or_path):
-        return model_name_or_path
-    
+    def _dict_from_json_file(self, path):
+        with open(path, 'r', encoding='utf-8') as json_file:
+            config_dict = json.load(json_file)
+        return config_dict
+
     @classmethod
-    def get_config_dict(cls, model_name_or_path, **kwargs):
-        config_dict = cls._dict_from_json_file(model_name_or_path)
-        return config_dict, kwargs
+    def from_json(cls, json_file: str):
+        config_dict = cls._dict_from_json_file(json_file)
+        print(config_dict)
+        return cls(**config_dict)
+
+    @classmethod
+    def _get_config_dict(cls, name_or_path, **kwargs):
+        config_dir = os.path.join(cls.cache_dir, cls.model_name)
+        if os.path.isdir(config_dir):
+            config_file = os.path.join(config_dir, f'{name_or_path}.json')
+            if os.path.isfile(config_file):
+                return cls._dict_from_json_file(config_file)
+            else:
+                config_file = urlparse('https://')
+        else:
+            os.mkdir(config_dir)
+            return
+
+        # config_dict = cls._dict_from_json_file(config_file)
+
+            # return config_dict, kwargs
 
     # @classmethod
     # def from_json(cls, json_file: str):

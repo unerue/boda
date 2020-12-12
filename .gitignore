@@ -33,6 +33,9 @@ boda/tests/resnet50_550_coco_972_70000.pth
 *.pth
 old/
 
+cache/ 
+# tests/
+
 boda/tests/print_yolact.py
 print_yolact.py
 run.py

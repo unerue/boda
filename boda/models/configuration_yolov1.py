@@ -2,7 +2,7 @@ from ..configuration_base import BaseConfig
 
 
 YOLOV1_PRETRAINED_CONFIG = {
-    'yolov1-base': None,
+    'yolov1-base': 'https://drive.google.com/file/d/10cpkJnhDLZr-Vtt8zNTf-8kz9gl3S0He/view?usp=sharing',
     'yolov1-tiny': None,
 }
 
@@ -19,15 +19,17 @@ class Yolov1Config(BaseConfig):
         grid_size ():
     """
     model_name = 'yolov1'
+
     def __init__(
-        self, 
+        self,
         max_size=448,
         num_classes=20,
         backbone_structure=None,
         selected_layers=[-1],
         num_boxes=2,
         grid_size=7,
-        **kwargs):
+        **kwargs
+    ) -> None:
         super().__init__(max_size=max_size, **kwargs)
         self.num_classes = num_classes
         self.backbone_structure = backbone_structure

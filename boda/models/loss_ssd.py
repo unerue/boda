@@ -1,6 +1,7 @@
 import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
+from ..architecture_base import LossFunction
 
 
 class Matcher:
@@ -105,7 +106,7 @@ def log_sum_exp(x):
     return torch.log(torch.sum(torch.exp(x-x_max), 1, keepdim=True)) + x_max
 
 
-class MultiBoxLoss(nn.Module):
+class SsdLoss(LossFunction):
     """SSD Weighted Loss Function
     Compute Targets:
         1) Produce Confidence Target Indices by matching  ground truth boxes
@@ -128,10 +129,20 @@ class MultiBoxLoss(nn.Module):
         See: https://arxiv.org/pdf/1512.02325.pdf for more details.
     """
 
-    def __init__(self, num_classes, size, overlap_thresh, prior_for_matching,
-                 bkg_label, neg_mining, neg_pos, neg_overlap, encode_target,
-                 use_gpu=True):
-        super(MultiBoxLoss, self).__init__()
+    def __init__(
+        self, 
+        config, 
+        num_classes, 
+        size, 
+        overlap_thresh, 
+        prior_for_matching,
+        bkg_label, 
+        neg_mining, 
+        neg_pos, 
+        neg_overlap, 
+        encode_target,
+        use_gpu=True):
+        super().__init__()
         self.use_gpu = use_gpu
         self.num_classes = num_classes
         self.threshold = overlap_thresh
@@ -144,7 +155,7 @@ class MultiBoxLoss(nn.Module):
         cfg = v[str(size)]
         self.variance = cfg['variance']
 
-    def forward(self, predictions, targets):
+    def forward(self, inputs, targets):
         """Multibox Loss
         Args:
             predictions (tuple): A tuple containing loc preds, conf preds,
@@ -155,12 +166,76 @@ class MultiBoxLoss(nn.Module):
             ground_truth (tensor): Ground truth boxes and labels for a batch,
                 shape: [batch_size,num_objs,5] (last idx is the label).
         """
-        loc_data, conf_data, priors = predictions
+        self.check_targets(targets)
+        targets = self.copy_targets(targets)
+        
+        pred_boxes = inputs['boxes']
+        pred_scores = inputs['scores']
+        pred_priors = inputs['priors']
+
+        true_boxes = targets['boxes']
+        true_labels = targets['labels']
+
+        loc_data, conf_data, priors = inputs
+
         # batch_size
-        num = loc_data.size(0)
-        priors = priors[:loc_data.size(1), :]
-        num_priors = (priors.size(0))
-        num_classes = self.num_classes
+        bs = pred_boxes.size(0)
+        priors = pred_priors[:pred_boxes.size(1), :]
+        num_priors = priors.size(0)
+
+        # match priors (default boxes) and ground truth boxes
+        default_boxes = torch.zeros(bs, num_priors, 4)
+        default_scores = torch.zeros(bs, num_priors)
+
+        for i in range(bs):
+            _true_boxes = true_boxes[i]
+            _true_labels = true_labels[i]
+            Match(
+                threshold, _true_boxes, default_boxes, variance,
+                _true_labels, default_boxes, default_scores, i)
+        
+        default_boxes.requires_grad =False
+        default_scores.requires_grad = False
+
+        pos = default_scores > 0
+
+        pos_idx = pos.unsqueeze(pos.dim()).expand_as(pred_boxes)
+        _pred_boxes = pred_boxes[pos_idx].view(-1, 4)
+        _default_boxes = default_boxes[pos_idx].view(-1, 4)
+
+
+        loss_l = F.smooth_l1_loss(loc_p, loc_t, size_average=False) / N
+
+        batch_scores = pred_scores.view(-1, self.num_classes)
+
+        loss_c = log_sum_exp(batch_scores) - batch_scores.gather(1, default_scores.view(-1, 1))
+
+        # Hard Negative Mining
+        loss_c[pos] = 0  # filter out pos boxes for now
+        loss_c = loss_c.view(num, -1)
+        _, loss_idx = loss_c.sort(1, descending=True)
+        _, idx_rank = loss_idx.sort(1)
+        num_pos = pos.long().sum(1, keepdim=True)
+        num_neg = torch.clamp(self.negpos_ratio*num_pos, max=pos.size(1)-1)
+        neg = idx_rank < num_neg.expand_as(idx_rank)
+
+        # Confidence Loss Including Positive and Negative Examples
+        pos_idx = pos.unsqueeze(2).expand_as(conf_data)
+        neg_idx = neg.unsqueeze(2).expand_as(conf_data)
+        conf_p = conf_data[(pos_idx+neg_idx).gt(0)].view(-1, self.num_classes)
+        targets_weighted = conf_t[(pos+neg).gt(0)]
+        loss_class = F.cross_entropy(conf_p, targets_weighted, size_average=False) / N
+
+        # Sum of losses: L(x,c,l,g) = (Lconf(x, c) + αLloc(x,l,g)) / N
+
+        N = num_pos.data.sum()
+        loss_l /= N
+        loss_c /= N
+        losses = {
+            'loss_boxes': loss_boxes,
+            'loss_class': loss_class,
+        }
+        return losses
 
         # match priors (default boxes) and ground truth boxes
         loc_t = torch.Tensor(num, num_priors, 4)

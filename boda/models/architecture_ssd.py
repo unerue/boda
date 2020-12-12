@@ -15,13 +15,13 @@ EXTRA_LAYER_STRUCTURES = {
     'ssd300': [
         [(256, {'kernel_size': 1}), (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
         [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
-        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3})], 
+        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3})],
         [(128, {'kernel_size': 1}), (256, {'kernel_size': 3})]],
     'ssd512': [
-        [(256, {'kernel_size': 1}), (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
-        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
-        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
-        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride': 2, 'padding':  1})], 
+        [(256, {'kernel_size': 1}), (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
+        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
+        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
+        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride': 2, 'padding':  1})],
         [(128, {'kernel_size': 1})]]
 }
 
@@ -30,17 +30,18 @@ class SsdPredictNeck(nn.Module):
     def __init__(self, config, in_channels: int):
         super().__init__()
         self.config = config
+        self.out_channels = []
         self.norm = L2Norm(512, 10)
-        self.selected_layers = [3, 4]
-        self.extra_channels = []
-        self.extra_channels.append(in_channels)
-        self.extra_layers = nn.ModuleList()
-        self.in_channels = in_channels
-        
+
+        self.selected_layers = config.selected_layers
+        self.out_channels.append(in_channels)
+        self.layers = nn.ModuleList()  # layers or extra_layers?
+        self._in_channels = in_channels
+
         for cfg in extra_layers:
             self._add_extra_layer(cfg)
-        
-    def _add_extra_layer(self, config):
+
+    def _add_extra_layer(self, config, **kwargs):
         layers = []
         for v in config:
             kwargs = None
@@ -57,28 +58,40 @@ class SsdPredictNeck(nn.Module):
 
                 layers += [
                     nn.Conv2d(
-                        in_channels=self.in_channels, 
+                        in_channels=self._in_channels, 
                         out_channels=v,
                         **kwargs),
                     nn.ReLU()]
 
-                self.in_channels = v
+                self._in_channels = v
 
-        self.extra_channels.append(v)
-        self.extra_layers.append(nn.Sequential(*layers))
+        self.out_channels.append(v)
+        self.layers.append(nn.Sequential(*layers))
 
     def forward(self, inputs: List[Tensor]):
-        extra_layers = []
-        extra_layers.append(self.norm(inputs[-2]))
+        outputs = []
+        outputs.append(self.norm(inputs[-2]))
 
         output = inputs[-1]
-        for layer in self.extra_layers:
+        for layer in self.layers:
             output = layer(output)
-            extra_layers.append(output)
-        
-        self.config.grid_sizes = [e.size(-1) for e in extra_layers]
+            outputs.append(output)
 
-        return extra_layers
+        self.config.grid_sizes = [e.size(-1) for e in outputs]
+
+        return outputs
+
+
+def prior_cache(func):
+    cache = defaultdict()
+
+    @functools.wraps(func)
+    def wrapper(*args):
+        k, v = func(*args)
+        if k not in cache:
+            cache[k] = v
+        return k, cache[k]
+    return wrapper
 
 
 class PriorBox:
@@ -98,9 +111,10 @@ class PriorBox:
         for v in self.variance:
             if v <= 0:
                 raise ValueError('Variances must be greater than 0')
-
-    def forward(self):
-        mean = []
+    
+    @prior_cache
+    def generate(self):
+        prior_boxes = []
         for k, f in enumerate(self.feature_maps):
             for i, j in itertools.product(range(f), repeat=2):
                 f_k = self.max_size / self.steps[k]
@@ -111,19 +125,19 @@ class PriorBox:
                 # aspect_ratio: 1
                 # rel size: min_size
                 s_k = self.min_sizes[k] / self.max_size
-                mean += [cx, cy, s_k, s_k]
+                prior_boxes += [cx, cy, s_k, s_k]
 
                 # aspect_ratio: 1
                 # rel size: sqrt(s_k * s_(k+1))
                 s_k_prime = math.sqrt(s_k * (self.max_sizes[k]/self.max_size))
-                mean += [cx, cy, s_k_prime, s_k_prime]
+                prior_boxes += [cx, cy, s_k_prime, s_k_prime]
 
                 # rest of aspect ratios
-                for ar in self.aspect_ratios[k]:
-                    mean += [cx, cy, s_k*math.sqrt(ar), s_k/math.sqrt(ar)]
-                    mean += [cx, cy, s_k/math.sqrt(ar), s_k*math.sqrt(ar)]
+                for ratio in self.config.aspect_ratios[k]:
+                    prior_boxes += [cx, cy, s_k*math.sqrt(ratio), s_k/math.sqrt(ratio)]
+                    prior_boxes += [cx, cy, s_k/math.sqrt(ratio), s_k*math.sqrt(ratio)]
         # back to torch land
-        output = torch.Tensor(mean).view(-1, 4)
+        output = torch.tensor(prior_boxes).view(-1, 4)
         if self.clip:
             output.clamp_(max=1, min=0)
         
@@ -142,72 +156,94 @@ class L2Norm(nn.Module):
     def reset_parameters(self):
         torch.nn.init.constant_(self.weight, self.gamma)
 
-    def forward(self, x):
+    def forward(self, inputs):
         norm = x.pow(2).sum(dim=1, keepdim=True).sqrt() + self.eps
         #x /= norm
-        x = torch.div(x, norm)
-        out = self.weight.unsqueeze(0).unsqueeze(2).unsqueeze(3).expand_as(x) * x
-        return out
-
-
-
+        inputs = torch.div(inputs, norm)
+        outputs = self.weight.unsqueeze(0).unsqueeze(2).unsqueeze(3).expand_as(inputs) * inputs
+        return outputs
 
 
 class SsdPredictHead(nn.Module):
     def __init__(self, config, extra_channels):
         super().__init__()
         self.config = config
+        self.out_channels = []
+
         self.num_classes = config.num_classes + 1
         self.boxes = config.boxes
         self.extra_channels = extra_channels
         self.bbox_layers = nn.ModuleList()
         self.conf_layers = nn.ModuleList()
-        
-        self._multibox()
 
-    def _multibox(self):
+        self.prior_box = PriorBox(config)
+
+        self.bbox_layers = self._make_layer(4)
+        self.conf_layers = self._make_layer(config.num_classes + 1)
+        # self._make_layer()
+
+    # TODO: _make_layer or _add_predict_layer?
+    def _make_layer(self, out_channels):
+        _layers = []
         for i in range(len(self.extra_channels)):
-            self.bbox_layers += [
+            _layers += [
                 nn.Conv2d(
                     in_channels=self.extra_channels[i],
-                    out_channels=self.boxes[i] * 4, 
+                    out_channels=self.boxes[i] * out_channels, 
                     kernel_size=3,
                     padding=1)]
+        
+        return nn.Sequential(*_layers)
 
-            self.conf_layers += [
-                nn.Conv2d(
-                    in_channels=self.extra_channels[i],
-                    out_channels=self.boxes[i] * self.num_classes, 
-                    kernel_size=3,
-                    padding=1)]
+    # def _make_layer(self):
+    #     layers = []
+    #     for i in range(len(self.extra_channels)):
+    #         self.bbox_layers += [
+    #             nn.Conv2d(
+    #                 in_channels=self.extra_channels[i],
+    #                 out_channels=self.boxes[i] * 4, 
+    #                 kernel_size=3,
+    #                 padding=1)]
 
-    def forward(self, inputs):
-        bbox_layers = []
-        print(len(self.bbox_layers), len(self.conf_layers))
+    #         self.conf_layers += [
+    #             nn.Conv2d(
+    #                 in_channels=self.extra_channels[i],
+    #                 out_channels=self.boxes[i] * self.num_classes, 
+    #                 kernel_size=3,
+    #                 padding=1)]
+
+    def forward(self, inputs: Tensor) -> Dict[str, Tensor]:
+        bbox = []
+        conf = []
+    
         for bbox_layer, output in zip(self.bbox_layers, inputs):
             output = bbox_layer(output)
-            bbox_layers.append(output)
+            bbox.append(output)
 
-        conf_layers = []
         for conf_layer, output in zip(self.conf_layers, inputs):
             output = conf_layer(output)
-            conf_layers.append(output)
+            conf.append(output)
 
-        prior_box = PriorBox(self.config)
-        priors = torch.Tensor(prior_box.forward())
+        priors = prior_box.generate()  # priors or prior_boxes?
         print(priors)
         print(priors.size())
         print(bbox_layers[0].size())
-        loc = torch.cat([o.view(o.size(0), -1) for o in bbox_layers], 1)
-        conf = torch.cat([o.view(o.size(0), -1) for o in conf_layers], 1)
+        bbox = torch.cat([o.view(o.size(0), -1) for o in bbox], 1)
+        conf = torch.cat([o.view(o.size(0), -1) for o in conf], 1)
         
         
-        print(loc.size())
+        print(bbox.size())
         print(conf.size())
-        loc = loc.view(loc.size(0), -1, 4)
-        conf = conf.view(conf.size(0), -1, self.num_classes)
-        print(loc.size(), conf.size())
-        return bbox_layers, conf_layers, prior_box
+        boxes = bbox.view(bbox.size(0), -1, 4)
+        scores = conf.view(conf.size(0), -1, self.num_classes)
+        print(bbox.size(), conf.size())
+
+        preds = {
+            'boxes': boxes,
+            'scores': scores,
+            'priors': priors}
+
+        return preds
 
 
 class SsdModel(BaseModel):
@@ -225,7 +261,7 @@ class SsdModel(BaseModel):
         self.config = config
         self.backbone = vgg16()
         self.neck = SsdPredictNeck(config, self.backbone.channels[-1])
-        self.head = SsdPredictHead(config, self.neck.extra_channels)
+        self.head = SsdPredictHead(config, self.neck.out_channels)
 
     def forward(self, inputs):
         outputs = self.backbone(inputs)
@@ -241,29 +277,29 @@ class SsdModel(BaseModel):
 
 
 
-extra_layers = [
-    # [('M', {'kernel_size': 3, 'stride':  1, 'padding':  1}),
-    #  (1024, {'kernel_size': 3, 'padding': 6, 'dilation': 6}), 
-    #  (1024, {'kernel_size': 1})], 
-    [(256, {'kernel_size': 1}), 
-     (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
-    [(128, {'kernel_size': 1}), 
-     (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
-    [(128, {'kernel_size': 1}), 
-     (256, {'kernel_size': 3})], 
-    [(128, {'kernel_size': 1}), 
-     (256, {'kernel_size': 3})]]
+# extra_layers = [
+#     # [('M', {'kernel_size': 3, 'stride':  1, 'padding':  1}),
+#     #  (1024, {'kernel_size': 3, 'padding': 6, 'dilation': 6}), 
+#     #  (1024, {'kernel_size': 1})], 
+#     [(256, {'kernel_size': 1}), 
+#      (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
+#     [(128, {'kernel_size': 1}), 
+#      (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
+#     [(128, {'kernel_size': 1}), 
+#      (256, {'kernel_size': 3})], 
+#     [(128, {'kernel_size': 1}), 
+#      (256, {'kernel_size': 3})]]
 
-layers512 = [
-    [(256, {'kernel_size': 1}), 
-     (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
-    [(128, {'kernel_size': 1}), 
-     (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
-    [(128, {'kernel_size': 1}), 
-     (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
-    [(128, {'kernel_size': 1}), 
-     (256, {'kernel_size': 3, 'stride': 2, 'padding':  1})], 
-    [(128, {'kernel_size': 1})]]
+# layers512 = [
+#     [(256, {'kernel_size': 1}), 
+#      (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
+#     [(128, {'kernel_size': 1}), 
+#      (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
+#     [(128, {'kernel_size': 1}), 
+#      (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
+#     [(128, {'kernel_size': 1}), 
+#      (256, {'kernel_size': 3, 'stride': 2, 'padding':  1})], 
+#     [(128, {'kernel_size': 1})]]
 
 
 
