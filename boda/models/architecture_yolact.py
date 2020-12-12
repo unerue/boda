@@ -4,13 +4,13 @@ import itertools
 import functools
 from collections import defaultdict
 from collections import OrderedDict
-from typing import Tuple, List, Dict, Any, Callable, TypeVar
+from typing import Tuple, List, Dict, Any, Callable, TypeVar, Union
 
 import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 
-from ..architecture_base import Neck, Head, PretrainedModel
+from ..architecture_base import Neck, Head, Model
 from .configuration_yolact import YolactConfig
 from .backbone_resnet import resnet101
 # from ..architecture_base import Register
@@ -25,7 +25,9 @@ class YolactPredictNeck(Neck):
     def __init__(self, config, in_channels: List[int]) -> None:
         super().__init__()
         self.config = config
-        _selected_layers = list(range(len(config.selected_layers) + config.num_downsamples))
+        _selected_layers = list(range(len(config.selected_layers)
+                                + config.num_downsamples))
+        # TODO: channels or out_channels?
         self.channels = [config.fpn_out_channels] * len(_selected_layers)
 
         self.lateral_layers = nn.ModuleList([
@@ -89,7 +91,12 @@ def prior_cache(func):
 
 
 class PriorBox:
-    def __init__(self, config, aspect_ratios: List[int], scales: List[float]) -> None:
+    def __init__(
+        self,
+        config,
+        aspect_ratios: List[int],
+        scales: List[float]
+    ) -> None:
         self.config = config
         self.aspect_ratios = aspect_ratios
         self.scales = scales
@@ -133,17 +140,18 @@ class ProtoNet(nn.Sequential):
         config ()
         in_channels ()
         layers ()
-        include_last_relu ()        
+        include_last_relu ()
     """
     def __init__(
         self,
         config,
         in_channels: int,
         layers: List,
-        include_last_relu: bool = True) -> None:
+        include_last_relu: bool = True
+    ) -> None:
         self.config = config
         self.channels = []
-
+        # TODO: mask_layers or _layers?
         mask_layers = OrderedDict()
         for i, v in enumerate(layers):
             if isinstance(v[0], int):
@@ -153,7 +161,10 @@ class ProtoNet(nn.Sequential):
 
             elif v[0] is None:
                 mask_layers[f'{i}'] = nn.Upsample(
-                    scale_factor=-v[1], mode='bilinear', align_corners=False, **v[2])
+                    scale_factor=-v[1],
+                    mode='bilinear',
+                    align_corners=False,
+                    **v[2])
 
         if include_last_relu:
             mask_layers[f'relu{len(mask_layers)+1}'] = nn.ReLU()
@@ -181,7 +192,8 @@ class YolactPredictHead(Head):
         aspect_ratios: List[int],
         scales: List[float],
         parent,
-        index: int) -> None:
+        index: int
+    ) -> None:
         super().__init__()
         self.config = config
         self.prior_box = PriorBox(config, aspect_ratios, scales)
@@ -216,7 +228,8 @@ class YolactPredictHead(Head):
         self,
         num_extra_layers: int,
         in_channels: int,
-        out_channels: int) -> nn.Sequential:
+        out_channels: int
+    ) -> nn.Sequential:
         _predict_layers = []
         if num_extra_layers > 0:
             for _ in range(num_extra_layers):
@@ -257,15 +270,22 @@ class YolactPretrained(Model):
     config_class = YolactConfig
     base_model_prefix = 'yolact'
 
-    # @classmethod
-    # def from_pretrained(cls, model_name_or_path):
-    #     print('Loading model!')
-    #     config, model_kwargs = cls.config_class.from_pretrained(model_name_or_path)
-    #     config = YolactConfig()
-    #     model = YolactModel(config)
-    #     model.state_dict(torch.load('yolact.pth'))
+    @classmethod
+    def from_pretrained(cls, name_or_path: Union[str, os.PathLike]):
+        config = cls.config_class.from_pretrained(name_or_path)
+        model = YolactModel(config)
+        # model.state_dict(torch.load('yolact.pth'))
+        return model
 
-    #     return model
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=0.1)
+        elif isinstance(module, nn.BatchNorm2d):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        if isinstance(module, nn.Linear) and module.bias is not None:
+            module.bias.data.zero_()
 
 
 class YolactModel(YolactPretrained):
@@ -291,7 +311,9 @@ class YolactModel(YolactPretrained):
         config,
         backbone=None,
         neck=None,
-        head=None) -> None:
+        head=None,
+        **kwargs
+    ) -> None:
         super().__init__(config)
         self.config = config
 

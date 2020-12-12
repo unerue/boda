@@ -4,9 +4,9 @@ from ..configuration_base import BaseConfig
 
 
 YOLACT_PRETRAINED_CONFIG = {
-    'yolact550-base': None,
-    'yolact300': None,
-    'yolact700': None,
+    'yolact-base': 'https://drive.google.com/file/d/1i_Wqc4gxY_u4F7sn2kVbpmce5iQRxMKm/view?usp=sharing',
+    'yolact-300': '',
+    'yolact-700': '',
 }
 
 
@@ -14,11 +14,10 @@ class YolactConfig(BaseConfig):
     """Configuration for YOLACT
 
     Arguments:
-        max_size ():
-        padding ():
-        proto_net_structure (List):
+        max_size (Union[int, Tuple[int]]):
+        num_classes (int):
     """
-    config_name = 'yolact550-base'
+    model_name = 'yolact'
 
     def __init__(
         self,

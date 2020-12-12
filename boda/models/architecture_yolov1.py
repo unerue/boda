@@ -1,8 +1,7 @@
-import sys
-from typing import Tuple, List, Dict, Any
+import os
+from typing import Tuple, List, Dict, Any, Union
 from collections import OrderedDict
 
-import numpy as np
 import torch
 from torch import nn, Tensor
 
@@ -15,26 +14,43 @@ class Yolov1PredictNeck(Neck):
     """Prediction Neck for YOLOv1
     Arguments:
         in_channels (int):
+
+    Keyword Arguments:
+        bn (bool)
+        relu (bool)
     """
-    def __init__(self, config, in_channels: int, **kwargs) -> None:
+    def __init__(self, config, in_channels: int = 1024, **kwargs) -> None:
         """
         """
         super().__init__()
         self.config = config
         self.out_channels = []
+        self.selected_layers = config.selected_layers
+        if isinstance(self.selected_layers, list):
+            self.selected_layers = self.selected_layers[0] 
 
         self._in_channels = in_channels
-        self.layers = nn.ModuleList()  # TODO: layers or extra_layers?
+        # TODO: layers or extra_layers?
+        # neck_layers? what the...
+        self.layers = nn.ModuleList()
 
-        self._add_extra_layer(1024, config.bn, config.relu)
-        self._add_extra_layer(1024, config.bn, config.relu)
-        self._add_extra_layer(1024, config.bn, config.relu)
-        self._add_extra_layer(1024, config.bn, config.relu)
+        self._add_extra_layer(in_channels, config.bn, config.relu)
+        self._add_extra_layer(in_channels, config.bn, config.relu)
+        self._add_extra_layer(in_channels, config.bn, config.relu)
+        self._add_extra_layer(in_channels, config.bn, config.relu)
 
-    def _add_extra_layer(self, out_channels, bn: bool = False, relu: bool = False, **kwargs):
+    def _add_extra_layer(
+        self,
+        out_channels,
+        bn: bool = False,
+        relu: bool = False,
+        **kwargs
+    ) -> None:
         _layers = []
         _layers.append(
-            nn.Conv2d(self._in_channels, out_channels, kernel_size=3, padding=1, **kwargs))
+            nn.Conv2d(
+                self._in_channels, out_channels,
+                kernel_size=3, padding=1, **kwargs))
 
         if bn:
             _layers.append(nn.BatchNorm2d(out_channels))
@@ -50,12 +66,13 @@ class Yolov1PredictNeck(Neck):
 
     def forward(self, inputs: List[Tensor]) -> Tensor:
         """
-            inputs (List[Tensor]): 
+        Arguments:
+            inputs (List[Tensor]):
 
         Return:
             (Tensor): Size([])
         """
-        inputs = inputs[self.config.selected_layers[0]]
+        inputs = inputs[self.selected_layers]
         for layer in self.layers:
             inputs = layer(inputs)
 
@@ -64,26 +81,34 @@ class Yolov1PredictNeck(Neck):
 
 class Yolov1PredictHead(Head):
     """Prediction Neck for YOLOv1
+
     Arguments:
-        selected_layers (List[float]):
-        scales (List[float]):
+        config
+        in_channles (int):
+        out_channels (int):
+        relu (bool):
     """
     def __init__(
         self,
         config,
         in_channels: int = 1024,
+        out_channels: int = 4006,
         relu: bool = False,
         **kwargs
     ) -> None:
         super().__init__()
         self.config = config
-        self.out_channels = []
+        self.out_channels = []  # TODO: out_channels? channels?
 
         self._out_channels = 5 * config.num_boxes + config.num_classes
         self.layers = nn.Sequential(
-            nn.Linear(config.num_grids * config.num_grids * in_channels, 4096),
+            nn.Linear(
+                config.num_grids * config.num_grids * in_channels,
+                out_channels),
             nn.LeakyReLU(0.1) if not relu else nn.ReLU(),
-            nn.Linear(4096, config.num_grids * config.num_grids * self._out_channels),
+            nn.Linear(
+                out_channels,
+                config.num_grids * config.num_grids * self._out_channels),
             nn.Sigmoid())
 
     def forward(self, inputs: Tensor) -> Dict[str, Tensor]:
@@ -99,9 +124,11 @@ class Yolov1PredictHead(Head):
         bs = inputs.size(0)
         inputs = inputs.view(bs, -1)
         outputs = self.layers(inputs)
-        outputs = outputs.view(-1, self.config.num_grids, self.config.num_grids, self._out_channels)
+        outputs = outputs.view(
+            -1, self.config.num_grids, self.config.num_grids, self._out_channels)
 
-        outputs = outputs.view(bs, -1, 5*self.config.num_boxes+self.config.num_classes)
+        outputs = outputs.view(
+            bs, -1, 5*self.config.num_boxes+self.config.num_classes)
 
         boxes = outputs[..., :5*self.config.num_boxes].contiguous().view(bs, -1, 5)
         scores = boxes[..., 4]
@@ -122,7 +149,7 @@ class Yolov1Pretrained(Model):
     base_model_prefix = 'yolov1'
 
     @classmethod
-    def from_pretrained(cls, name_or_path):
+    def from_pretrained(cls, name_or_path: Union[str, os.PathLike]):
         config = cls.config_class.from_pretrained(name_or_path)
         model = Yolov1Model(config)
         # model.state_dict(torch.load('yolact.pth'))

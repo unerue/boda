@@ -11,8 +11,8 @@ from torchsummary import summary
 from boda.utils.timer import Timer
 
 
-# model = darknet21()
-# print(summary(model, input_data=(3, 448, 448), verbose=0))
+model = darknet()
+print(summary(model, input_data=(3, 448, 448), verbose=0))
 
 model = Yolov1Model.from_pretrained('yolov1-base')
 print(summary(model, input_data=(3, 448, 448), verbose=0))

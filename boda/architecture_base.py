@@ -61,10 +61,9 @@ class ModelMixin(ABC):
     _checked_inputs: bool = True
 
     def __init__(self, config, **kwargs):
-        # super().__init__()
-        pass
+        ...
 
-    def init_architecture(self, config):
+    def initialize(self, config, backbone, neck, head):
         pass
 
     @classmethod
@@ -111,7 +110,11 @@ class Model(nn.Module, ModelMixin):
     #     return getattr(self, self.base_model_prefix, self)
 
     @classmethod
-    def from_pretrained(cls, model_name_or_path: Union[str, os.PathLike], **kwargs):
+    def from_pretrained(
+        cls,
+        model_name_or_path: Union[str, os.PathLike],
+        **kwargs
+    ):
         raise NotImplementedError
 
     # def load_weights(self, path):
