@@ -8,6 +8,7 @@ from boda.models.architecture_yolov1 import Yolov1Model
 from boda.models.loss_yolov1 import Yolov1Loss
 from boda.utils.parser import CocoDataset
 from torchsummary import summary
+from boda.utils.timer import Timer
 
 
 # model = darknet21()
@@ -19,12 +20,20 @@ criterion = Yolov1Loss(config)
 optimizer = optim.SGD(model.parameters(), 0.001)
 
 
+# with Timer('start'):
+#     config = Yolov1Config()
+#     model = Yolov1Model(config).to('cuda')
+#     criterion = Yolov1Loss(config)
+#     optimizer = optim.SGD(model.parameters(), 0.001)
+
+
 def collate_fn(batch):
     return tuple(zip(*batch))
 
 
 coco_dataset = CocoDataset(
-    './benchmarks/samples/', './benchmarks/samples/annotations.json')
+    './benchmarks/dataset/train', 
+    './benchmarks/dataset/train/annotations.json')
 # coco_dataset[10]
 train_loader = DataLoader(
     coco_dataset,

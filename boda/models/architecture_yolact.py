@@ -13,7 +13,7 @@ import torch.nn.functional as F
 from ..architecture_base import Neck, Head, PretrainedModel
 from .configuration_yolact import YolactConfig
 from .backbone_resnet import resnet101
-from ..architecture_base import Register
+# from ..architecture_base import Register
 
 
 class YolactPredictNeck(Neck):
@@ -252,7 +252,6 @@ class YolactPredictHead(Head):
         return bbox, conf, mask, priors
 
 
-@Register.register
 class YolactPretrained(Model):
     config_class = YolactConfig
     base_model_prefix = 'yolact'
