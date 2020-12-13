@@ -1,4 +1,5 @@
 import math
+import numpy as np
 
 import torch
 from torch import nn, Tensor
@@ -39,7 +40,6 @@ def gcxywh_to_xyxy(boxes: Tensor) -> Tensor:
     return xyxy
 
 
-
 def intersect(box_a: Tensor, box_b: Tensor) -> Tensor:
     """ We resize both tensors to [A,B,2] without new malloc:
     [A,2] -> [A,1,2] -> [A,B,2]
@@ -63,6 +63,13 @@ def intersect(box_a: Tensor, box_b: Tensor) -> Tensor:
         box_b[:, :, :2].unsqueeze(1).expand(n, A, B, 2))
 
     return torch.clamp(max_xy - min_xy, min=0).prod(3)  # inter
+
+
+def intersect_numpy(box_a, box_b):
+    max_xy = np.minimum(box_a[:, 2:], box_b[2:])
+    min_xy = np.maximum(box_a[:, :2], box_b[:2])
+    inter = np.clip((max_xy - min_xy), a_min=0, a_max=np.inf)
+    return inter[:, 0] * inter[:, 1]
 
 
 def jaccard(box_a: Tensor, box_b: Tensor, iscrowd: bool = False) -> Tensor:
@@ -95,6 +102,26 @@ def jaccard(box_a: Tensor, box_b: Tensor, iscrowd: bool = False) -> Tensor:
     out = inter / area_a if iscrowd else inter / union
 
     return out if use_batch else out.squeeze(0)
+
+
+def jaccard_numpy(box_a, box_b):
+    """Compute the jaccard overlap of two sets of boxes.  The jaccard overlap
+    is simply the intersection over union of two boxes.
+    E.g.:
+        A ∩ B / A ∪ B = A ∩ B / (area(A) + area(B) - A ∩ B)
+    Args:
+        box_a: Multiple bounding boxes, Shape: [num_boxes,4]
+        box_b: Single bounding box, Shape: [4]
+    Return:
+        jaccard overlap: Shape: [box_a.shape[0], box_a.shape[1]]
+    """
+    inter = intersect(box_a, box_b)
+    area_a = ((box_a[:, 2]-box_a[:, 0]) *
+              (box_a[:, 3]-box_a[:, 1]))  # [A,B]
+    area_b = ((box_b[2]-box_b[0]) *
+              (box_b[3]-box_b[1]))  # [A,B]
+    union = area_a + area_b - inter
+    return inter / union  # [A,B]
 
 
 def elemwise_box_iou(box_a, box_b):

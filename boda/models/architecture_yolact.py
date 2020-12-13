@@ -13,7 +13,6 @@ import torch.nn.functional as F
 from ..architecture_base import Neck, Head, Model
 from .configuration_yolact import YolactConfig
 from .backbone_resnet import resnet101
-# from ..architecture_base import Register
 
 
 class YolactPredictNeck(Neck):
@@ -102,7 +101,7 @@ class PriorBox:
         self.scales = scales
 
     @prior_cache
-    def generate(self, h, w):
+    def generate(self, h: int, w: int) -> Tuple[int, Tensor]:
         size = (h, w)
         prior_boxes = []
         for j, i in itertools.product(range(h), range(w)):
@@ -127,7 +126,7 @@ class PriorBox:
 
                         prior_boxes += [x, y, w, h]
 
-        priors = torch.Tensor(prior_boxes).view(-1, 4)
+        priors = torch.as_tensor(prior_boxes).view(-1, 4)
         priors.requires_grad = False
 
         return size, priors
@@ -191,7 +190,7 @@ class YolactPredictHead(Head):
         out_channels: int,
         aspect_ratios: List[int],
         scales: List[float],
-        parent,
+        parent: nn.Module,
         index: int
     ) -> None:
         super().__init__()
@@ -205,7 +204,8 @@ class YolactPredictHead(Head):
             if config.extra_head_net is None:
                 out_channels = in_channels
             else:
-                self.upfeature = ProtoNet(config, in_channels, config.extra_head_net)
+                self.upfeature = ProtoNet(
+                    config, in_channels, config.extra_head_net)
                 out_channels = self.upfeature.channels[-1]
 
             self.bbox_layers = self._add_predict_layer(

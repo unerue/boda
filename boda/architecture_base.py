@@ -1,5 +1,5 @@
 import os
-from abc import ABC, abstractmethod, ABCMeta
+from abc import ABC, abstractmethod
 from typing import Tuple, List, Dict, Union
 
 import torch
@@ -11,6 +11,7 @@ class Backbone(nn.Module):
 
     def __init__(self):
         super().__init__()
+        self.channels: List[int] = []
 
     def forward(self, inputs: Tensor) -> List[Tensor]:
         raise NotImplementedError
@@ -33,8 +34,14 @@ class Backbone(nn.Module):
 
 
 class Neck(nn.Module):
+    neck_type: str = ''
+
     def __init__(self):
         super().__init__()
+        self.channels: List[int] = []
+
+    def _add_extra_layer(self):
+        raise NotImplementedError
 
     def eager_outputs(self, *args):
         raise NotImplementedError
@@ -46,6 +53,10 @@ class Neck(nn.Module):
 class Head(nn.Module):
     def __init__(self):
         super().__init__()
+        self.channels: List[int] = []
+
+    def _add_predict_layer(self):
+        raise NotImplementedError
 
     def eager_outputs(self, *args):
         raise NotImplementedError
