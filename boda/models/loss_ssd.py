@@ -3,6 +3,7 @@ from torch import nn, Tensor
 import torch.nn.functional as F
 
 from ..architecture_base import LossFunction
+from ..utils.bbox import jaccard
 
 
 class Matcher:
@@ -39,8 +40,8 @@ class Matcher:
         # jaccard index
         overlaps = jaccard(
             truths,
-            point_form(priors)
-        )
+            point_form(priors))
+
         # (Bipartite Matching)
         # [1,num_objects] best prior for each ground truth
         best_prior_overlap, best_prior_idx = overlaps.max(1, keepdim=True)
@@ -120,6 +121,7 @@ def log_sum_exp(x):
 
 class SsdLoss(LossFunction):
     """SSD Weighted Loss Function
+
     Compute Targets:
         1) Produce Confidence Target Indices by matching  ground truth boxes
            with (default) 'priorboxes' that have jaccard index > threshold parameter
@@ -129,6 +131,7 @@ class SsdLoss(LossFunction):
         3) Hard negative mining to filter the excessive number of negative examples
            that comes with using a large number of default bounding boxes.
            (default negative:positive ratio 3:1)
+
     Objective Loss:
         L(x,c,l,g) = (Lconf(x, c) + αLloc(x,l,g)) / N
         Where, Lconf is the CrossEntropy Loss and Lloc is the SmoothL1 Loss

@@ -5,9 +5,8 @@ import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 
-from torchsummary import summary
+from ..architecture_base import Backbone
 
-from ..base import Backbone
 
 class VGG(nn.Module):
     """
@@ -15,18 +14,20 @@ class VGG(nn.Module):
     https://github.com/pytorch/vision/blob/master/torchvision/models/vgg.py
     https://github.com/dbolya/yolact/blob/master/backbone.py
     """
-    def __init__(self, config, bn: bool = False, num_classes: int = 1000):
+    def __init__(
+        self,
+        structure,
+        bn: bool = False,
+        num_classes: int = 1000
+    ) -> None:
         super().__init__()
         self.bn = bn
         self.in_channels = 3
         self.channels = []
         self.layers = nn.ModuleList()
 
-        for cfg in config:
-            self._make_layer(cfg)
-
-        self.avgpool = nn.AvgPool2d((7, 7))
-        self.fc = None
+        for layer in structure:
+            self._make_layer(layer)
 
     def forward(self, inputs):
         outputs = []
@@ -37,7 +38,7 @@ class VGG(nn.Module):
         return outputs
 
     def _make_layer(self, config):
-        layers = []
+        _layers = []
         for v in config:
             kwargs = None
             if isinstance(v, tuple):
@@ -48,7 +49,7 @@ class VGG(nn.Module):
                 if kwargs is None:
                     kwargs = {'kernel_size': 2, 'stride': 2}
 
-                layers.append(nn.MaxPool2d(**kwargs))
+                _layers.append(nn.MaxPool2d(**kwargs))
             else:
                 if kwargs is None:
                     kwargs = {'kernel_size': 3, 'padding': 1}
@@ -59,55 +60,26 @@ class VGG(nn.Module):
                     **kwargs)
 
                 if self.bn:
-                    layers += [conv2d, nn.BatchNorm2d(v), nn.ReLU()]
+                    _layers += [conv2d, nn.BatchNorm2d(v), nn.ReLU()]
                 else:
-                    layers += [conv2d, nn.ReLU()]
+                    _layers += [conv2d, nn.ReLU()]
 
                 self.in_channels = v
 
         self.channels.append(self.in_channels)
-        self.layers.append(nn.Sequential(*layers))
+        self.layers.append(nn.Sequential(*_layers))
 
-
-cfg = {
-    'vgg11': [64, 'M', 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
-    'vgg13': [64, 64, 'M', 128, 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
-    'vgg16': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M'],
-    'vgg19': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 256, 'M', 512, 512, 512, 512, 'M', 512, 512, 512, 512, 'M'],
-}
 
 structures = {
-        'vgg11': [64, 'M', 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
-        'vgg13': [64, 64, 'M', 128, 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
-        'vgg16': [[64, 64],
-              [ 'M', 128, 128],
-              [ 'M', 256, 256, 256],
-              [('M', {'kernel_size': 2, 'stride': 2, 'ceil_mode': True}), 512, 512, 512],
-              [ 'M', 512, 512, 512],
-              [('M',  {'kernel_size': 3, 'stride':  1, 'padding':  1}),
-               (1024, {'kernel_size': 3, 'padding': 6, 'dilation': 6}),
-               (1024, {'kernel_size': 1})]],
-        'vgg19': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 256, 'M', 512, 512, 512, 512, 'M', 512, 512, 512, 512, 'M'],
-        'test': [
-    [64, 64],
-    ['M', 128, 128],
-    ['M', 256, 256, 256],
-    [('M', {'kernel_size': 2, 'stride': 2, 'ceil_mode': True}), 512, 512, 512],
-    ['M', 512, 512, 512]],
+    'vgg16': [
+        [64, 64],
+        ['M', 128, 128],
+        ['M', 256, 256, 256],
+        [('M', {'kernel_size': 2, 'stride': 2, 'ceil_mode': True}), 512, 512, 512],
+        ['M', 512, 512, 512]]}
 
-    'test1': [
-    [64, 64],
-    [ 'M', 128, 128],
-    [ 'M', 256, 256, 256],
-    [('M', {'kernel_size': 2, 'stride': 2, 'ceil_mode': True}), 512, 512, 512],
-    [ 'M', 512, 512, 512],
-    [('M',  {'kernel_size': 3, 'stride':  1, 'padding':  1}),
-     (1024, {'kernel_size': 3, 'padding': 6, 'dilation': 6}),
-     (1024, {'kernel_size': 1})]
-]
-}
 
 def vgg16(config: Dict = None):
-    model = VGG(structures['test'])
+    model = VGG(structures['vgg16'])
 
     return model
