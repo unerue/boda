@@ -1,48 +1,71 @@
 import os
 import math
-from typing import List
+import functools
+from collections import defaultdict
+from typing import List, Dict, Union
 import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 
 import itertools 
-from .architecture_base import BaseModel
-from ..base import Neck, Head, Model
+from ..architecture_base import Neck, Head, Model
+from .configuration_ssd import SsdConfig
 from .backbone_vgg import vgg16
 
 
-EXTRA_LAYER_STRUCTURES = {
-    'ssd300': [
-        [(256, {'kernel_size': 1}), (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
-        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
-        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3})],
-        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3})]],
-    'ssd512': [
-        [(256, {'kernel_size': 1}), (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
-        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
-        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
-        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride': 2, 'padding':  1})],
-        [(128, {'kernel_size': 1})]]
-}
+class L2Norm(nn.Module):
+    def __init__(
+        self,
+        in_channels: int = 512,
+        gamma: int = 10,
+        eps: float = 1e-10,
+    ) -> None:
+        super().__init__()
+        self.in_channels = in_channels
+        self.gamma = gamma
+        self.eps = eps
+        self.weight = nn.Parameter(torch.Tensor(in_channels))
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        torch.nn.init.constant_(self.weight, self.gamma)
+
+    def forward(self, inputs):
+        norm_inputs = inputs.pow(2).sum(dim=1, keepdim=True).sqrt() + self.eps
+        inputs = torch.div(inputs, norm_inputs)  # x /= norm_x
+        outputs = self.weight.unsqueeze(0).unsqueeze(2).unsqueeze(3).expand_as(inputs) * inputs
+        return outputs
 
 
-class SsdPredictNeck(nn.Module):
-    def __init__(self, config, in_channels: int):
+class SsdPredictNeck(Neck):
+    """Prediction Neck for SSD
+
+    Arguments:
+        config
+        in_channels (int):
+    """
+    def __init__(
+        self,
+        config,
+        in_channels: int,
+        extra_layers: Dict[str, List]
+    ) -> None:
         super().__init__()
         self.config = config
-        self.out_channels = []
-        self.norm = L2Norm(512, 10)
+        self.channels = []
+        self.channels.append(in_channels)
 
+        self.norm = L2Norm(512, 10)
         self.selected_layers = config.selected_layers
-        self.out_channels.append(in_channels)
-        self.layers = nn.ModuleList()  # layers or extra_layers?
+        self.extra_layers = nn.ModuleList()  # layers or extra_layers?
         self._in_channels = in_channels
 
-        for cfg in extra_layers:
-            self._add_extra_layer(cfg)
+        # TODO: rename variable
+        for layer in extra_layers:
+            self._add_extra_layer(layer)
 
     def _add_extra_layer(self, config, **kwargs):
-        layers = []
+        _layers = []
         for v in config:
             kwargs = None
             if isinstance(v, tuple):
@@ -51,12 +74,12 @@ class SsdPredictNeck(nn.Module):
             print(self.in_channels, v, kwargs)
 
             if v == 'M':
-                layers.append(nn.MaxPool2d(**kwargs))
+                _layers.append(nn.MaxPool2d(**kwargs))
             else:
                 if kwargs is None:
                     kwargs = {'kernel_size': 1}
 
-                layers += [
+                _layers += [
                     nn.Conv2d(
                         in_channels=self._in_channels, 
                         out_channels=v,
@@ -65,8 +88,8 @@ class SsdPredictNeck(nn.Module):
 
                 self._in_channels = v
 
-        self.out_channels.append(v)
-        self.layers.append(nn.Sequential(*layers))
+        self.channels.append(v)
+        self.extra_layers.append(nn.Sequential(*_layers))
 
     def forward(self, inputs: List[Tensor]):
         outputs = []
@@ -95,7 +118,9 @@ def prior_cache(func):
 
 
 class PriorBox:
-    """Compute priorbox coordinates in center-offset form for each source
+    """Prior Box
+    
+    Compute priorbox coordinates in center-offset form for each source
     feature map.
     """
     def __init__(self, config, feature_maps=None):
@@ -137,31 +162,11 @@ class PriorBox:
                     prior_boxes += [cx, cy, s_k*math.sqrt(ratio), s_k/math.sqrt(ratio)]
                     prior_boxes += [cx, cy, s_k/math.sqrt(ratio), s_k*math.sqrt(ratio)]
         # back to torch land
-        output = torch.tensor(prior_boxes).view(-1, 4)
+        prior_boxes = torch.tensor(prior_boxes).view(-1, 4)
         if self.clip:
-            output.clamp_(max=1, min=0)
-        
-        return output
+            prior_boxes.clamp_(max=1, min=0)
 
-
-class L2Norm(nn.Module):
-    def __init__(self, n_channels, scale):
-        super().__init__()
-        self.n_channels = n_channels
-        self.gamma = scale or None
-        self.eps = 1e-10
-        self.weight = nn.Parameter(torch.Tensor(self.n_channels))
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        torch.nn.init.constant_(self.weight, self.gamma)
-
-    def forward(self, inputs):
-        norm = x.pow(2).sum(dim=1, keepdim=True).sqrt() + self.eps
-        #x /= norm
-        inputs = torch.div(inputs, norm)
-        outputs = self.weight.unsqueeze(0).unsqueeze(2).unsqueeze(3).expand_as(inputs) * inputs
-        return outputs
+        return prior_boxes
 
 
 class SsdPredictHead(nn.Module):
@@ -213,30 +218,29 @@ class SsdPredictHead(nn.Module):
     #                 padding=1)]
 
     def forward(self, inputs: Tensor) -> Dict[str, Tensor]:
-        bbox = []
-        conf = []
-    
+        boxes = []
+        scores = []
         for bbox_layer, output in zip(self.bbox_layers, inputs):
             output = bbox_layer(output)
-            bbox.append(output)
+            boxes.append(output)
 
         for conf_layer, output in zip(self.conf_layers, inputs):
             output = conf_layer(output)
-            conf.append(output)
+            scores.append(output)
 
-        priors = prior_box.generate()  # priors or prior_boxes?
+        priors = self.prior_box.generate()  # priors or prior_boxes?
         print(priors)
         print(priors.size())
-        print(bbox_layers[0].size())
-        bbox = torch.cat([o.view(o.size(0), -1) for o in bbox], 1)
-        conf = torch.cat([o.view(o.size(0), -1) for o in conf], 1)
+        print(self.bbox_layers[0].size())
+        boxes = torch.cat([box.view(box.size(0), -1) for box in boxes], 1)
+        scores = torch.cat([score.view(score.size(0), -1) for score in scores], 1)
         
         
-        print(bbox.size())
-        print(conf.size())
-        boxes = bbox.view(bbox.size(0), -1, 4)
-        scores = conf.view(conf.size(0), -1, self.num_classes)
-        print(bbox.size(), conf.size())
+        print(boxes.size())
+        print(scores.size())
+        boxes = boxes.view(boxes.size(0), -1, 4)
+        scores = scores.view(scores.size(0), -1, self.num_classes)
+        print(boxes.size(), scores.size())
 
         preds = {
             'boxes': boxes,
@@ -246,7 +250,19 @@ class SsdPredictHead(nn.Module):
         return preds
 
 
-class SsdModel(BaseModel):
+class SsdPretrained(Model):
+    config_class = SsdConfig
+    base_model_prefix = 'ssd'
+
+    @classmethod
+    def from_pretrained(cls, name_or_path: Union[str, os.PathLike]):
+        config = cls.config_class.from_pretrained(name_or_path)
+        model = SsdModel(config)
+
+        return model
+
+
+class SsdModel(SsdPretrained):
     """
      ██████╗  ██████╗ ███████╗ 
     ██╔════╝ ██╔════╝ ██╔═══██╗
@@ -256,12 +272,19 @@ class SsdModel(BaseModel):
      ╚═════╝  ╚═════╝ ╚══════╝
 
     """
-    def __init__(self, config):
+    def __init__(
+        self,
+        config,
+        backbone=None,
+        neck=None,
+        head=None,
+        **kwargs
+    ) -> None:
         super().__init__()
         self.config = config
         self.backbone = vgg16()
         self.neck = SsdPredictNeck(config, self.backbone.channels[-1])
-        self.head = SsdPredictHead(config, self.neck.out_channels)
+        self.head = SsdPredictHead(config, self.neck.channels)
 
     def forward(self, inputs):
         outputs = self.backbone(inputs)
@@ -272,167 +295,17 @@ class SsdModel(BaseModel):
         outputs = self.head(outputs)
         print(len(outputs))
 
-        # print(outputs[0][0])
 
-
-
-
-# extra_layers = [
-#     # [('M', {'kernel_size': 3, 'stride':  1, 'padding':  1}),
-#     #  (1024, {'kernel_size': 3, 'padding': 6, 'dilation': 6}), 
-#     #  (1024, {'kernel_size': 1})], 
-#     [(256, {'kernel_size': 1}), 
-#      (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
-#     [(128, {'kernel_size': 1}), 
-#      (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
-#     [(128, {'kernel_size': 1}), 
-#      (256, {'kernel_size': 3})], 
-#     [(128, {'kernel_size': 1}), 
-#      (256, {'kernel_size': 3})]]
-
-# layers512 = [
-#     [(256, {'kernel_size': 1}), 
-#      (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
-#     [(128, {'kernel_size': 1}), 
-#      (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
-#     [(128, {'kernel_size': 1}), 
-#      (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
-#     [(128, {'kernel_size': 1}), 
-#      (256, {'kernel_size': 3, 'stride': 2, 'padding':  1})], 
-#     [(128, {'kernel_size': 1})]]
-
-
-
-
-
-
-# class SsdPredictHead(nn.Module):
-#     """SSD Prediction Neck and Head
-#     """
-#     def __init__(self, config, ):
-#         super().__init__()
-#         self.num_classes = 20 + 1
-
-#         # self.backbone_layers = config.backbone_layers
-#         self.backbone = vgg(backbone_layers)
-
-#         self.extra_channels = []
-#         self.extra_channels.append(self.backbone.channels[-1])
-#         self.extra_layers = nn.ModuleList()
-
-#         self.in_channels = self.backbone.channels[-1]
-        
-#         for cfg in extra_layers:
-#             self._add_extra_layers(cfg)
-
-#         print(self.extra_channels)
-        
-
-#         self.selected_layers = [4, 6]
-
-#         self.loc_layers = nn.ModuleList()
-#         self.conf_layers = nn.ModuleList()
-
-        
-#         self._multibox()
-
-#         self.l2_norm = None
-#         self.prior_box = None
-#         print(self.loc_layers)
-#         print(self.conf_layers)
-#         print(len(self.loc_layers))
-#         print(len(self.conf_layers))
-
-#         # self._multibox(config.selected_layers)
-        
-#     def _add_extra_layers(self, config):
-#         # Extra layers added to VGG for feature scaling
-#         layers = []
-#         for v in config:
-#             kwargs = None
-#             if isinstance(v, tuple):
-#                 kwargs = v[1]
-#                 v = v[0]
-#             print(self.in_channels, v, kwargs)
-#             if v == 'M':
-#                 layers.append(nn.MaxPool2d(**kwargs))
-#             else:
-#                 if kwargs is None:
-#                     kwargs = {'kernel_size': 1}
-
-#                 layers += [
-#                     nn.Conv2d(
-#                         in_channels=self.in_channels, 
-#                         out_channels=v,
-#                         **kwargs),
-#                     nn.ReLU()]
-
-#                 self.in_channels = v
-
-#         self.extra_channels.append(v)
-#         self.extra_layers.append(nn.Sequential(*layers))
-
-#     def _multibox(self):
-#         """config -? VGG selected layers"""
-#         config = [4, 6, 6, 6, 4, 4]
-#         for i in range(len(self.extra_channels)):
-#             self.loc_layers += [
-#                 nn.Conv2d(
-#                     in_channels=self.extra_channels[i],
-#                     out_channels=config[i] * 4, 
-#                     kernel_size=3, 
-#                     padding=1)]
-
-#             self.conf_layers += [
-#                 nn.Conv2d(
-#                     in_channels=self.extra_channels[i],
-#                     out_channels=config[i] * self.num_classes, 
-#                     kernel_size=3, 
-#                     padding=1)]
-
-
-#     def forward(self, x):
-#         """Applies network layers and ops on input image(s) x.
-#         Args:
-#             x: input image or batch of images. Shape: [batch,3,300,300].
-#         Return:
-#             Depending on phase:
-#             test:
-#                 Variable(tensor) of output class label predictions,
-#                 confidence score, and corresponding location predictions for
-#                 each object detected. Shape: [batch,topk,7]
-#             train:
-#                 list of concat outputs from:
-#                     1: confidence layers, Shape: [batch*num_priors,num_classes]
-#                     2: localization layers, Shape: [batch,num_priors*4]
-#                     3: priorbox layers, Shape: [2,num_priors*4]
-#         """
-#         outputs = []
-#         x = self.backbone(x)
-#         # TODO:
-#         # 마지막 백본 레이어에 L2Norm 추가
-#         # PriorBox 추가
-#         x = x[-1]
-
-#         outputs.append(x)
-#         for layer in self.extra_layers:
-#             x = layer(x)
-#             outputs.append(x)
-
-#         loc_layers = []
-#         conf_layers = []
-#         for output, loc_layer, conf_layer in zip(outputs, self.loc_layers, self.conf_layers):
-#             loc_layers.append(loc_layer(output).permute(0, 2, 3, 1).contiguous())
-#             conf_layers.append(conf_layer(output).permute(0, 2, 3, 1).contiguous())
-
-#         boxes = torch.cat([out.view(out.size(0), -1) for out in loc_layers], dim=1)
-#         scores = torch.cat([out.view(out.size(0), -1) for out in conf_layers], dim=1)
-
-#         outputs = {
-#             'boxes': boxes.view(boxes.size(0), -1, 4),
-#             'scores': scores.view(scores.size(0), -1, self.num_classes),
-#             # 'priors': self.priors
-#         }
-#         print(outputs['boxes'].size())
-#         print(outputs['scores'].size())
-#         return outputs
+EXTRA_LAYER_STRUCTURES = {
+    'ssd300': [
+        [(256, {'kernel_size': 1}), (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
+        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
+        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3})],
+        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3})]],
+    'ssd512': [
+        [(256, {'kernel_size': 1}), (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
+        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
+        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
+        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride': 2, 'padding':  1})],
+        [(128, {'kernel_size': 1})]]
+}

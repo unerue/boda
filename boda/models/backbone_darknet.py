@@ -49,7 +49,7 @@ class DarkNet19(nn.Module):
         self.relu = relu
 
         self._in_channels = 3
-        self.out_channels = []
+        self.channels = []
         self.layers = nn.ModuleList()
 
         for structure in backbone_structure:
@@ -93,7 +93,7 @@ class DarkNet19(nn.Module):
 
                 self._in_channels = v
 
-        self.out_channels.append(self._in_channels)
+        self.channels.append(self._in_channels)
         self.layers.append(nn.Sequential(*_layers))
 
 
@@ -159,7 +159,7 @@ class DarkNet(nn.Module):
         self.relu = nn.LeakyReLU(0.1)
 
         self.layers = nn.ModuleList()
-        self.out_channels = []
+        self.channels = []
 
         self._make_layer(block, [32, 64], layers[0])
         self._make_layer(block, [64, 128], layers[1])
@@ -192,7 +192,7 @@ class DarkNet(nn.Module):
             layers.append(block(self.in_channels, out_channels))
         
         self.layers.append(nn.Sequential(*layers))
-        self.out_channels.append(out_channels[1])
+        self.channels.append(out_channels[1])
 
     def forward(self, inputs: Tensor) -> List[Tensor]:
         inputs = self.conv(inputs)

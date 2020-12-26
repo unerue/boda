@@ -1,14 +1,25 @@
 import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
+
 from ..architecture_base import LossFunction
 
 
 class Matcher:
-    def __init__(self):
+    def __init__(self, config):
         pass
 
-    def __call__(self, threshold, truths, priors, variances, labels, loc_t, conf_t, idx):
+    def __call__(
+        self,
+        threshold,
+        truths,
+        priors,
+        variances,
+        labels,
+        loc_t,
+        conf_t,
+        idx
+    ):
         """Match each prior box with the ground truth box of the highest jaccard
         overlap, encode the bounding boxes, then return the matched indices
         corresponding to both confidence and location preds.
@@ -44,6 +55,7 @@ class Matcher:
         # ensure every gt matches with its prior of max overlap
         for j in range(best_prior_idx.size(0)):
             best_truth_idx[best_prior_idx[j]] = j
+
         matches = truths[best_truth_idx]          # Shape: [num_priors,4]
         conf = labels[best_truth_idx] + 1         # Shape: [num_priors]
         conf[best_truth_overlap < threshold] = 0  # label as background
@@ -130,20 +142,19 @@ class SsdLoss(LossFunction):
     """
 
     def __init__(
-        self, 
-        config, 
-        num_classes, 
-        size, 
-        overlap_thresh, 
+        self,
+        config,
+        num_classes,
+        size,
+        overlap_thresh,
         prior_for_matching,
-        bkg_label, 
-        neg_mining, 
-        neg_pos, 
-        neg_overlap, 
+        bkg_label,
+        neg_mining,
+        neg_pos,
+        neg_overlap,
         encode_target,
-        use_gpu=True):
+    ):
         super().__init__()
-        self.use_gpu = use_gpu
         self.num_classes = num_classes
         self.threshold = overlap_thresh
         self.background_label = bkg_label

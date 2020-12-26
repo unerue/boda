@@ -6,12 +6,13 @@ import torch
 from torch import nn, Tensor
 
 from ..architecture_base import Neck, Head, Model
-from .backbone_darknet import darknet, darknet21
+from .backbone_darknet import darknet
 from .configuration_yolov1 import Yolov1Config
 
 
 class Yolov1PredictNeck(Neck):
     """Prediction Neck for YOLOv1
+
     Arguments:
         in_channels (int):
 
@@ -20,19 +21,16 @@ class Yolov1PredictNeck(Neck):
         relu (bool)
     """
     def __init__(self, config, in_channels: int = 1024, **kwargs) -> None:
-        """
-        """
         super().__init__()
         self.config = config
-        self.out_channels = []
+        self.channels = []
         self.selected_layers = config.selected_layers
         if isinstance(self.selected_layers, list):
             self.selected_layers = self.selected_layers[0] 
 
         self._in_channels = in_channels
         # TODO: layers or extra_layers?
-        # neck_layers? what the...
-        self.layers = nn.ModuleList()
+        self.extra_layers = nn.ModuleList()
 
         self._add_extra_layer(in_channels, config.bn, config.relu)
         self._add_extra_layer(in_channels, config.bn, config.relu)
@@ -61,8 +59,8 @@ class Yolov1PredictNeck(Neck):
             _layers.append(nn.LeakyReLU(0.1))
 
         self._in_channels = out_channels
-        self.layers.append(nn.Sequential(*_layers))
-        self.out_channels.append(out_channels)
+        self.extra_layers.append(nn.Sequential(*_layers))
+        self.channels.append(out_channels)
 
     def forward(self, inputs: List[Tensor]) -> Tensor:
         """
@@ -98,7 +96,7 @@ class Yolov1PredictHead(Head):
     ) -> None:
         super().__init__()
         self.config = config
-        self.out_channels = []  # TODO: out_channels? channels?
+        self.channels = []  # TODO: out_channels? channels?
 
         self._out_channels = 5 * config.num_boxes + config.num_classes
         self.layers = nn.Sequential(
@@ -202,11 +200,10 @@ class Yolov1Model(Yolov1Pretrained):
         if backbone is None:
             self.backbone = darknet(pretrained=False)
         if neck is None:
-            self.neck = Yolov1PredictNeck(config, self.backbone.out_channels[-1])
+            self.neck = Yolov1PredictNeck(config, self.backbone.channels[-1])
         if head is None:
-            self.head = Yolov1PredictHead(config, self.neck.out_channels[-1])
+            self.head = Yolov1PredictHead(config, self.neck.channels[-1])
 
-        # self._init_weights()
 
     def forward(self, inputs: List[Tensor]) -> List[Tensor]:
         """

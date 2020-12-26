@@ -32,18 +32,10 @@ model = Yolov1Model(config)
 
 |Model|Original|Ours|
 |:----|-------:|---:|
-|FCN|||
-|YOLO|||
+|YOLOv1|||
 |SSD|||
-|Faster R-CNN|||
-|RetinaNet|||
 |YOLOv3|||
-|YOLACT|||
-||||
 |YOLOv4|||
-|SOLO|||
+|YOLACT|||
+|SOLOv1|||
 |CenterMask|||
-|EfficientDet|||
-|DETR|||
-||||
-

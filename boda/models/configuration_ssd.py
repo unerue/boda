@@ -1,4 +1,4 @@
-from ..config import BaseConfig
+from ..configuration_base import BaseConfig
 
 
 SSD_PRETRAINED_CONFIG = {

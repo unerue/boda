@@ -16,7 +16,7 @@ from .backbone_resnet import resnet101
 
 
 class YolactPredictNeck(Neck):
-    """Prediction Neack for YOLACT
+    """Prediction Neck for YOLACT
 
     Arguments:
         in_channels ():
