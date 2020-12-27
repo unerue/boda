@@ -2,18 +2,19 @@ import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 
-from ..utils.bbox import match, log_sum_exp, decode, center_size, crop, elemwise_box_iou
+from ..utils.bbox import match, log_sum_exp, decode, center_size, crop, elemwise_box_iou, jaccard, cxcywh_to_xyxy
 from ..utils.mask import elemwise_mask_iou
 
 
 class Matcher:
-    def __init__(self) -> None:
-        raise NotImplementedError
+    def __init__(self, pos_thresh, neg_thresh) -> None:
+        self.pos_thresh = pos_thresh
+        self.neg_thresh = neg_thresh
+        self.variances = [0.1, 0.2]
+        self.crowd_iou_threshold = 1
 
     def __call__(
         self,
-        pos_thresh,
-        neg_thresh,
         truths,
         priors,
         labels,
@@ -24,30 +25,10 @@ class Matcher:
         idx,
         loc_data
     ) -> None:
-        """
-        Match each prior box with the ground truth box of the highest jaccard
-        overlap, encode the bounding boxes, then return the matched indices
-        corresponding to both confidence and location preds.
-
-        Arguments:
-            pos_thresh: (float) IoU > pos_thresh ==> positive.
-            neg_thresh: (float) IoU < neg_thresh ==> negative.
-            truths: (tensor) Ground truth boxes, Shape: [num_obj, num_priors].
-            priors: (tensor) Prior boxes from priorbox layers, Shape: [n_priors,4].
-            labels: (tensor) All the class labels for the image, Shape: [num_obj].
-            crowd_boxes: (tensor) All the crowd box annotations or None if there are none.
-            loc_t: (tensor) Tensor to be filled w/ endcoded location targets.
-            conf_t: (tensor) Tensor to be filled w/ matched indices for conf preds. Note: -1 means neutral.
-            idx_t: (tensor) Tensor to be filled w/ the index of the matched gt box for each prior.
-            idx: (int) current batch index.
-            loc_data: (tensor) The predicted bbox regression coordinates for this batch.
-        Return:
-            The matched indices corresponding to 1)location and 2)confidence preds.
-        """
-        decoded_priors = decode(loc_data, priors, cfg.use_yolo_regressors) if cfg.use_prediction_matching else point_form(priors)
+        decoded_priors = decode(loc_data, cxcywh_to_xyxy(priors))
         
         # Size [num_objects, num_priors]
-        overlaps = jaccard(truths, decoded_priors) if not cfg.use_change_matching else change(truths, decoded_priors)
+        overlaps = jaccard(truths, decoded_priors)
 
         # Size [num_priors] best ground truth for each prior
         best_truth_overlap, best_truth_idx = overlaps.max(0)
@@ -78,314 +59,53 @@ class Matcher:
         matches = truths[best_truth_idx]            # Shape: [num_priors,4]
         conf = labels[best_truth_idx] + 1           # Shape: [num_priors]
 
-        conf[best_truth_overlap < pos_thresh] = -1  # label as neutral
-        conf[best_truth_overlap < neg_thresh] =  0  # label as background
+        conf[best_truth_overlap < self.pos_thresh] = -1  # label as neutral
+        conf[best_truth_overlap < self.neg_thresh] =  0  # label as background
 
         # Deal with crowd annotations for COCO
-        if crowd_boxes is not None and cfg.crowd_iou_threshold < 1:
+        if crowd_boxes is not None and self.crowd_iou_threshold < 1:
             # Size [num_priors, num_crowds]
             crowd_overlaps = jaccard(decoded_priors, crowd_boxes, iscrowd=True)
             # Size [num_priors]
             best_crowd_overlap, best_crowd_idx = crowd_overlaps.max(1)
             # Set non-positives with crowd iou of over the threshold to be neutral.
-            conf[(conf <= 0) & (best_crowd_overlap > cfg.crowd_iou_threshold)] = -1
+            conf[(conf <= 0) & (best_crowd_overlap > self.crowd_iou_threshold)] = -1
 
-        loc = encode(matches, priors, cfg.use_yolo_regressors)
+        loc = self.encode(matches, priors)
         loc_t[idx]  = loc    # [num_priors,4] encoded offsets to learn
         conf_t[idx] = conf   # [num_priors] top class label for each prior
         idx_t[idx]  = best_truth_idx # [num_priors] indices for lookup
 
+        return loc_t, conf_t, idx_t
 
-
-
-
-    def change(gt, priors):
-        """
-        Compute the d_change metric proposed in Box2Pix:
-        https://lmb.informatik.uni-freiburg.de/Publications/2018/UB18/paper-box2pix.pdf
-        
-        Input should be in point form (xmin, ymin, xmax, ymax).
-        Output is of shape [num_gt, num_priors]
-        Note this returns -change so it can be a drop in replacement for 
-        """
-        num_priors = priors.size(0)
-        num_gt     = gt.size(0)
-
-        gt_w = (gt[:, 2] - gt[:, 0])[:, None].expand(num_gt, num_priors)
-        gt_h = (gt[:, 3] - gt[:, 1])[:, None].expand(num_gt, num_priors)
-
-        gt_mat =     gt[:, None, :].expand(num_gt, num_priors, 4)
-        pr_mat = priors[None, :, :].expand(num_gt, num_priors, 4)
-
-        diff = gt_mat - pr_mat
-        diff[:, :, 0] /= gt_w
-        diff[:, :, 2] /= gt_w
-        diff[:, :, 1] /= gt_h
-        diff[:, :, 3] /= gt_h
-
-        return -torch.sqrt( (diff ** 2).sum(dim=2) )
-
-
-
-
-def match(pos_thresh, neg_thresh, truths, priors, labels, crowd_boxes, loc_t, conf_t, idx_t, idx, loc_data):
-    """Match each prior box with the ground truth box of the highest jaccard
-    overlap, encode the bounding boxes, then return the matched indices
-    corresponding to both confidence and location preds.
-    Args:
-        pos_thresh: (float) IoU > pos_thresh ==> positive.
-        neg_thresh: (float) IoU < neg_thresh ==> negative.
-        truths: (tensor) Ground truth boxes, Shape: [num_obj, num_priors].
-        priors: (tensor) Prior boxes from priorbox layers, Shape: [n_priors,4].
-        labels: (tensor) All the class labels for the image, Shape: [num_obj].
-        crowd_boxes: (tensor) All the crowd box annotations or None if there are none.
-        loc_t: (tensor) Tensor to be filled w/ endcoded location targets.
-        conf_t: (tensor) Tensor to be filled w/ matched indices for conf preds. Note: -1 means neutral.
-        idx_t: (tensor) Tensor to be filled w/ the index of the matched gt box for each prior.
-        idx: (int) current batch index.
-        loc_data: (tensor) The predicted bbox regression coordinates for this batch.
-    Return:
-        The matched indices corresponding to 1)location and 2)confidence preds.
-    """
-    decoded_priors = decode(loc_data, priors, cfg.use_yolo_regressors) if cfg.use_prediction_matching else point_form(priors)
-    
-    # Size [num_objects, num_priors]
-    overlaps = jaccard(truths, decoded_priors) if not cfg.use_change_matching else change(truths, decoded_priors)
-
-    # Size [num_priors] best ground truth for each prior
-    best_truth_overlap, best_truth_idx = overlaps.max(0)
-
-    # We want to ensure that each gt gets used at least once so that we don't
-    # waste any training data. In order to do that, find the max overlap anchor
-    # with each gt, and force that anchor to use that gt.
-    for _ in range(overlaps.size(0)):
-        # Find j, the gt with the highest overlap with a prior
-        # In effect, this will loop through overlaps.size(0) in a "smart" order,
-        # always choosing the highest overlap first.
-        best_prior_overlap, best_prior_idx = overlaps.max(1)
-        j = best_prior_overlap.max(0)[1]
-
-        # Find i, the highest overlap anchor with this gt
-        i = best_prior_idx[j]
-
-        # Set all other overlaps with i to be -1 so that no other gt uses it
-        overlaps[:, i] = -1
-        # Set all other overlaps with j to be -1 so that this loop never uses j again
-        overlaps[j, :] = -1
-
-        # Overwrite i's score to be 2 so it doesn't get thresholded ever
-        best_truth_overlap[i] = 2
-        # Set the gt to be used for i to be j, overwriting whatever was there
-        best_truth_idx[i] = j
-
-    matches = truths[best_truth_idx]            # Shape: [num_priors,4]
-    conf = labels[best_truth_idx] + 1           # Shape: [num_priors]
-
-    conf[best_truth_overlap < pos_thresh] = -1  # label as neutral
-    conf[best_truth_overlap < neg_thresh] =  0  # label as background
-
-    # Deal with crowd annotations for COCO
-    if crowd_boxes is not None and cfg.crowd_iou_threshold < 1:
-        # Size [num_priors, num_crowds]
-        crowd_overlaps = jaccard(decoded_priors, crowd_boxes, iscrowd=True)
-        # Size [num_priors]
-        best_crowd_overlap, best_crowd_idx = crowd_overlaps.max(1)
-        # Set non-positives with crowd iou of over the threshold to be neutral.
-        conf[(conf <= 0) & (best_crowd_overlap > cfg.crowd_iou_threshold)] = -1
-
-    loc = encode(matches, priors, cfg.use_yolo_regressors)
-    loc_t[idx]  = loc    # [num_priors,4] encoded offsets to learn
-    conf_t[idx] = conf   # [num_priors] top class label for each prior
-    idx_t[idx]  = best_truth_idx # [num_priors] indices for lookup
-
-
-def encode(matched, priors, use_yolo_regressors:bool=False):
-    """
-    Encode bboxes matched with each prior into the format
-    produced by the network. See decode for more details on
-    this format. Note that encode(decode(x, p), p) = x.
-    
-    Args:
-        - matched: A tensor of bboxes in point form with shape [num_priors, 4]
-        - priors:  The tensor of all priors with shape [num_priors, 4]
-    Return: A tensor with encoded relative coordinates in the format
-            outputted by the network (see decode). Size: [num_priors, 4]
-    """
-
-    if use_yolo_regressors:
-        # Exactly the reverse of what we did in decode
-        # In fact encode(decode(x, p), p) should be x
-        boxes = center_size(matched)
-
-        loc = torch.cat((
-            boxes[:, :2] - priors[:, :2],
-            torch.log(boxes[:, 2:] / priors[:, 2:])
-        ), 1)
-    else:
-        variances = [0.1, 0.2]
-
+    def encode(self, matched, priors):
         # dist b/t match center and prior's center
         g_cxcy = (matched[:, :2] + matched[:, 2:])/2 - priors[:, :2]
         # encode variance
         g_cxcy /= (variances[0] * priors[:, 2:])
         # match wh / prior wh
         g_wh = (matched[:, 2:] - matched[:, :2]) / priors[:, 2:]
-        g_wh = torch.log(g_wh) / variances[1]
+        g_wh = torch.log(g_wh) / self.variances[1]
         # return target for smooth_l1_loss
         loc = torch.cat([g_cxcy, g_wh], 1)  # [num_priors,4]
         
-    return loc
+        return loc
 
-@torch.jit.script
-def decode(loc, priors, use_yolo_regressors:bool=False):
-    """
-    Decode predicted bbox coordinates using the same scheme
-    employed by Yolov2: https://arxiv.org/pdf/1612.08242.pdf
-        b_x = (sigmoid(pred_x) - .5) / conv_w + prior_x
-        b_y = (sigmoid(pred_y) - .5) / conv_h + prior_y
-        b_w = prior_w * exp(loc_w)
-        b_h = prior_h * exp(loc_h)
-    
-    Note that loc is inputed as [(s(x)-.5)/conv_w, (s(y)-.5)/conv_h, w, h]
-    while priors are inputed as [x, y, w, h] where each coordinate
-    is relative to size of the image (even sigmoid(x)). We do this
-    in the network by dividing by the 'cell size', which is just
-    the size of the convouts.
-    
-    Also note that prior_x and prior_y are center coordinates which
-    is why we have to subtract .5 from sigmoid(pred_x and pred_y).
-    
-    Args:
-        - loc:    The predicted bounding boxes of size [num_priors, 4]
-        - priors: The priorbox coords with size [num_priors, 4]
-    
-    Returns: A tensor of decoded relative coordinates in point form 
-             form with size [num_priors, 4]
-    """
-
-    if use_yolo_regressors:
-        # Decoded boxes in center-size notation
+    def decode(self, loc, priors):
         boxes = torch.cat((
-            loc[:, :2] + priors[:, :2],
-            priors[:, 2:] * torch.exp(loc[:, 2:])
-        ), 1)
+            priors[:, :2] + loc[:, :2] * self.variances[0] * priors[:, 2:],
+            priors[:, 2:] * torch.exp(loc[:, 2:] * self.variances[1])), 1)
 
-        boxes = point_form(boxes)
-    else:
-        variances = [0.1, 0.2]
-        
-        boxes = torch.cat((
-            priors[:, :2] + loc[:, :2] * variances[0] * priors[:, 2:],
-            priors[:, 2:] * torch.exp(loc[:, 2:] * variances[1])), 1)
         boxes[:, :2] -= boxes[:, 2:] / 2
         boxes[:, 2:] += boxes[:, :2]
     
-    return boxes
-
-
-
-def log_sum_exp(x):
-    """Utility function for computing log_sum_exp while determining
-    This will be used to determine unaveraged confidence loss across
-    all examples in a batch.
-    Args:
-        x (Variable(tensor)): conf_preds from conf layers
-    """
-    x_max = x.data.max()
-    return torch.log(torch.sum(torch.exp(x-x_max), 1)) + x_max
-
-
-@torch.jit.script
-def sanitize_coordinates(_x1, _x2, img_size:int, padding:int=0, cast:bool=True):
-    """
-    Sanitizes the input coordinates so that x1 < x2, x1 != x2, x1 >= 0, and x2 <= image_size.
-    Also converts from relative to absolute coordinates and casts the results to long tensors.
-    If cast is false, the result won't be cast to longs.
-    Warning: this does things in-place behind the scenes so copy if necessary.
-    """
-    _x1 = _x1 * img_size
-    _x2 = _x2 * img_size
-    if cast:
-        _x1 = _x1.long()
-        _x2 = _x2.long()
-    x1 = torch.min(_x1, _x2)
-    x2 = torch.max(_x1, _x2)
-    x1 = torch.clamp(x1-padding, min=0)
-    x2 = torch.clamp(x2+padding, max=img_size)
-
-    return x1, x2
-
-
-@torch.jit.script
-def crop(masks, boxes, padding:int=1):
-    """
-    "Crop" predicted masks by zeroing out everything not in the predicted bbox.
-    Vectorized by Chong (thanks Chong).
-    Args:
-        - masks should be a size [h, w, n] tensor of masks
-        - boxes should be a size [n, 4] tensor of bbox coords in relative point form
-    """
-    h, w, n = masks.size()
-    x1, x2 = sanitize_coordinates(boxes[:, 0], boxes[:, 2], w, padding, cast=False)
-    y1, y2 = sanitize_coordinates(boxes[:, 1], boxes[:, 3], h, padding, cast=False)
-
-    rows = torch.arange(w, device=masks.device, dtype=x1.dtype).view(1, -1, 1).expand(h, w, n)
-    cols = torch.arange(h, device=masks.device, dtype=x1.dtype).view(-1, 1, 1).expand(h, w, n)
-    
-    masks_left  = rows >= x1.view(1, 1, -1)
-    masks_right = rows <  x2.view(1, 1, -1)
-    masks_up    = cols >= y1.view(1, 1, -1)
-    masks_down  = cols <  y2.view(1, 1, -1)
-    
-    crop_mask = masks_left * masks_right * masks_up * masks_down
-    
-    return masks * crop_mask.float()
-
-
-def index2d(src, idx):
-    """
-    Indexes a tensor by a 2d index.
-    In effect, this does
-        out[i, j] = src[i, idx[i, j]]
-    
-    Both src and idx should have the same size.
-    """
-
-    offs = torch.arange(idx.size(0), device=idx.device)[:, None].expand_as(idx)
-    idx  = idx + offs * idx.size(1)
-
-    return src.view(-1)[idx.view(-1)].view(idx.size())
-
-
+        return boxes
 
 
 class YolactLoss(nn.Module):
-    """SSD Weighted Loss Function
-    Compute Targets:
-        1) Produce Confidence Target Indices by matching  ground truth boxes
-           with (default) 'priorboxes' that have jaccard index > threshold parameter
-           (default threshold: 0.5).
-        2) Produce localization target by 'encoding' variance into offsets of ground
-           truth boxes and their matched  'priorboxes'.
-        3) Hard negative mining to filter the excessive number of negative examples
-           that comes with using a large number of default bounding boxes.
-           (default negative:positive ratio 3:1)
-    Objective Loss:
-        L(x,c,l,g) = (Lconf(x, c) + αLloc(x,l,g)) / N
-        Where, Lconf is the CrossEntropy Loss and Lloc is the SmoothL1 Loss
-        weighted by α which is set to 1 by cross val.
-        Args:
-            c: class confidences,
-            l: predicted boxes,
-            g: ground truth boxes
-            N: number of matched default boxes
-        See: https://arxiv.org/pdf/1512.02325.pdf for more details.
-    """
-
     def __init__(self, num_classes, pos_threshold, neg_threshold, negpos_ratio):
-        super(MultiBoxLoss, self).__init__()
-        self.num_classes = num_classes
-        
+        super().__init__()
+        self.num_classes = num_classes + 1
         self.pos_threshold = pos_threshold
         self.neg_threshold = neg_threshold
         self.negpos_ratio = negpos_ratio
@@ -395,30 +115,7 @@ class YolactLoss(nn.Module):
         self.l1_expected_area = 20*20/70/70
         self.l1_alpha = 0.1
 
-        if cfg.use_class_balanced_conf:
-            self.class_instances = None
-            self.total_instances = 0
-
     def forward(self, net, predictions, targets, masks, num_crowds):
-        """Multibox Loss
-        Args:
-            predictions (tuple): A tuple containing loc preds, conf preds,
-            mask preds, and prior boxes from SSD net.
-                loc shape: torch.size(batch_size,num_priors,4)
-                conf shape: torch.size(batch_size,num_priors,num_classes)
-                masks shape: torch.size(batch_size,num_priors,mask_dim)
-                priors shape: torch.size(num_priors,4)
-                proto* shape: torch.size(batch_size,mask_h,mask_w,mask_dim)
-            targets (list<tensor>): Ground truth boxes and labels for a batch,
-                shape: [batch_size][num_objs,5] (last idx is the label).
-            masks (list<tensor>): Ground truth masks for each object in each image,
-                shape: [batch_size][num_objs,im_height,im_width]
-            num_crowds (list<int>): Number of crowd annotations per batch. The crowd
-                annotations should be the last num_crowds elements of targets and masks.
-            
-            * Only if mask_type == lincomb
-        """
-
         loc_data  = predictions['loc']
         conf_data = predictions['conf']
         mask_data = predictions['mask']
@@ -443,17 +140,9 @@ class YolactLoss(nn.Module):
         conf_t = loc_data.new(batch_size, num_priors).long()
         idx_t = loc_data.new(batch_size, num_priors).long()
 
-        if cfg.use_class_existence_loss:
-            class_existence_t = loc_data.new(batch_size, num_classes-1)
-
         for idx in range(batch_size):
             truths      = targets[idx][:, :-1].data
             labels[idx] = targets[idx][:, -1].data.long()
-
-            if cfg.use_class_existence_loss:
-                # Construct a one-hot vector for each object and collapse it into an existence vector with max
-                # Also it's fine to include the crowd annotations here
-                class_existence_t[idx, :] = torch.eye(num_classes-1, device=conf_t.get_device())[labels[idx]].max(dim=0)[0]
 
             # Split the crowd annotations because they come bundled in
             cur_crowds = num_crowds[idx]
@@ -468,7 +157,7 @@ class YolactLoss(nn.Module):
                 crowd_boxes = None
 
             
-            match(self.pos_threshold, self.neg_threshold,
+            Matcher()(self.pos_threshold, self.neg_threshold,
                   truths, priors.data, labels[idx], crowd_boxes,
                   loc_t, conf_t, idx_t, idx, loc_data[idx])
                   
@@ -488,59 +177,34 @@ class YolactLoss(nn.Module):
         losses = {}
 
         # Localization Loss (Smooth L1)
-        if cfg.train_boxes:
-            loc_p = loc_data[pos_idx].view(-1, 4)
-            loc_t = loc_t[pos_idx].view(-1, 4)
-            losses['B'] = F.smooth_l1_loss(loc_p, loc_t, reduction='sum') * cfg.bbox_alpha
 
-        if cfg.train_masks:
-            if cfg.mask_type == mask_type.direct:
-                if cfg.use_gt_bboxes:
-                    pos_masks = []
-                    for idx in range(batch_size):
-                        pos_masks.append(masks[idx][idx_t[idx, pos[idx]]])
-                    masks_t = torch.cat(pos_masks, 0)
-                    masks_p = mask_data[pos, :].view(-1, cfg.mask_dim)
-                    losses['M'] = F.binary_cross_entropy(torch.clamp(masks_p, 0, 1), masks_t, reduction='sum') * cfg.mask_alpha
-                else:
-                    losses['M'] = self.direct_mask_loss(pos_idx, idx_t, loc_data, mask_data, priors, masks)
-            elif cfg.mask_type == mask_type.lincomb:
-                ret = self.lincomb_mask_loss(pos, idx_t, loc_data, mask_data, priors, proto_data, masks, gt_box_t, score_data, inst_data, labels)
-                if cfg.use_maskiou:
-                    loss, maskiou_targets = ret
-                else:
-                    loss = ret
-                losses.update(loss)
+        loc_p = loc_data[pos_idx].view(-1, 4)
+        loc_t = loc_t[pos_idx].view(-1, 4)
+        losses['B'] = F.smooth_l1_loss(loc_p, loc_t, reduction='sum') * cfg.bbox_alpha
 
-                if cfg.mask_proto_loss is not None:
-                    if cfg.mask_proto_loss == 'l1':
-                        losses['P'] = torch.mean(torch.abs(proto_data)) / self.l1_expected_area * self.l1_alpha
-                    elif cfg.mask_proto_loss == 'disj':
-                        losses['P'] = -torch.mean(torch.max(F.log_softmax(proto_data, dim=-1), dim=-1)[0])
+        
+        if cfg.mask_type == mask_type.direct:
+            losses['M'] = self.direct_mask_loss(pos_idx, idx_t, loc_data, mask_data, priors, masks)
+
+        elif cfg.mask_type == mask_type.lincomb:
+            ret = self.lincomb_mask_loss(pos, idx_t, loc_data, mask_data, priors, proto_data, masks, gt_box_t, score_data, inst_data, labels)
+            loss = ret
+            losses.update(loss)
+
+            # if cfg.mask_proto_loss is not None:
+            #     if cfg.mask_proto_loss == 'l1':
+            #         losses['P'] = torch.mean(torch.abs(proto_data)) / self.l1_expected_area * self.l1_alpha
+            #     elif cfg.mask_proto_loss == 'disj':
+            #         losses['P'] = -torch.mean(torch.max(F.log_softmax(proto_data, dim=-1), dim=-1)[0])
 
         # Confidence loss
-        if cfg.use_focal_loss:
-            if cfg.use_sigmoid_focal_loss:
-                losses['C'] = self.focal_conf_sigmoid_loss(conf_data, conf_t)
-            elif cfg.use_objectness_score:
-                losses['C'] = self.focal_conf_objectness_loss(conf_data, conf_t)
-            else:
-                losses['C'] = self.focal_conf_loss(conf_data, conf_t)
-        else:
-            if cfg.use_objectness_score:
-                losses['C'] = self.conf_objectness_loss(conf_data, conf_t, batch_size, loc_p, loc_t, priors)
-            else:
-                losses['C'] = self.ohem_conf_loss(conf_data, conf_t, pos, batch_size)
+        losses['C'] = self.ohem_conf_loss(conf_data, conf_t, pos, batch_size)
 
         # Mask IoU Loss
-        if cfg.use_maskiou and maskiou_targets is not None:
-            losses['I'] = self.mask_iou_loss(net, maskiou_targets)
+        losses['I'] = self.mask_iou_loss(net, maskiou_targets)
 
         # These losses also don't depend on anchors
-        if cfg.use_class_existence_loss:
-            losses['E'] = self.class_existence_loss(predictions['classes'], class_existence_t)
-        if cfg.use_semantic_segmentation_loss:
-            losses['S'] = self.semantic_segmentation_loss(predictions['segm'], masks, labels)
+        losses['S'] = self.semantic_segmentation_loss(predictions['segm'], masks, labels)
 
         # Divide all losses by the number of positives.
         # Don't do it for loss[P] because that doesn't depend on the anchors.

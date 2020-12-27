@@ -34,7 +34,6 @@ model = Yolov1Model(config)
 |:----|-------:|---:|
 |YOLOv1|||
 |SSD|||
-|YOLOv3|||
 |YOLOv4|||
 |YOLACT|||
 |SOLOv1|||
