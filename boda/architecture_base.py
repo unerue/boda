@@ -194,6 +194,10 @@ class LossFunction(nn.Module):
                 else:
                     raise ValueError('Expected target boxes to be Tensor.')
             cls._checked_targets = False
+    
+    def decode(self, targets: List[Dict[str, Tensor]]) -> Dict[str, Tensor]:
+        for target in targets:
+            pass
 
 
 # class Register(ABCMeta):

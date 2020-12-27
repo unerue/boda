@@ -72,7 +72,11 @@ class Yolov1Loss(LossFunction):
 
         return preds
 
-    def forward(self, inputs, targets):
+    def forward(
+        self,
+        inputs: Dict[str, Tensor],
+        targets: List[Dict[str, Tensor]]
+    ) -> Dict[str, Tensor]:
         """
             inputs (Dict[str, Tensor])
             targets (Dict[str, Tensor])

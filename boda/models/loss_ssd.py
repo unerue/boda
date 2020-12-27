@@ -8,20 +8,18 @@ from ..utils.loss import log_sum_exp
 
 
 class Matcher:
-    def __init__(self, config):
-        pass
+    def __init__(self, config, threshold, variances):
+        self.config = config
+        self.threshold = threshold
+        self.variances = variances
 
     def __call__(
         self,
-        threshold,
-        truths,
-        priors,
-        variances,
-        labels,
-        loc_t,
-        conf_t,
+        pred_boxes,
+        pred_priors,
+        true_boxes,
         idx
-    ):
+    ) -> Tensor:
         """Match each prior box with the ground truth box of the highest jaccard
         overlap, encode the bounding boxes, then return the matched indices
         corresponding to both confidence and location preds.
@@ -137,7 +135,6 @@ class SsdLoss(LossFunction):
     def __init__(
         self,
         config,
-        num_classes,
         size,
         overlap_thresh,
         prior_for_matching,
@@ -148,7 +145,8 @@ class SsdLoss(LossFunction):
         encode_target,
     ):
         super().__init__()
-        self.num_classes = num_classes
+        self.num_classes = config.num_classes + 1
+        self.variances = config.variances
         self.threshold = overlap_thresh
         self.background_label = bkg_label
         self.encode_target = encode_target
@@ -156,8 +154,6 @@ class SsdLoss(LossFunction):
         self.do_neg_mining = neg_mining
         self.negpos_ratio = neg_pos
         self.neg_overlap = neg_overlap
-        cfg = v[str(size)]
-        self.variance = cfg['variance']
 
     def forward(self, inputs, targets):
         """Multibox Loss
@@ -172,7 +168,7 @@ class SsdLoss(LossFunction):
         """
         self.check_targets(targets)
         targets = self.copy_targets(targets)
-        
+
         pred_boxes = inputs['boxes']
         pred_scores = inputs['scores']
         pred_priors = inputs['priors']
@@ -183,7 +179,7 @@ class SsdLoss(LossFunction):
         loc_data, conf_data, priors = inputs
 
         # batch_size
-        bs = pred_boxes.size(0)
+        bs = len(targets)
         priors = pred_priors[:pred_boxes.size(1), :]
         num_priors = priors.size(0)
 
@@ -194,8 +190,8 @@ class SsdLoss(LossFunction):
         for i in range(bs):
             _true_boxes = true_boxes[i]
             _true_labels = true_labels[i]
-            Match(
-                threshold, _true_boxes, default_boxes, variance,
+            Match(self.threshold)(
+                _true_boxes, default_boxes, variance,
                 _true_labels, default_boxes, default_scores, i)
         
         default_boxes.requires_grad =False

@@ -5,17 +5,24 @@ from torch.utils.data import DataLoader
 from boda.models.configuration_yolov1 import Yolov1Config
 from boda.models.backbone_darknet import darknet, darknet21
 from boda.models.architecture_yolov1 import Yolov1Model
-from boda.models.loss_yolov1 import Yolov1Loss
-from boda.utils.parser import CocoDataset
+# from boda.models.loss_yolov1 import Yolov1Loss
+# from boda.utils.parser import CocoDataset
 from torchsummary import summary
-from boda.utils.timer import Timer
+# from boda.utils.timer import Timer
 
 
 model = darknet()
 print(summary(model, input_data=(3, 448, 448), verbose=0))
 
-model = Yolov1Model.from_pretrained('yolov1-base')
-print(summary(model, input_data=(3, 448, 448), verbose=0))
+# model = Yolov1Model.from_pretrained('yolov1-base')
+# print(summary(model, input_data=(3, 448, 448), verbose=0))
+
+
+from boda.models.backbone_mobilenet import mobilenet_v2
+
+model = mobilenet_v2().to('cuda')
+print(summary(model, input_data=(3, 550, 550), verbose=0))
+
 
 # config = Yolov1Config()
 # model = Yolov1Model(config).to('cuda')

@@ -296,10 +296,12 @@ class SsdModel(SsdPretrained):
         outputs = self.neck(outputs)
         print(len(outputs))
 
-        preds = []
+        preds = defaultdict(list)
         for i, layer in enumerate(self.head_layers):
             output = layer(outputs[i])
-            preds.append(output)
+
+            for k, v in output.items():
+                preds[k].append(v)
 
         print('??', len(preds))
 
