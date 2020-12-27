@@ -1,28 +1,129 @@
-def change(gt, priors):
-    """
-    Compute the d_change metric proposed in Box2Pix:
-    https://lmb.informatik.uni-freiburg.de/Publications/2018/UB18/paper-box2pix.pdf
-    
-    Input should be in point form (xmin, ymin, xmax, ymax).
-    Output is of shape [num_gt, num_priors]
-    Note this returns -change so it can be a drop in replacement for 
-    """
-    num_priors = priors.size(0)
-    num_gt     = gt.size(0)
+import torch
+from torch import nn, Tensor
+import torch.nn.functional as F
 
-    gt_w = (gt[:, 2] - gt[:, 0])[:, None].expand(num_gt, num_priors)
-    gt_h = (gt[:, 3] - gt[:, 1])[:, None].expand(num_gt, num_priors)
+from ..utils.bbox import match, log_sum_exp, decode, center_size, crop, elemwise_box_iou
+from ..utils.mask import elemwise_mask_iou
 
-    gt_mat =     gt[:, None, :].expand(num_gt, num_priors, 4)
-    pr_mat = priors[None, :, :].expand(num_gt, num_priors, 4)
 
-    diff = gt_mat - pr_mat
-    diff[:, :, 0] /= gt_w
-    diff[:, :, 2] /= gt_w
-    diff[:, :, 1] /= gt_h
-    diff[:, :, 3] /= gt_h
+class Matcher:
+    def __init__(self) -> None:
+        raise NotImplementedError
 
-    return -torch.sqrt( (diff ** 2).sum(dim=2) )
+    def __call__(
+        self,
+        pos_thresh,
+        neg_thresh,
+        truths,
+        priors,
+        labels,
+        crowd_boxes,
+        loc_t,
+        conf_t,
+        idx_t,
+        idx,
+        loc_data
+    ) -> None:
+        """
+        Match each prior box with the ground truth box of the highest jaccard
+        overlap, encode the bounding boxes, then return the matched indices
+        corresponding to both confidence and location preds.
+
+        Arguments:
+            pos_thresh: (float) IoU > pos_thresh ==> positive.
+            neg_thresh: (float) IoU < neg_thresh ==> negative.
+            truths: (tensor) Ground truth boxes, Shape: [num_obj, num_priors].
+            priors: (tensor) Prior boxes from priorbox layers, Shape: [n_priors,4].
+            labels: (tensor) All the class labels for the image, Shape: [num_obj].
+            crowd_boxes: (tensor) All the crowd box annotations or None if there are none.
+            loc_t: (tensor) Tensor to be filled w/ endcoded location targets.
+            conf_t: (tensor) Tensor to be filled w/ matched indices for conf preds. Note: -1 means neutral.
+            idx_t: (tensor) Tensor to be filled w/ the index of the matched gt box for each prior.
+            idx: (int) current batch index.
+            loc_data: (tensor) The predicted bbox regression coordinates for this batch.
+        Return:
+            The matched indices corresponding to 1)location and 2)confidence preds.
+        """
+        decoded_priors = decode(loc_data, priors, cfg.use_yolo_regressors) if cfg.use_prediction_matching else point_form(priors)
+        
+        # Size [num_objects, num_priors]
+        overlaps = jaccard(truths, decoded_priors) if not cfg.use_change_matching else change(truths, decoded_priors)
+
+        # Size [num_priors] best ground truth for each prior
+        best_truth_overlap, best_truth_idx = overlaps.max(0)
+
+        # We want to ensure that each gt gets used at least once so that we don't
+        # waste any training data. In order to do that, find the max overlap anchor
+        # with each gt, and force that anchor to use that gt.
+        for _ in range(overlaps.size(0)):
+            # Find j, the gt with the highest overlap with a prior
+            # In effect, this will loop through overlaps.size(0) in a "smart" order,
+            # always choosing the highest overlap first.
+            best_prior_overlap, best_prior_idx = overlaps.max(1)
+            j = best_prior_overlap.max(0)[1]
+
+            # Find i, the highest overlap anchor with this gt
+            i = best_prior_idx[j]
+
+            # Set all other overlaps with i to be -1 so that no other gt uses it
+            overlaps[:, i] = -1
+            # Set all other overlaps with j to be -1 so that this loop never uses j again
+            overlaps[j, :] = -1
+
+            # Overwrite i's score to be 2 so it doesn't get thresholded ever
+            best_truth_overlap[i] = 2
+            # Set the gt to be used for i to be j, overwriting whatever was there
+            best_truth_idx[i] = j
+
+        matches = truths[best_truth_idx]            # Shape: [num_priors,4]
+        conf = labels[best_truth_idx] + 1           # Shape: [num_priors]
+
+        conf[best_truth_overlap < pos_thresh] = -1  # label as neutral
+        conf[best_truth_overlap < neg_thresh] =  0  # label as background
+
+        # Deal with crowd annotations for COCO
+        if crowd_boxes is not None and cfg.crowd_iou_threshold < 1:
+            # Size [num_priors, num_crowds]
+            crowd_overlaps = jaccard(decoded_priors, crowd_boxes, iscrowd=True)
+            # Size [num_priors]
+            best_crowd_overlap, best_crowd_idx = crowd_overlaps.max(1)
+            # Set non-positives with crowd iou of over the threshold to be neutral.
+            conf[(conf <= 0) & (best_crowd_overlap > cfg.crowd_iou_threshold)] = -1
+
+        loc = encode(matches, priors, cfg.use_yolo_regressors)
+        loc_t[idx]  = loc    # [num_priors,4] encoded offsets to learn
+        conf_t[idx] = conf   # [num_priors] top class label for each prior
+        idx_t[idx]  = best_truth_idx # [num_priors] indices for lookup
+
+
+
+
+
+    def change(gt, priors):
+        """
+        Compute the d_change metric proposed in Box2Pix:
+        https://lmb.informatik.uni-freiburg.de/Publications/2018/UB18/paper-box2pix.pdf
+        
+        Input should be in point form (xmin, ymin, xmax, ymax).
+        Output is of shape [num_gt, num_priors]
+        Note this returns -change so it can be a drop in replacement for 
+        """
+        num_priors = priors.size(0)
+        num_gt     = gt.size(0)
+
+        gt_w = (gt[:, 2] - gt[:, 0])[:, None].expand(num_gt, num_priors)
+        gt_h = (gt[:, 3] - gt[:, 1])[:, None].expand(num_gt, num_priors)
+
+        gt_mat =     gt[:, None, :].expand(num_gt, num_priors, 4)
+        pr_mat = priors[None, :, :].expand(num_gt, num_priors, 4)
+
+        diff = gt_mat - pr_mat
+        diff[:, :, 0] /= gt_w
+        diff[:, :, 2] /= gt_w
+        diff[:, :, 1] /= gt_h
+        diff[:, :, 3] /= gt_h
+
+        return -torch.sqrt( (diff ** 2).sum(dim=2) )
 
 
 
@@ -97,7 +198,7 @@ def match(pos_thresh, neg_thresh, truths, priors, labels, crowd_boxes, loc_t, co
     conf_t[idx] = conf   # [num_priors] top class label for each prior
     idx_t[idx]  = best_truth_idx # [num_priors] indices for lookup
 
-@torch.jit.script
+
 def encode(matched, priors, use_yolo_regressors:bool=False):
     """
     Encode bboxes matched with each prior into the format
@@ -256,15 +357,9 @@ def index2d(src, idx):
     return src.view(-1)[idx.view(-1)].view(idx.size())
 
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.autograd import Variable
-from ..box_utils import match, log_sum_exp, decode, center_size, crop, elemwise_mask_iou, elemwise_box_iou
 
-from data import cfg, mask_type, activation_func
 
-class MultiBoxLoss(nn.Module):
+class YolactLoss(nn.Module):
     """SSD Weighted Loss Function
     Compute Targets:
         1) Produce Confidence Target Indices by matching  ground truth boxes

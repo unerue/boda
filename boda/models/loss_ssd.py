@@ -3,7 +3,8 @@ from torch import nn, Tensor
 import torch.nn.functional as F
 
 from ..architecture_base import LossFunction
-from ..utils.bbox import jaccard
+from ..utils.bbox import jaccard, cxcywh_to_xyxy
+from ..utils.loss import log_sum_exp
 
 
 class Matcher:
@@ -40,7 +41,7 @@ class Matcher:
         # jaccard index
         overlaps = jaccard(
             truths,
-            point_form(priors))
+            cxcywh_to_xyxy(priors))
 
         # (Bipartite Matching)
         # [1,num_objects] best prior for each ground truth
@@ -60,7 +61,7 @@ class Matcher:
         matches = truths[best_truth_idx]          # Shape: [num_priors,4]
         conf = labels[best_truth_idx] + 1         # Shape: [num_priors]
         conf[best_truth_overlap < threshold] = 0  # label as background
-        loc = encode(matches, priors, variances)
+        loc = self.encode(matches, priors, variances)
         loc_t[idx] = loc    # [num_priors,4] encoded offsets to learn
         conf_t[idx] = conf  # [num_priors] top class label for each prior
         
@@ -106,17 +107,6 @@ class Matcher:
         boxes[:, :2] -= boxes[:, 2:] / 2
         boxes[:, 2:] += boxes[:, :2]
         return boxes
-
-
-def log_sum_exp(x):
-    """Utility function for computing log_sum_exp while determining
-    This will be used to determine unaveraged confidence loss across
-    all examples in a batch.
-    Args:
-        x (Variable(tensor)): conf_preds from conf layers
-    """
-    x_max = x.data.max()
-    return torch.log(torch.sum(torch.exp(x-x_max), 1, keepdim=True)) + x_max
 
 
 class SsdLoss(LossFunction):
