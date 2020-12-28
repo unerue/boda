@@ -74,14 +74,14 @@ class SsdPredictNeck(Neck):
 
         self.norm = L2Norm(512, 10)
         self.selected_layers = config.selected_layers
-        self.extra_layers = nn.ModuleList()  # layers or extra_layers?
+        self.layers = nn.ModuleList()  # layers or extra_layers?
         self._in_channels = in_channels
 
         # TODO: rename variable
         for layer in extra_layers:
-            self._add_extra_layer(layer)
+            self._make_layer(layer)
 
-    def _add_extra_layer(self, config, **kwargs):
+    def _make_layer(self, config, **kwargs):
         _layers = []
         for v in config:
             kwargs = None
@@ -106,7 +106,7 @@ class SsdPredictNeck(Neck):
             print(_layers)
 
         self.channels.append(self._in_channels)
-        self.extra_layers.append(nn.Sequential(*_layers))
+        self.layers.append(nn.Sequential(*_layers))
 
     def forward(self, inputs: List[Tensor]):
         outputs = []
@@ -209,10 +209,10 @@ class SsdPredictHead(nn.Module):
         self.prior_box = PriorBox(
             config, aspect_ratios, step, min_sizes, max_sizes)
 
-        self.bbox_layers = self._add_predict_layer(in_channels, 4)
-        self.conf_layers = self._add_predict_layer(in_channels, self.num_classes)
+        self.bbox_layers = self._make_layer(in_channels, 4)
+        self.conf_layers = self._make_layer(in_channels, self.num_classes)
 
-    def _add_predict_layer(self, in_channels, out_channels):
+    def _make_layer(self, in_channels, out_channels):
         _layer = [
             nn.Conv2d(
                 in_channels=in_channels,

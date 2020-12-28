@@ -29,15 +29,14 @@ class Yolov1PredictNeck(Neck):
             self.selected_layers = self.selected_layers[0] 
 
         self._in_channels = in_channels
-        # TODO: layers or extra_layers?
-        self.extra_layers = nn.ModuleList()
 
-        self._add_extra_layer(in_channels, config.bn, config.relu)
-        self._add_extra_layer(in_channels, config.bn, config.relu)
-        self._add_extra_layer(in_channels, config.bn, config.relu)
-        self._add_extra_layer(in_channels, config.bn, config.relu)
+        self.layers = nn.ModuleList()
+        self._make_layer(in_channels)
+        self._make_layer(in_channels)
+        self._make_layer(in_channels)
+        self._make_layer(in_channels)
 
-    def _add_extra_layer(
+    def _make_layer(
         self,
         out_channels,
         bn: bool = False,
@@ -59,7 +58,7 @@ class Yolov1PredictNeck(Neck):
             _layers.append(nn.LeakyReLU(0.1))
 
         self._in_channels = out_channels
-        self.extra_layers.append(nn.Sequential(*_layers))
+        self.layers.append(nn.Sequential(*_layers))
         self.channels.append(out_channels)
 
     def forward(self, inputs: List[Tensor]) -> Tensor:

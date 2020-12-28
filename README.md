@@ -38,3 +38,32 @@ model = Yolov1Model(config)
 |YOLACT|||
 |SOLOv1|||
 |CenterMask|||
+
+
+```python
+class Backbone(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self):
+        return
+
+
+class Neck(nn.Module):
+    def __init__(self):
+        super().__init__()
+    
+    def _make_layer(self):
+
+    def forward(self):
+        return
+
+
+class Head(nn.Module):
+
+
+class Pretrained:
+    
+
+class Model()
+```

@@ -68,12 +68,15 @@ class YolactConfig(BaseConfig):
         self.extra_head_net = [(256, 3, {'padding': 1})]
         self.extra_layers = (0, 0, 0)
         self.eval_mask_branch = True
+        self.use_share = False
+        self.use_semantic_segmentation = True
+        self.use_eval_mask_branch = True
 
         self.num_extra_bbox_layers = 0
         self.num_extra_conf_layers = 0
         self.num_extra_mask_layers = 0
         self.freeze_bn = True
 
-        self.preapply_sqrt = True
+        self.use_preapply_sqrt = True
         self.use_pixel_scales = True
         self.use_square_anchors = True

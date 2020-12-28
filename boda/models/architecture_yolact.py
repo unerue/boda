@@ -92,13 +92,19 @@ def prior_cache(func):
 class PriorBox:
     def __init__(
         self,
-        config,
         aspect_ratios: List[int],
-        scales: List[float]
+        scales: List[float],
+        max_size: int,
+        use_preapply_sqrt: bool = True,
+        use_pixel_scales: bool = True,
+        use_square_anchors: bool = True
     ) -> None:
-        self.config = config
+        self.max_size = max_size
         self.aspect_ratios = aspect_ratios
         self.scales = scales
+        self.use_preapply_sqrt = use_preapply_sqrt
+        self.use_pixel_scales = use_pixel_scales
+        self.use_square_anchors = use_square_anchors
 
     @prior_cache
     def generate(self, h: int, w: int) -> Tuple[int, Tensor]:
@@ -111,25 +117,25 @@ class PriorBox:
             for ratios in self.aspect_ratios:
                 for scale in self.scales:
                     for ratio in ratios:
-                        if not self.config.preapply_sqrt:
+                        if not self.use_preapply_sqrt:
                             ratio = math.sqrt(ratio)
 
-                        if self.config.use_pixel_scales:
-                            w = scale * ratio / self.config.max_size[1]
-                            h = scale / ratio / self.config.max_size[0]
+                        if self.use_pixel_scales:
+                            w = scale * ratio / self.max_size[1]
+                            h = scale / ratio / self.max_size[0]
                         else:
                             w = scale * ratio / h
                             h = scale / ratio / w
 
-                        if self.config.use_square_anchors:
+                        if self.use_square_anchors:
                             h = w
 
                         prior_boxes += [x, y, w, h]
 
-        priors = torch.as_tensor(prior_boxes).view(-1, 4)
-        priors.requires_grad = False
+        prior_boxes = torch.as_tensor(prior_boxes).view(-1, 4)
+        prior_boxes.requires_grad = False
 
-        return size, priors
+        return size, prior_boxes
 
 
 class ProtoNet(nn.Sequential):
@@ -157,7 +163,6 @@ class ProtoNet(nn.Sequential):
                 mask_layers[f'{i}'] = nn.Conv2d(
                     in_channels, v[0], kernel_size=v[1], **v[2])
                 self.channels.append(v[0])
-
             elif v[0] is None:
                 mask_layers[f'{i}'] = nn.Upsample(
                     scale_factor=-v[1],
@@ -171,6 +176,30 @@ class ProtoNet(nn.Sequential):
         super().__init__(mask_layers)
 
 
+class HeadBranch(nn.Sequential):
+    def __init__(
+        self,
+        num_extra_layers: int,
+        in_channels: int,
+        out_channels: int
+    ) -> None:
+        sub_layers = OrderedDict()
+        if num_extra_layers > 0:
+            for i in range(num_extra_layers):
+                sub_layers[f'{i}'] = [
+                    nn.Conv2d(
+                        in_channels,
+                        in_channels,
+                        kernel_size=3,
+                        padding=1),
+                    nn.ReLU()]
+
+        sub_layers[f'{len(sub_layers)+1}'] = nn.Conv2d(
+            in_channels, out_channels, kernel_size=3, padding=1)
+
+        super().__init__(sub_layers)
+
+    
 class YolactPredictHead(Head):
     """Prediction Head for YOLACT
 
@@ -195,7 +224,15 @@ class YolactPredictHead(Head):
     ) -> None:
         super().__init__()
         self.config = config
-        self.prior_box = PriorBox(config, aspect_ratios, scales)
+        self.num_classes = config.num_classes + 1
+        self.prior_box = PriorBox(
+            aspect_ratios,
+            scales,
+            config.max_size,
+            config.use_preapply_sqrt,
+            config.use_pixel_scales,
+            config.use_square_anchors)
+
         self.config.mask_dim = config.mask_dim
         self.num_priors = sum(len(x)*len(scales) for x in aspect_ratios)
         self.parent = [parent]
@@ -208,23 +245,22 @@ class YolactPredictHead(Head):
                     config, in_channels, config.extra_head_net)
                 out_channels = self.upfeature.channels[-1]
 
-            self.bbox_layers = self._add_predict_layer(
+            self.bbox_layers = self._make_layer(
                 config.num_extra_bbox_layers,
                 out_channels,
                 self.num_priors * 4)
 
-            self.conf_layers = self._add_predict_layer(
+            self.conf_layers = self._make_layer(
                 config.num_extra_conf_layers,
                 out_channels,
-                self.num_priors * config.num_classes)
+                self.num_priors * self.num_classes)
 
-            self.mask_layers = self._add_predict_layer(
+            self.mask_layers = self._make_layer(
                 config.num_extra_mask_layers,
                 out_channels,
                 self.num_priors * self.config.mask_dim)
 
-    # TODO: _add_predict_layer or _make_layer?
-    def _add_predict_layer(
+    def _make_layer(
         self,
         num_extra_layers: int,
         in_channels: int,
@@ -254,16 +290,23 @@ class YolactPredictHead(Head):
 
         inputs = pred.upfeature(inputs)
 
-        bbox = pred.bbox_layers(inputs)
-        conf = pred.conf_layers(inputs)
-        mask = pred.mask_layers(inputs)
+        boxes = pred.bbox_layers(inputs)
+        scores = pred.conf_layers(inputs)
+        masks = pred.mask_layers(inputs)
 
-        bbox = bbox.permute(0, 2, 3, 1).contiguous().view(inputs.size(0), -1, 4)
-        conf = conf.permute(0, 2, 3, 1).contiguous().view(inputs.size(0), -1, self.config.num_classes)
-
+        boxes = boxes.permute(0, 2, 3, 1).contiguous().view(inputs.size(0), -1, 4)
+        scores = scores.permute(0, 2, 3, 1).contiguous().view(inputs.size(0), -1, self.num_classes)
+        masks = masks.permute(0, 2, 3, 1).contiguous().view(inputs.size(0), -1, self.config.mask_dim)
         _, priors = self.prior_box.generate(h, w)
 
-        return bbox, conf, mask, priors
+        preds = {
+            'boxes': boxes,
+            'priors': priors,
+            'masks': masks,
+            'scores': scores,
+        }
+
+        return preds
 
 
 class YolactPretrained(Model):
@@ -309,9 +352,10 @@ class YolactModel(YolactPretrained):
     def __init__(
         self,
         config,
-        backbone=None,
-        neck=None,
-        head=None,
+        backbone = None,
+        neck: Neck = None,
+        head: Head = None,
+        num_classes: int = None,
         **kwargs
     ) -> None:
         super().__init__(config)
@@ -376,13 +420,40 @@ class YolactModel(YolactPretrained):
         for o in outputs:
             print(o.size())
 
-        proto_input = outputs[0]
-        # print(proto_input.size())
-        segout = self.semantic_layer(outputs[0])
-        proto_output = self.proto_net(proto_input)
+        preds = defaultdict(list)
+        # preds = {'boxes': [], 'scores': 'prot[], 'masks': [], 'priors': []}
+
+        # preds['proto'] = prototypes
+
         for i, layer in zip(self.config.selected_layers, self.head_layers):
             print(i, layer)
             print(outputs[i].size())
             output = layer(outputs[i])
+            # if self.config.use_share and layer is not self.predict_layers[0]:
+            #     pass
 
-        return outputs
+            for k, v in output.items():
+                preds[k].append(v)
+        
+        for k, v in preds.items():
+            print()
+            print(k)
+            for j in v:
+                print(j.size())
+
+        for k, v in preds.items():
+            preds[k] = torch.cat(v, dim=-2)
+        
+        for k, v in preds.items():
+            print(k, v.size())
+
+        if self.training:
+            if self.config.use_semantic_segmentation:
+                preds['prototypes'] = self.proto_net(outputs[0])
+                preds['semantic'] = self.semantic_layer(outputs[0])
+        else:
+            preds['scores'] = F.softmax(preds['scores'], dim=-1)
+
+        
+
+        return preds

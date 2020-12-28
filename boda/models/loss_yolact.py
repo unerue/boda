@@ -1,3 +1,5 @@
+from typing import Tuple, List, Dict, Union
+
 import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
@@ -110,22 +112,33 @@ class YolactLoss(nn.Module):
         self.neg_threshold = neg_threshold
         self.negpos_ratio = negpos_ratio
 
+        self.class_existence_alpha = 1
+        self.semantic_segmentation_alpha = 1
         # If you output a proto mask with this area, your l1 loss will be l1_alpha
         # Note that the area is relative (so 1 would be the entire image)
-        self.l1_expected_area = 20*20/70/70
+        self.l1_expected_area = 20 * 20 / 70 / 70
         self.l1_alpha = 0.1
 
-    def forward(self, net, predictions, targets, masks, num_crowds):
+    def forward(
+        self,
+        inputs: Dict[str, List[Tensor]],
+        targets: List[Dict[str, Tensor]],
+    ) -> Tensor:
+        pred_boxes = inputs['boxes']
+        pred_scores = inputs['scores']
+        pred_masks = inputs['masks']
+        pred_priors = inputs['priors']
+        pred_prototypes = inputs['proto']  # TODO: proto? prototypes?
+
+        bs = len(targets)
+
         loc_data  = predictions['loc']
         conf_data = predictions['conf']
         mask_data = predictions['mask']
         priors    = predictions['priors']
 
-        if cfg.mask_type == mask_type.lincomb:
-            proto_data = predictions['proto']
+        prototypes = predictions['proto']
 
-        score_data = predictions['score'] if cfg.use_mask_scoring   else None   
-        inst_data  = predictions['inst']  if cfg.use_instance_coeff else None
         
         labels = [None] * len(targets) # Used in sem segm loss
 
@@ -226,7 +239,7 @@ class YolactLoss(nn.Module):
         return losses
 
     def class_existence_loss(self, class_data, class_existence_t):
-        return cfg.class_existence_alpha * F.binary_cross_entropy_with_logits(class_data, class_existence_t, reduction='sum')
+        return self.class_existence_alpha * F.binary_cross_entropy_with_logits(class_data, class_existence_t, reduction='sum')
 
     def semantic_segmentation_loss(self, segment_data, mask_t, class_t, interpolation_mode='bilinear'):
         # Note num_classes here is without the background class so cfg.num_classes-1
@@ -284,27 +297,7 @@ class YolactLoss(nn.Module):
         targets_weighted = conf_t[(pos+neg).gt(0)]
         loss_c = F.cross_entropy(conf_p, targets_weighted, reduction='none')
 
-        if cfg.use_class_balanced_conf:
-            # Lazy initialization
-            if self.class_instances is None:
-                self.class_instances = torch.zeros(self.num_classes, device=targets_weighted.device)
-            
-            classes, counts = targets_weighted.unique(return_counts=True)
-            
-            for _cls, _cnt in zip(classes.cpu().numpy(), counts.cpu().numpy()):
-                self.class_instances[_cls] += _cnt
-
-            self.total_instances += targets_weighted.size(0)
-
-            weighting = 1 - (self.class_instances[targets_weighted] / self.total_instances)
-            weighting = torch.clamp(weighting, min=1/self.num_classes)
-
-            # If you do the math, the average weight of self.class_instances is this
-            avg_weight = (self.num_classes - 1) / self.num_classes
-
-            loss_c = (loss_c * weighting).sum() / avg_weight
-        else:
-            loss_c = loss_c.sum()
+        loss_c = loss_c.sum()
         
         return cfg.conf_alpha * loss_c
 
