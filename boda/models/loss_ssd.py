@@ -19,30 +19,11 @@ class Matcher:
         pred_priors,
         true_boxes,
         idx
-    ) -> Tensor:
-        """Match each prior box with the ground truth box of the highest jaccard
-        overlap, encode the bounding boxes, then return the matched indices
-        corresponding to both confidence and location preds.
-        Args:
-            threshold: (float) The overlap threshold used when mathing boxes.
-            truths: (tensor) Ground truth boxes, Shape: [num_obj, 4].
-            priors: (tensor) Prior boxes from priorbox layers, Shape: [n_priors,4].
-            variances: (tensor) Variances corresponding to each prior coord,
-                Shape: [2].
-            labels: (tensor) All the class labels for the image, Shape: [num_obj].
-            loc_t: (tensor) Tensor to be filled w/ endcoded location targets.
-            conf_t: (tensor) Tensor to be filled w/ matched indices for conf preds.
-            idx: (int) current batch index
-        Return:
-            The matched indices corresponding to 1)location and 2)confidence preds.
-        """
-        # jaccard index
+    ) -> Tuple[Tensor]:
         overlaps = jaccard(
-            truths,
-            cxcywh_to_xyxy(priors))
+            true_boxes,
+            cxcywh_to_xyxy(pred_priors))
 
-        # (Bipartite Matching)
-        # [1,num_objects] best prior for each ground truth
         best_prior_overlap, best_prior_idx = overlaps.max(1, keepdim=True)
         # [1,num_priors] best ground truth for each prior
         best_truth_overlap, best_truth_idx = overlaps.max(0, keepdim=True)
@@ -60,81 +41,28 @@ class Matcher:
         conf = labels[best_truth_idx] + 1         # Shape: [num_priors]
         conf[best_truth_overlap < threshold] = 0  # label as background
         loc = self.encode(matches, priors, variances)
-        loc_t[idx] = loc    # [num_priors,4] encoded offsets to learn
-        conf_t[idx] = conf  # [num_priors] top class label for each prior
+
+        return loc, conf
         
     def encode(self, matched, priors, variances):
-        """Encode the variances from the priorbox layers into the ground truth boxes
-        we have matched (based on jaccard overlap) with the prior boxes.
-        Args:
-            matched: (tensor) Coords of ground truth for each prior in point-form
-                Shape: [num_priors, 4].
-            priors: (tensor) Prior boxes in center-offset form
-                Shape: [num_priors,4].
-            variances: (list[float]) Variances of priorboxes
-        Return:
-            encoded boxes (tensor), Shape: [num_priors, 4]
-        """
-
-        # dist b/t match center and prior's center
-        g_cxcy = (matched[:, :2] + matched[:, 2:])/2 - priors[:, :2]
-        # encode variance
-        g_cxcy /= (variances[0] * priors[:, 2:])
-        # match wh / prior wh
-        g_wh = (matched[:, 2:] - matched[:, :2]) / priors[:, 2:]
-        g_wh = torch.log(g_wh) / variances[1]
-        # return target for smooth_l1_loss
-        return torch.cat([g_cxcy, g_wh], 1)  # [num_priors,4]
+        gcxcy = (matched[:, :2] + matched[:, 2:])/2 - priors[:, :2]
+        gcxcy /= (variances[0] * priors[:, 2:])
+        gwh = (matched[:, 2:] - matched[:, :2]) / priors[:, 2:]
+        gwh = torch.log(gwh) / variances[1]
+        return torch.cat([gcxcy, gwh], 1)  # [num_priors,4]
 
     def decode(self, loc, priors, variances):
-        """Decode locations from predictions using priors to undo
-        the encoding we did for offset regression at train time.
-        Args:
-            loc (tensor): location predictions for loc layers,
-                Shape: [num_priors,4]
-            priors (tensor): Prior boxes in center-offset form.
-                Shape: [num_priors,4].
-            variances: (list[float]) Variances of priorboxes
-        Return:
-            decoded bounding box predictions
-        """
-
         boxes = torch.cat((
             priors[:, :2] + loc[:, :2] * variances[0] * priors[:, 2:],
-            priors[:, 2:] * torch.exp(loc[:, 2:] * variances[1])), 1)
+            priors[:, 2:] * torch.exp(loc[:, 2:] * variances[1])), dim=1)
         boxes[:, :2] -= boxes[:, 2:] / 2
         boxes[:, 2:] += boxes[:, :2]
         return boxes
 
 
 class SsdLoss(LossFunction):
-    """SSD Weighted Loss Function
-
-    Compute Targets:
-        1) Produce Confidence Target Indices by matching  ground truth boxes
-           with (default) 'priorboxes' that have jaccard index > threshold parameter
-           (default threshold: 0.5).
-        2) Produce localization target by 'encoding' variance into offsets of ground
-           truth boxes and their matched  'priorboxes'.
-        3) Hard negative mining to filter the excessive number of negative examples
-           that comes with using a large number of default bounding boxes.
-           (default negative:positive ratio 3:1)
-
-    Objective Loss:
-        L(x,c,l,g) = (Lconf(x, c) + αLloc(x,l,g)) / N
-        Where, Lconf is the CrossEntropy Loss and Lloc is the SmoothL1 Loss
-        weighted by α which is set to 1 by cross val.
-        Args:
-            c: class confidences,
-            l: predicted boxes,
-            g: ground truth boxes
-            N: number of matched default boxes
-        See: https://arxiv.org/pdf/1512.02325.pdf for more details.
-    """
-
     def __init__(
         self,
-        config,
         size,
         overlap_thresh,
         prior_for_matching,
@@ -156,15 +84,7 @@ class SsdLoss(LossFunction):
         self.neg_overlap = neg_overlap
 
     def forward(self, inputs, targets):
-        """Multibox Loss
-        Args:
-            predictions (tuple): A tuple containing loc preds, conf preds,
-            and prior boxes from SSD net.
-                conf shape: torch.size(batch_size,num_priors,num_classes)
-                loc shape: torch.size(batch_size,num_priors,4)
-                priors shape: torch.size(num_priors,4)
-            ground_truth (tensor): Ground truth boxes and labels for a batch,
-                shape: [batch_size,num_objs,5] (last idx is the label).
+        """
         """
         self.check_targets(targets)
         targets = self.copy_targets(targets)
@@ -187,6 +107,10 @@ class SsdLoss(LossFunction):
         default_boxes = torch.zeros(bs, num_priors, 4)
         default_scores = torch.zeros(bs, num_priors)
 
+        matched_pred_boxes = pred_boxes.new_tensor(batch_size, num_priors, 4)
+        matched_pred_scores = pred_boxes.new_tensor(batch_size, num_priors, dtype=torch.int64)
+        
+
         for i in range(bs):
             _true_boxes = true_boxes[i]
             _true_labels = true_labels[i]
@@ -194,6 +118,9 @@ class SsdLoss(LossFunction):
                 _true_boxes, default_boxes, variance,
                 _true_labels, default_boxes, default_scores, i)
         
+        loc_t[idx] = loc    # [num_priors,4] encoded offsets to learn
+        conf_t[idx] = conf  # [num_priors] top class label for each prior
+
         default_boxes.requires_grad =False
         default_scores.requires_grad = False
 

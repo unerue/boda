@@ -43,7 +43,9 @@ class Yolov1Loss(LossFunction):
         outputs = torch.zeros(bs, gs, gs, 5*nb+nc, device='cuda')
         for batch, target in enumerate(targets):
             boxes = target['boxes']
-            boxes /= torch.tensor([[w, h, w, h]], dtype=torch.float, device=self.config.device).expand_as(boxes)
+            boxes /= torch.tensor(
+                [[w, h, w, h]], dtype=torch.float, 
+                device=self.config.device).expand_as(boxes)
             boxes = xyxy_to_cxywh(boxes)
             for box_id, box in enumerate(boxes):
                 ij = (box[:2] / cell_size).ceil() - 1.0
@@ -142,18 +144,10 @@ class Yolov1Loss(LossFunction):
 
         loss_class = F.mse_loss(pred_labels, true_labels, reduction='sum') / bs
 
-        # loss_wh = torch.sum(torch.pow(torch.sqrt(response_boxes_targets[:, 3]) - torch.sqrt(response_boxes_preds[:, 3]), 2) \
-        # + torch.pow(torch.sqrt(response_boxes_targets[:, 4]) - torch.sqrt(response_boxes_preds[:, 4]), 2))
-        
-        # loss_boxes = (self.lambda_coord * (loss_xy + loss_wh)) / bs 
-        # # loss_boxes = (self.lambda_coord * (loss_xy)) / bs 
-
         loss_obj = F.mse_loss(
             pred_response_scores, iou_targets, reduction='sum')
 
         loss_scores = (loss_obj + (self.lambda_noobj * loss_noobj)) / bs
-        # # Class probability loss for the cells which contain objects.
-        # loss_class = F.mse_loss(class_preds, class_targets, reduction='sum') / bs
 
         losses = {
             'loss_boxes': loss_boxes,

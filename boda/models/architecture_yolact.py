@@ -282,8 +282,7 @@ class YolactPredictHead(Head):
 
         return nn.Sequential(*_predict_layers)
 
-    # def forward(self, inputs: Tensor) -> Dict(str, Tensor):
-    def forward(self, inputs: Tensor):
+    def forward(self, inputs: Tensor) -> Dict[str, Tensor]:
         pred = self if self.parent[0] is None else self.parent[0]
 
         h, w = inputs.size(2), inputs.size(3)
@@ -405,6 +404,11 @@ class YolactModel(YolactPretrained):
         self.semantic_layer = nn.Conv2d(self.neck.channels[0], config.num_classes-1, kernel_size=1)
 
     def forward(self, inputs: List[Tensor]) -> Dict[str, List[Tensor]]:
+        """
+        inputs (List[Tensor]):
+        Return:
+            Dict[str, List[Tensor]]: number of batch size
+        """
         inputs = self.check_inputs(inputs)
         self.config.device = inputs.device
 
@@ -420,7 +424,6 @@ class YolactModel(YolactPretrained):
             print(o.size())
 
         preds = defaultdict(list)
-
         for i, layer in zip(self.config.selected_layers, self.head_layers):
             print(i, layer)
             print(outputs[i].size())
