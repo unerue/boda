@@ -404,10 +404,9 @@ class YolactModel(YolactPretrained):
 
         self.semantic_layer = nn.Conv2d(self.neck.channels[0], config.num_classes-1, kernel_size=1)
 
-    def forward(self, inputs):
+    def forward(self, inputs: List[Tensor]) -> Dict[str, List[Tensor]]:
         inputs = self.check_inputs(inputs)
         self.config.device = inputs.device
-        print(self.config.device)
 
         self.config.size = (inputs.size(2), inputs.size(3))
 
@@ -421,9 +420,6 @@ class YolactModel(YolactPretrained):
             print(o.size())
 
         preds = defaultdict(list)
-        # preds = {'boxes': [], 'scores': 'prot[], 'masks': [], 'priors': []}
-
-        # preds['proto'] = prototypes
 
         for i, layer in zip(self.config.selected_layers, self.head_layers):
             print(i, layer)
@@ -434,7 +430,9 @@ class YolactModel(YolactPretrained):
 
             for k, v in output.items():
                 preds[k].append(v)
-        
+        # print()
+        # for pred in preds:
+        #     print(pred['boxes'].size())
         for k, v in preds.items():
             print()
             print(k)
@@ -444,6 +442,7 @@ class YolactModel(YolactPretrained):
         for k, v in preds.items():
             preds[k] = torch.cat(v, dim=-2)
         
+        print()
         for k, v in preds.items():
             print(k, v.size())
 
@@ -455,5 +454,4 @@ class YolactModel(YolactPretrained):
             preds['scores'] = F.softmax(preds['scores'], dim=-1)
 
         
-
         return preds

@@ -85,11 +85,14 @@ class CocoDataset(Dataset):
         boxes = np.array(boxes)
         boxes[:, 2] = boxes[:, 0] + boxes[:, 2]
         boxes[:, 3] = boxes[:, 1] + boxes[:, 3]
+
         labels = np.array(labels)
+        crowds = np.array([0])
 
         targets = {
             'boxes': torch.as_tensor(boxes, dtype=torch.float64),
             'labels': torch.as_tensor(labels, dtype=torch.int64),
+            'crowds': torch.as_tensor(crowds, dtype=torch.int64)
         }
 
         image, targets = Resize((448, 448))(image, targets)

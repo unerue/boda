@@ -133,6 +133,16 @@ class ResNet(nn.Module):
         self._make_layer(block, conv_channels // block.expansion, blocks=depth, stride=downsample)
 
 
+def resnet18():
+    backbone = ResNet([2, 2, 2, 2])
+    return backbone
+
+
+def resnet34():
+    backbone = ResNet([3, 4, 6, 3])
+    return backbone
+
+
 def resnet50(pretrained: bool = False):
     backbone = ResNet([3, 4, 6, 3])
     # Add downsampling layers until we reach the number we need
