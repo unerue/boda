@@ -38,5 +38,6 @@ print_yolact.py
 run.py
 logo.pptx
 *.pth
-
+test_ssd.py
+test_yolov1.py
 # .gitignore
