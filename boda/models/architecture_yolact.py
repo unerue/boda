@@ -108,6 +108,14 @@ class PriorBox:
 
     @prior_cache
     def generate(self, h: int, w: int) -> Tuple[int, Tensor]:
+        """
+        Arguments:
+            h (int): feature map size
+            w (int): feature map size
+        Returns
+            feature map size (Tuple[int])
+            prior boxes (Tensor): Size[N, 4]
+        """
         size = (h, w)
         prior_boxes = []
         for j, i in itertools.product(range(h), range(w)):
@@ -177,6 +185,9 @@ class ProtoNet(nn.Sequential):
 
 
 class HeadBranch(nn.Sequential):
+    """
+    TODO: all replace
+    """
     def __init__(
         self,
         num_extra_layers: int,
@@ -199,7 +210,7 @@ class HeadBranch(nn.Sequential):
 
         super().__init__(sub_layers)
 
-    
+
 class YolactPredictHead(Head):
     """Prediction Head for YOLACT
 
@@ -359,7 +370,9 @@ class YolactModel(YolactPretrained):
     ) -> None:
         super().__init__(config)
         self.config = config
+        self.use_semantic_segmentation = config.use_semantic_segmentation
 
+        # TODO: rename backbone, neck, head layers
         if backbone is None:
             self.backbone = resnet101()
             num_layers = max(config.selected_layers) + 1
@@ -398,7 +411,7 @@ class YolactModel(YolactPretrained):
                 scales=config.scales[i],
                 parent=parent,
                 index=i)
-            # print(config.aspect_ratios[i], config.scales[i])
+
             self.head_layers.append(head_layer)
 
         self.semantic_layer = nn.Conv2d(self.neck.channels[0], config.num_classes-1, kernel_size=1)
@@ -419,23 +432,17 @@ class YolactModel(YolactPretrained):
 
         outputs = [outputs[i] for i in self.config.selected_layers]
         outputs = self.neck(outputs)
-        print(len(outputs))
         for o in outputs:
             print(o.size())
 
         preds = defaultdict(list)
         for i, layer in zip(self.config.selected_layers, self.head_layers):
-            print(i, layer)
             print(outputs[i].size())
             output = layer(outputs[i])
-            # if self.config.use_share and layer is not self.predict_layers[0]:
-            #     pass
 
             for k, v in output.items():
                 preds[k].append(v)
-        # print()
-        # for pred in preds:
-        #     print(pred['boxes'].size())
+
         for k, v in preds.items():
             print()
             print(k)
@@ -444,17 +451,15 @@ class YolactModel(YolactPretrained):
 
         for k, v in preds.items():
             preds[k] = torch.cat(v, dim=-2)
-        
-        print()
+
         for k, v in preds.items():
             print(k, v.size())
 
         if self.training:
-            if self.config.use_semantic_segmentation:
+            if self.use_semantic_segmentation:
                 preds['prototypes'] = self.proto_net(outputs[0])
                 preds['semantic'] = self.semantic_layer(outputs[0])
         else:
             preds['scores'] = F.softmax(preds['scores'], dim=-1)
 
-        
         return preds

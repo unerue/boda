@@ -10,7 +10,7 @@ from torch import nn, Tensor
 import torch.nn.functional as F
 from torch.nn.modules import padding
 
-from ..architecture_base import Neck, Head, PretrainedModel
+from ..architecture_base import Neck, Head, Model
 from .configuration_yolact import YolactConfig
 from .backbone_resnet import resnet101
 

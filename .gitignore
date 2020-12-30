@@ -34,7 +34,7 @@ old/
 cache/ 
 # tests/
 
-print_yolact.py
+test_yolact.py
 run.py
 logo.pptx
 *.pth

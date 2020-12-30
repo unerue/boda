@@ -1,11 +1,13 @@
+from collections import defaultdict
 from typing import Tuple, List, Dict, Union
+import numpy as np
 
 import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 
 from ..architecture_base import LossFunction
-from ..utils.bbox import match, log_sum_exp, decode, center_size, crop, elemwise_box_iou, jaccard, cxcywh_to_xyxy
+from ..utils.bbox import match, log_sum_exp, center_size, crop, elemwise_box_iou, jaccard, cxcywh_to_xyxy
 from ..utils.mask import elemwise_mask_iou
 
 
@@ -26,15 +28,15 @@ class Matcher:
         self,
         pred_boxes,
         pred_priors,
-        true_boxes,   
+        true_boxes, 
         true_labels,
         true_crowd_boxes,
     ) -> Tuple[Tensor]:
         decoded_priors = self.decode(
             pred_boxes, cxcywh_to_xyxy(pred_priors))
-        
+
         overlaps = jaccard(true_boxes, decoded_priors)
-        
+
         best_truth_overlap, best_truth_index = overlaps.max(0)
 
         for _ in range(overlaps.size(0)):
@@ -174,10 +176,10 @@ class YolactLoss(LossFunction):
         pos_scores = matched_pred_scores > 0
         num_pos_scores = pos_scores.sum(dim=1, keepdim=True)
         
-        # Shape: [batch,num_priors,4]
+        # Size([batch, num_priors, 4])
         pos_index = pos_scores.unsqueeze(pos_scores.dim()).expand_as(pred_boxes)
         
-        losses = {}
+        losses = defaultdict()
 
         # Localization Loss (Smooth L1)
 
@@ -185,19 +187,18 @@ class YolactLoss(LossFunction):
         matched_pred_boxes = matched_pred_boxes[pos_index].view(-1, 4)
         losses['loss_boxes'] = F.smooth_l1_loss(pred_boxes, matched_pred_boxes, reduction='sum') * self.bbox_alpha
 
-        ret = self.lincomb_mask_loss(pos, idx_t, loc_data, mask_data, priors, proto_data, masks, gt_box_t, score_data, inst_data, labels)
-        loss = ret
-        losses.update(loss)
-
+        losses['loss_masks'] = self.lincomb_mask_loss(
+            pos, idx_t, loc_data, mask_data, priors, proto_data,
+            masks, gt_box_t, score_data, inst_data, labels)
 
         # Confidence loss
-        losses['C'] = self.ohem_conf_loss(conf_data, conf_t, pos, batch_size)
+        losses['loss_conf'] = self.ohem_conf_loss(conf_data, conf_t, pos, batch_size)
 
         # Mask IoU Loss
-        losses['I'] = self.mask_iou_loss(net, maskiou_targets)
+        losses['loss_mask_iou'] = self.mask_iou_loss(net, maskiou_targets)
 
         # These losses also don't depend on anchors
-        losses['S'] = self.semantic_segmentation_loss(predictions['segm'], masks, labels)
+        losses['loss_semantic'] = self.semantic_segmentation_loss(predictions['segm'], masks, labels)
 
         # Divide all losses by the number of positives.
         # Don't do it for loss[P] because that doesn't depend on the anchors.
@@ -207,7 +208,6 @@ class YolactLoss(LossFunction):
                 losses[k] /= total_num_pos
             else:
                 losses[k] /= batch_size
-
 
         return losses
 
