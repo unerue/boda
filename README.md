@@ -32,12 +32,12 @@ model = Yolov1Model(config)
 
 |Model|Original|Ours|
 |:----|-------:|---:|
-|YOLOv1|||
-|SSD|||
-|YOLOv4|||
-|YOLACT|||
-|SOLOv1|||
-|CenterMask|||
+|YOLOv1|Rebuild||
+|SSD|Rebuild||
+|YOLOv4|Dev||
+|YOLACT|Rebuild||
+|SOLOv1|Dev||
+|CenterMask|Dev||
 
 
 ```python
