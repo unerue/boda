@@ -12,7 +12,7 @@ from torch.nn.modules import padding
 
 from ..architecture_base import Neck, Head, Model
 from .configuration_yolact import YolactConfig
-from .backbone_resnet import resnet101
+from .backbone.backbone_resnet import resnet101
 
 
 class Solov1PredictNeck(Neck):

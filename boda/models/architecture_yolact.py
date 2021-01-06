@@ -51,6 +51,8 @@ class YolactPredictNeck(Neck):
                 padding=1) for _ in range(config.num_downsamples)])
 
     def forward(self, inputs: List[Tensor]) -> List[Tensor]:
+        """
+        """
         x = torch.zeros(1, device=self.config.device)
         outputs = [x for _ in range(len(inputs))]
 
@@ -90,6 +92,8 @@ def prior_cache(func):
 
 
 class PriorBox:
+    """
+    """
     def __init__(
         self,
         aspect_ratios: List[int],
@@ -107,7 +111,7 @@ class PriorBox:
         self.use_square_anchors = use_square_anchors
 
     @prior_cache
-    def generate(self, h: int, w: int) -> Tuple[int, Tensor]:
+    def generate(self, h: int, w: int, device='cuda') -> Tuple[int, Tensor]:
         """
         Arguments:
             h (int): feature map size
@@ -139,8 +143,9 @@ class PriorBox:
                             h = w
 
                         prior_boxes += [x, y, w, h]
-
-        prior_boxes = torch.as_tensor(prior_boxes).view(-1, 4)
+        # TODO: thinking processing to(device) 
+        # prior_boxes = torch.zeros(), torch.cat([torch.zeros, [x, y, w, h]])??
+        prior_boxes = torch.as_tensor(prior_boxes).view(-1, 4).to(device)
         prior_boxes.requires_grad = False
 
         return size, prior_boxes
@@ -294,6 +299,12 @@ class YolactPredictHead(Head):
         return nn.Sequential(*_predict_layers)
 
     def forward(self, inputs: Tensor) -> Dict[str, Tensor]:
+        """
+        Argument:
+            inputs (FloatTensor[B, C, H, W]):
+        Return:
+            Dict[str, Tensor]
+        """
         pred = self if self.parent[0] is None else self.parent[0]
 
         h, w = inputs.size(2), inputs.size(3)
@@ -368,6 +379,8 @@ class YolactModel(YolactPretrained):
         num_classes: int = None,
         **kwargs
     ) -> None:
+        """
+        """
         super().__init__(config)
         self.config = config
         self.use_semantic_segmentation = config.use_semantic_segmentation
@@ -418,7 +431,9 @@ class YolactModel(YolactPretrained):
 
     def forward(self, inputs: List[Tensor]) -> Dict[str, List[Tensor]]:
         """
-        inputs (List[Tensor]):
+        Arguments:
+            inputs (List[Tensor]):
+
         Return:
             Dict[str, List[Tensor]]: number of batch size
         """
@@ -428,26 +443,24 @@ class YolactModel(YolactPretrained):
         self.config.size = (inputs.size(2), inputs.size(3))
 
         outputs = self.backbone(inputs)
-        print(self.backbone.channels)
 
         outputs = [outputs[i] for i in self.config.selected_layers]
         outputs = self.neck(outputs)
-        for o in outputs:
-            print(o.size())
+        # for o in outputs:
+        #     print(o.size())
 
         preds = defaultdict(list)
         for i, layer in zip(self.config.selected_layers, self.head_layers):
-            print(outputs[i].size())
             output = layer(outputs[i])
 
             for k, v in output.items():
                 preds[k].append(v)
 
-        for k, v in preds.items():
-            print()
-            print(k)
-            for j in v:
-                print(j.size())
+        # for k, v in preds.items():
+        #     print()
+        #     print(k)
+        #     for j in v:
+        #         print(j.size())
 
         for k, v in preds.items():
             preds[k] = torch.cat(v, dim=-2)

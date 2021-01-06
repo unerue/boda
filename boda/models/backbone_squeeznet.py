@@ -1,10 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.init as init
-from .utils import load_state_dict_from_url
 from typing import Any
 
-__all__ = ['SqueezeNet', 'squeezenet1_0', 'squeezenet1_1']
 
 model_urls = {
     'squeezenet1_0': 'https://download.pytorch.org/models/squeezenet1_0-a815701f.pth',
@@ -13,7 +11,6 @@ model_urls = {
 
 
 class Fire(nn.Module):
-
     def __init__(
         self,
         inplanes: int,
@@ -41,7 +38,6 @@ class Fire(nn.Module):
 
 
 class SqueezeNet(nn.Module):
-
     def __init__(
         self,
         version: str = '1_0',

@@ -10,7 +10,7 @@ import torch.nn.functional as F
 import itertools 
 from ..architecture_base import Neck, Head, Model
 from .configuration_ssd import SsdConfig
-from .backbone_vgg import vgg16
+from .backbone.backbone_vgg import vgg16
 
 
 STRUCTURES = {

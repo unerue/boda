@@ -154,9 +154,9 @@ class Matcher(ABC):
 class LossFunction(nn.Module):
     _checked_targets = True
 
-    def __init__(self, config, **kwargs) -> None:
+    def __init__(self, **kwargs) -> None:
         super().__init__()
-        self.config = config
+        # self.config = config
 
     def forward(
         self,

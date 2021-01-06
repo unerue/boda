@@ -5,6 +5,10 @@ import torch
 from torch import nn, Tensor
 
 
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
+
+
 def log_sum_exp(x):
     """Utility function for computing log_sum_exp while determining
     This will be used to determine unaveraged confidence loss across

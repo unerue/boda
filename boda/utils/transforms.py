@@ -1,34 +1,74 @@
 from typing import Tuple, List, Dict, Callable
 
+import cv2
+import pycocotools
 import torch
+from torch import dtype, nn, Tensor
 import numpy as np
+from numpy import ndarray
+from torch.nn.functional import interpolate
 
 
 class Compose:
-    def __init__(self, transforms: List[Callable]):
+    def __init__(self, transforms: List[Callable]) -> None:
         self.transforms = transforms
 
     def __call__(
         self,
-        image: np.ndarray,
-        targets: Dict[str, np.ndarray]
-    ) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
+        image: ndarray,
+        targets: Dict[str, ndarray]
+    ) -> Tuple[ndarray, Dict[str, ndarray]]:
         for t in self.transforms:
-            inputs, targets = t(image, targets)
+            image, targets = t(image, targets)
 
-        return inputs, targets
+        return image, targets
 
 
-class Resize:
-    def __init__(self):
-        raise NotImplementedError
+class Normalize:
+    def __call__(self, image, targets):
+        image /= 255
+        return image, targets
+
+
+class ToTensor:
+    def __init__(self) -> None:
+        pass
 
     def __call__(
         self,
-        image: np.ndarray,
-        targets: Dict[str, np.ndarray]
-    ) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
-        raise NotImplementedError
+        image: ndarray,
+        targets: Dict[str, ndarray]
+    ) -> Tuple[ndarray, Dict[str, Tensor]]:
+        image = torch.as_tensor(image.transpose((2, 0, 1)), dtype=torch.float32)
+        for key, value in targets.items():
+            print(key, value.shape)
+            targets[key] = torch.as_tensor(value)
+
+        return image, targets
+
+
+class Resize:
+    def __init__(self, size: Tuple[int], interpolation=cv2.INTER_LINEAR):
+        self.size = size
+        self.interpolation = interpolation
+
+    def __call__(
+        self,
+        image: ndarray,
+        targets: Dict[str, ndarray]
+    ) -> Tuple[ndarray, Dict[str, ndarray]]:
+        _, h, w = image.shape
+        image = cv2.resize(image, dsize=self.size, interpolation=self.interpolation)
+
+        targets['boxes'][:, [0, 2]] *= self.size[0] / w
+        targets['boxes'][:, [1, 3]] *= self.size[1] / h
+
+        if targets['masks'] is not None:
+            masks = targets['masks'].transpose((1, 2, 0))
+            masks = cv2.resize(masks, dsize=self.size, interpolation=self.interpolation)
+            targets['masks'] = masks.transpose((2, 0, 1))
+
+        return image, targets
 
 
 class RandomFlip:
@@ -191,10 +231,10 @@ class RandomBrightness:
         return image, targets
 
 
-class ToTensor:
-    def __call__(
-        self,
-        image: np.ndarray,
-        targets: Dict[str, np.ndarray]
-    ) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
-        return torch.from_numpy(image.astype(np.float32)).permute(2, 0, 1), targets
+# class ToTensor:
+#     def __call__(
+#         self,
+#         image: np.ndarray,
+#         targets: Dict[str, np.ndarray]
+#     ) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
+#         return torch.from_numpy(image.astype(np.float32)).permute(2, 0, 1), targets

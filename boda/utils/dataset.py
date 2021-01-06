@@ -6,29 +6,20 @@ import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
 from pycocotools.coco import COCO
-
-
-class Resize:
-    def __init__(self, size, interpolation=Image.BILINEAR):
-        self.size = size
-        self.interpolation = interpolation
-
-    def __call__(self, image, targets):
-        w, h = image.size
-        image = image.resize(self.size)
-        # masks = TF.resize(masks, self.size, self.interpolation)
-
-        targets['boxes'][:, [0, 2]] *= self.size[0] / w
-        targets['boxes'][:, [1, 3]] *= self.size[1] / h
-
-        return image, targets
+from pycocotools import mask
+import cv2
 
 
 class CocoParser:
     def __init__(self, info_file):
         self.coco = self._from_json(info_file)
-        self.image_info = {c['id']: c['file_name'] for c in self.coco['images']}
+        self.image_info = {
+            c['id']: {
+                'file_name': c['file_name'], 
+                'height': c['height'], 
+                'width': c['width']} for c in self.coco['images']}
         self.annot_info = self._get_annot_info()
+        print(f'Attached dataset... {len(self.image_info):,}')
 
     def _from_json(self, info_file):
         with open(info_file, 'r', encoding='utf-8') as f:
@@ -45,15 +36,20 @@ class CocoParser:
                 'bbox': annot['bbox'],
                 'segmentation': annot['segmentation'],
                 'area': annot['area'],
-                'iscrowd': annot['iscrowd']})
+                'iscrowd': annot['iscrowd']
+            })
 
         return annot_info
 
     def get_annots(self, image_id):
         return self.annot_info.get(image_id)
 
+    # TODO: get_image_path or get_file_name    
     def get_file_name(self, image_id):
-        return self.image_info.get(image_id)
+        return self.image_info.get(image_id)['file_name']
+
+    def get_masks(self):
+        raise NotImplementedError
 
 
 class CocoDataset(Dataset):
@@ -74,32 +70,58 @@ class CocoDataset(Dataset):
         targets = self.coco.get_annots(image_id)
 
         image = self.coco.get_file_name(image_id)
-        image = Image.open(os.path.join(self.image_dir, image)).convert('RGB')
+        # image = Image.open(os.path.join(self.image_dir, image)).convert('RGB')
+        image = cv2.imread(os.path.join(self.image_dir, image))
+        h, w, _ = image.shape
 
         boxes = []
         labels = []
+        masks = []
+        crowds = []
+        areas = []
         for target in targets:
             boxes.append(target['bbox'])
             labels.append(target['category_id'])
+            crowds.append(target['iscrowd'])
+            areas.append(target['area'])
+            
+            if target['segmentation'] is not None:
+                segment = target['segmentation']
+                if isinstance(segment, list):
+                    rles = mask.frPyObjects(segment, h, w)
+                    rle = mask.merge(rles)
+                elif isinstance(segment['count'], list):
+                    rle = mask.frPyObjects(segment, h, w)
+                else:
+                    rle = segment
+                
+                masks.append(mask.decode(rle))
 
-        boxes = np.array(boxes)
+        boxes = np.asarray(boxes, dtype=np.float64)
         boxes[:, 2] = boxes[:, 0] + boxes[:, 2]
         boxes[:, 3] = boxes[:, 1] + boxes[:, 3]
 
-        labels = np.array(labels)
-        crowds = np.array([0])
+        labels = np.asarray(labels, dtype=np.int64)
+        crowds = np.asarray(crowds, dtype=np.int64)
+
+        masks = np.vstack(masks).reshape(-1, h, w)
+        # image = image.transpose((2, 0, 1))
 
         targets = {
-            'boxes': torch.as_tensor(boxes, dtype=torch.float64),
-            'labels': torch.as_tensor(labels, dtype=torch.int64),
-            'crowds': torch.as_tensor(crowds, dtype=torch.int64)
+            'boxes': boxes,
+            'labels': labels,
+            'crowds': crowds,
+            'masks': masks
         }
 
-        image, targets = Resize((448, 448))(image, targets)
-        image = np.array(image).transpose(2, 0, 1)
-        image = image / 255.0
+        if self.transforms is not None:
+            image, targets = self.transforms(image, targets)
 
-        image = torch.as_tensor(image, dtype=torch.float32)
+        # image, targets = Resize((448, 448))(image, targets)
+        # image = np.array(image).transpose(2, 0, 1)
+        # image = image / 255.0
+
+        # image = torch.as_tensor(image, dtype=torch.float32)
 
         return image, targets
 

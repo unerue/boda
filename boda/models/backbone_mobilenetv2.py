@@ -3,9 +3,6 @@ from torch import Tensor
 from typing import Callable, Any, Optional, List
 
 
-__all__ = ['MobileNetV2', 'mobilenet_v2']
-
-
 model_urls = {
     'mobilenet_v2': 'https://download.pytorch.org/models/mobilenet_v2-b0353104.pth',
 }
@@ -24,6 +21,7 @@ def _make_divisible(v: float, divisor: int, min_value: Optional[int] = None) -> 
     """
     if min_value is None:
         min_value = divisor
+
     new_v = max(min_value, int(v + divisor / 2) // divisor * divisor)
     # Make sure that round down does not go down by more than 10%.
     if new_v < 0.9 * v:
