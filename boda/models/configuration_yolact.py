@@ -1,5 +1,5 @@
 import os
-from typing import Union, Any
+from typing import Optional, Tuple, Union, Any
 from ..configuration_base import BaseConfig
 
 
@@ -16,25 +16,36 @@ class YolactConfig(BaseConfig):
     Args:
         max_size (:obj:`Union[int, Tuple[int]]`):
         num_classes (:obj:`int`):
-        num_grids (:obj:`int`): 
+        num_grids (:obj:`int`):
+        num_grid_sizes (:obj:`int`):
+        num_mask_dim (:obj:`int`):
+
         padding (:obj:`int`):
         use_conv_downsample (:obj:`bool`, defaults to `True`): 
+        extra_layers (:obj:`int`): 
+        extra_layer_structure (:obj:`int`):
+        proto_layer_structure (:obj:`List[]):
+        head_layer_params (:obj:`List`)
+        mask_dim (:obj:`int`): 
+        num_grid_sizes (:obj:`int`):
+        num_mask_dim (:obj:`int`):
+
     """
     model_name = 'yolact'
 
     def __init__(
         self,
-        num_classes=80,
-        max_size=550,
-        padding=1,
-        use_conv_downsample=True,
-        num_features=256,
-        num_grids=0,
-        mask_size=16,
-        mask_dim=0,
-        proto_net_structure=None,
+        num_classes: int = 80,
+        max_size: int = 550,
+        padding: int = 1,
+        use_conv_downsample: bool = True,
+        num_features: int = 256,
+        num_grids: int = 0,
+        mask_size: int = 16,
+        mask_dim: int = 0,
+        proto_net_structure: Optional[int] = None,
         head_layer_params=None,
-        extra_layers=(0, 0, 0),
+        extra_layers: Tuple[int] = (0, 0, 0),
         extra_net_structure=None,
         **kwargs
     ) -> None:

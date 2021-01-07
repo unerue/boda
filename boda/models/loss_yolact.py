@@ -14,7 +14,8 @@ from ..utils.mask import elemwise_mask_iou
 
 class Matcher:
     """
-    Arguments:
+
+    Args:
         pos_threshold ():
         ? positive_threshold ():
         neg_threshold ():
@@ -23,8 +24,11 @@ class Matcher:
         variances ():
     """
     def __init__(
-        self, 
-        pos_thresh: float = 0.5, 
+        self,
+        positive_margin: float = 0.5,
+        positive_threshold: float = 0.5,
+        negative_threshold: float = 0.5,
+        pos_thresh: float = 0.5,
         neg_thresh: float = 0.5,
         crowd_iou_thresh: int = 1,
         variances: List[int] = [0.1, 0.2]
@@ -40,20 +44,15 @@ class Matcher:
         pred_priors,
         true_boxes,
         true_labels,
-        true_crowd_boxes,
+        true_crowds,
     ) -> Tuple[Tensor]:
         """
         Arguments:
             pred_boxes ():
-            ? predict_boxes ():
-            ? pred_boxes
-            ? true_boxes
-            ? target_boxes (): 
             pred_priors ():
             true_boxes ():
             true_labels ():
-            true_crowds (): ?
-            true_crowd_boxes ():
+            true_crowds ():
 
         Returns:
             boxes (FloatTensor[N, 4]): N is a number of prior boxes 
@@ -165,6 +164,12 @@ class YolactLoss(LossFunction):
         self.pos_threshold = pos_threshold
         self.neg_threshold = neg_threshold
         self.negpos_ratio = neg_pos_ratio
+        self.bbox_weight = 1.5
+        self.conf_weight = 1.5
+        self.confidence_weight = 1.5
+        self.mask_weight = 1.5
+        
+
         self.bbox_alpha = 1.5
         self.mask_alpha = 0.4 / 256 * 140 * 140
         self.score_alpha = 1.0
@@ -207,9 +212,6 @@ class YolactLoss(LossFunction):
         pred_masks = inputs['masks']
         pred_priors = inputs['priors']
         
-        print('!'*100)
-        print(pred_masks.size())
-
         pred_prototypes = inputs['prototypes']  # TODO: proto? prototypes?
         pred_semantic = inputs['semantic']
 
@@ -220,8 +222,6 @@ class YolactLoss(LossFunction):
         true_masks = [None] * len(targets)
 
         matched_pred_boxes = pred_boxes.new(batch_size, num_priors, 4)
-        print(matched_pred_boxes.shape)
-        print(matched_pred_boxes)
         matched_true_boxes = pred_boxes.new(batch_size, num_priors, 4)
         matched_pred_scores = pred_boxes.new(batch_size, num_priors)
         matched_indexes = pred_boxes.new(batch_size, num_priors).long()
@@ -249,14 +249,9 @@ class YolactLoss(LossFunction):
                 true_labels[i],
                 true_crowd_boxes)
 
-            print(matched_boxes.size(), matched_scores.size(), matched_index.size())
-            print(matched_boxes.device, matched_scores.device, matched_index.device)
-            print(matched_boxes.dtype, matched_scores.dtype, matched_index.dtype)
             matched_pred_boxes[i] = matched_boxes  # [num_priors,4] encoded offsets to learn
             matched_indexes[i] = matched_index
-            print(matched_true_boxes.dtype, true_boxes.dtype, matched_index.dtype)
-            print(matched_true_boxes.size(), true_boxes.size(), matched_index.size())
-            print(matched_indexes.dtype)
+
             matched_true_boxes[i, :, :] = true_boxes[matched_indexes[i]]
             matched_pred_scores[i] = matched_scores  # [num_priors] top class label for each prior
             matched_indexes[i] = matched_index  # [num_priors] indices for lookup
@@ -277,14 +272,11 @@ class YolactLoss(LossFunction):
 
         pred_boxes = pred_boxes[pos_index].view(-1, 4)
         matched_pred_boxes = matched_pred_boxes[pos_index].view(-1, 4)
-        print(pred_boxes.size(), matched_pred_boxes.size())
         losses['loss_boxes'] = F.smooth_l1_loss(pred_boxes, matched_pred_boxes, reduction='sum') * self.bbox_alpha
-        print(losses)
 
         # true_masks = torch.cat(true_masks)
         # print(true_masks.size())
         
-        print(pred_prototypes.size())
         score_data = None  # use_mask_scoring
         inst_data = None  # use_instance_coeff 
         losses['loss_masks'] = self.lincomb_mask_loss(
@@ -378,7 +370,6 @@ class YolactLoss(LossFunction):
 
         for idx in range(mask_data.size(0)):
             with torch.no_grad():
-                print('lincomb masks[idx]', masks[idx].unsqueeze(0).size(), masks[idx].dtype)
                 # TODO: masks byte to long
                 downsampled_masks = F.interpolate(masks[idx].unsqueeze(0).float(), (mask_h, mask_w),
                                                   mode=interpolation, align_corners=False).squeeze(0)
@@ -454,21 +445,13 @@ class YolactLoss(LossFunction):
 
     def ohem_conf_loss(self, conf_data, conf_t, pos, num):
         # Compute max conf across batch for hard negative mining
-        print('OHEM'*100)
-        print(conf_data.size())
-        print(conf_t.size())
-        print(pos.size())
         batch_conf = conf_data.view(-1, 81)
-        print(batch_conf.size(), batch_conf.dtype)
         # i.e. -softmax(class 0 confidence)
         # TODO: remove squeeze(1)
         loss_c = log_sum_exp(batch_conf).squeeze(1) - batch_conf[:, 0]
-        print(log_sum_exp(batch_conf).squeeze(1).size(), batch_conf[:, 0].size())
-        print(loss_c.size())
-
         # Hard Negative Mining
         loss_c = loss_c.view(num, -1)
-        print(loss_c.size())
+
         loss_c[pos]        = 0 # filter out pos boxes
         loss_c[conf_t < 0] = 0 # filter out neutrals (conf_t = -1)
         _, loss_idx = loss_c.sort(1, descending=True)
@@ -486,8 +469,6 @@ class YolactLoss(LossFunction):
         neg_idx = neg.unsqueeze(2).expand_as(conf_data)
         conf_p = conf_data[(pos_idx + neg_idx).gt(0)].view(-1, 81)
         targets_weighted = conf_t[(pos+neg).gt(0)].long()
-        print(conf_p.dtype, conf_p.size())
-        print(targets_weighted.dtype, targets_weighted.size())
         loss_c = F.cross_entropy(conf_p, targets_weighted, reduction='none')
 
         loss_c = loss_c.sum()
@@ -504,21 +485,17 @@ class YolactLoss(LossFunction):
         # Note num_classes here is without the background class so cfg.num_classes-1
         batch_size, num_classes, mask_h, mask_w = segment_data.size()
         loss_s = 0
-        print(len(segment_data), segment_data[0].size())
-        print(len(mask_t), mask_t[0].size())
-        print(len(class_t), class_t[0].size())
+
         
         for idx in range(batch_size):
             cur_segment = segment_data[idx]
             cur_class_t = class_t[idx]
-            print(cur_class_t)
 
             with torch.no_grad():
                 downsampled_masks = F.interpolate(
                     mask_t[idx].unsqueeze(0).float(), (mask_h, mask_w),
                     mode=interpolation_mode, align_corners=False).squeeze(0)
                 downsampled_masks = downsampled_masks.gt(0.5).float()
-                print(downsampled_masks.size())
                 # Construct Semantic Segmentation
                 segment_t = torch.zeros_like(cur_segment, requires_grad=False)
                 for obj_idx in range(downsampled_masks.size(0)):

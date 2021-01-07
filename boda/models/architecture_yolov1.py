@@ -6,7 +6,7 @@ import torch
 from torch import nn, Tensor
 
 from ..architecture_base import Neck, Head, Model
-from ..backbones.darknet import darknet
+from .backbone_darknet import darknet
 from .configuration_yolov1 import Yolov1Config
 
 
