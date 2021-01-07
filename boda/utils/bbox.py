@@ -105,6 +105,51 @@ def jaccard(box_a: Tensor, box_b: Tensor, iscrowd: bool = False) -> Tensor:
     return out if use_batch else out.squeeze(0)
 
 
+def sanitize_coordinates(_x1, _x2, img_size:int, padding:int=0, cast:bool=True):
+    """
+    Sanitizes the input coordinates so that x1 < x2, x1 != x2, x1 >= 0, and x2 <= image_size.
+    Also converts from relative to absolute coordinates and casts the results to long tensors.
+    If cast is false, the result won't be cast to longs.
+    Warning: this does things in-place behind the scenes so copy if necessary.
+    """
+    _x1 = _x1 * img_size
+    _x2 = _x2 * img_size
+    if cast:
+        _x1 = _x1.long()
+        _x2 = _x2.long()
+    x1 = torch.min(_x1, _x2)
+    x2 = torch.max(_x1, _x2)
+    x1 = torch.clamp(x1-padding, min=0)
+    x2 = torch.clamp(x2+padding, max=img_size)
+
+    return x1, x2
+
+
+def crop(masks, boxes, padding:int=1):
+    """
+    "Crop" predicted masks by zeroing out everything not in the predicted bbox.
+    Vectorized by Chong (thanks Chong).
+    Args:
+        - masks should be a size [h, w, n] tensor of masks
+        - boxes should be a size [n, 4] tensor of bbox coords in relative point form
+    """
+    h, w, n = masks.size()
+    x1, x2 = sanitize_coordinates(boxes[:, 0], boxes[:, 2], w, padding, cast=False)
+    y1, y2 = sanitize_coordinates(boxes[:, 1], boxes[:, 3], h, padding, cast=False)
+
+    rows = torch.arange(w, device=masks.device, dtype=x1.dtype).view(1, -1, 1).expand(h, w, n)
+    cols = torch.arange(h, device=masks.device, dtype=x1.dtype).view(-1, 1, 1).expand(h, w, n)
+    
+    masks_left  = rows >= x1.view(1, 1, -1)
+    masks_right = rows <  x2.view(1, 1, -1)
+    masks_up    = cols >= y1.view(1, 1, -1)
+    masks_down  = cols <  y2.view(1, 1, -1)
+    
+    crop_mask = masks_left * masks_right * masks_up * masks_down
+    
+    return masks * crop_mask.float()
+
+
 def jaccard_numpy(box_a, box_b):
     """Compute the jaccard overlap of two sets of boxes.  The jaccard overlap
     is simply the intersection over union of two boxes.

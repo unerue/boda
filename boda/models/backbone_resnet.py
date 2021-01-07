@@ -1,3 +1,5 @@
+from typing import Tuple, List, Optional, Callable
+
 import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
@@ -11,38 +13,126 @@ BACKBONE_ARCHIVE_MAP = {
     'resnet101': 'https://download.pytorch.org/models/resnet101-5d3b4d8f.pth',
 }
 
+class Conv2d1x1(nn.Sequential):
+    """1x1 convolution"""
+    def __init__(
+        self,
+        in_planes: int,
+        out_planes: int,
+        stride: int = 1,
+    ) -> None:
+        super().__init__(
+            nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
+        )
+
+
+class Conv2d3x3(nn.Sequential):
+    """3x3 convolution with padding"""
+    def __init__(
+        self,
+        in_planes: int,
+        out_planes: int,
+        stride: int = 1,
+        groups: int = 1,
+        dilation: int = 1
+    ) -> None:
+        super().__init__(
+            nn.Conv2d(
+                in_planes, out_planes, kernel_size=3, stride=stride,
+                padding=dilation, groups=groups, bias=False, dilation=dilation)
+        )
+
+
+class BasicBlock(nn.Module):
+    expansion: int = 1
+
+    def __init__(
+        self,
+        inplanes: int,
+        planes: int,
+        stride: int = 1,
+        downsample: Optional[nn.Module] = None,
+        groups: int = 1,
+        base_width: int = 64,
+        dilation: int = 1,
+        norm_layer: Optional[Callable[..., nn.Module]] = None
+    ) -> None:
+        super().__init__()
+        if norm_layer is None:
+            norm_layer = nn.BatchNorm2d
+
+        if groups != 1 or base_width != 64:
+            raise ValueError('BasicBlock only supports groups=1 and base_width=64')
+        if dilation > 1:
+            raise NotImplementedError('Dilation > 1 not supported in BasicBlock')
+        self.conv1 = Conv2d3x3(inplanes, planes, stride)
+        self.bn1 = norm_layer(planes)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = Conv2d3x3(planes, planes)
+        self.bn2 = norm_layer(planes)
+        self.downsample = downsample
+        self.stride = stride
+
+    def forward(self, x: Tensor) -> Tensor:
+        identity = x
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+
+        if self.downsample is not None:
+            identity = self.downsample(x)
+
+        out += identity
+        out = self.relu(out)
+
+        return out
+
 
 class Bottleneck(nn.Module):
     expansion = 4
-    def __init__(self, in_planes, planes, stride=1, downsample=None):
+    def __init__(
+        self,
+        in_planes: int,
+        planes: int,
+        stride: int = 1,
+        downsample: Optional[nn.Module] = None,
+        norm_layer: Optional[Callable[..., nn.Module]] = None
+    ) -> None:
         super().__init__()
-        self.conv1 = nn.Conv2d(
+        if norm_layer is None:
+            norm_layer = nn.BatchNorm2d
+
+        self.conv1 = Conv2d1x1(
             in_planes,
             planes,
             kernel_size=1,
             bias=False)
-        self.bn1 = nn.BatchNorm2d(planes)
+        self.bn1 = norm_layer(planes)
 
-        self.conv2 = nn.Conv2d(
+        self.conv2 = Conv2d3x3(
             planes,
             planes,
             kernel_size=3,
             stride=stride,
             padding=1,
             bias=False)
-        self.bn2 = nn.BatchNorm2d(planes)
+        self.bn2 = norm_layer(planes)
 
-        self.conv3 = nn.Conv2d(
+        self.conv3 = Conv2d1x1(
             planes,
             planes * self.expansion,
             kernel_size=1,
             bias=False)
-        self.bn3 = nn.BatchNorm2d(planes * self.expansion)
+        self.bn3 = norm_layer(planes * self.expansion)
 
         self.downsample = downsample
         self.stride = stride
 
-    def forward(self, inputs):
+    def forward(self, inputs) -> Tensor:
         residual = inputs
 
         outputs = F.relu(self.bn1(self.conv1(inputs)))
@@ -102,8 +192,6 @@ class ResNet(nn.Module):
         self.channels.append(planes * block.expansion)
         self.layers.append(layer)
 
-        return self
-
     def forward(self, inputs):
         inputs = self.conv(inputs)
         inputs = self.bn(inputs)
@@ -117,7 +205,10 @@ class ResNet(nn.Module):
 
         return outputs
 
-    def init_weights(self, path):
+    def add_layer(self, conv_channels=1024, downsample=2, depth=1, block=Bottleneck):
+        self._make_layer(block, conv_channels // block.expansion, blocks=depth, stride=downsample)
+
+    def from_pretrained(self, path):
         state_dict = torch.load(path)
 
         keys = list(state_dict)
@@ -128,9 +219,6 @@ class ResNet(nn.Module):
                 state_dict[new_key] = state_dict.pop(key)
 
         self.load_state_dict(state_dict, strict=False)
-
-    def add_layer(self, conv_channels=1024, downsample=2, depth=1, block=Bottleneck):
-        self._make_layer(block, conv_channels // block.expansion, blocks=depth, stride=downsample)
 
 
 def resnet18():

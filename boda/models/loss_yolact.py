@@ -16,9 +16,9 @@ class Matcher:
     """
     Arguments:
         pos_threshold ():
-        positive_threshold ():
+        ? positive_threshold ():
         neg_threshold ():
-        negative_threshold ():
+        ? negative_threshold ():
         crowd_iou_threshold ():
         variances ():
     """
@@ -43,6 +43,18 @@ class Matcher:
         true_crowd_boxes,
     ) -> Tuple[Tensor]:
         """
+        Arguments:
+            pred_boxes ():
+            ? predict_boxes ():
+            ? pred_boxes
+            ? true_boxes
+            ? target_boxes (): 
+            pred_priors ():
+            true_boxes ():
+            true_labels ():
+            true_crowds (): ?
+            true_crowd_boxes ():
+
         Returns:
             boxes (FloatTensor[N, 4]): N is a number of prior boxes 
             scores (LongTensor[N]): 
@@ -171,8 +183,19 @@ class YolactLoss(LossFunction):
     ) -> Dict[str, Tensor]:
         """
         Arguments:
-            inputs (): 
-            targets (Dict[str, Tensor]):
+            inputs (Dict[str, List[Tensor]]):
+                - boxes (FloatTensor[B, N, 4]):
+                - masks ():
+                - scores ():
+                - priors ():
+                - semantic ():
+
+            targets (List[Dict[str, Tensor]]):
+                boxes (FloatTensor[N, 4]): the ground-truth boxes in [x1, y1, x2, y2]
+                masks (ByteTensor[N, H, W]): the segmentation binary masks for each instance
+                labels (LongTensor[N]): the class label for each ground-truth
+                crowds (LongTensor[N]):
+                areas (FloatTensor[N]): 
         Return:
             Dict[str, Tensor]
         """
@@ -183,8 +206,11 @@ class YolactLoss(LossFunction):
         pred_scores = inputs['scores']
         pred_masks = inputs['masks']
         pred_priors = inputs['priors']
+        
+        print('!'*100)
+        print(pred_masks.size())
 
-        pred_prototypes = inputs['proto']  # TODO: proto? prototypes?
+        pred_prototypes = inputs['prototypes']  # TODO: proto? prototypes?
         pred_semantic = inputs['semantic']
 
         batch_size = len(targets)
@@ -200,9 +226,11 @@ class YolactLoss(LossFunction):
         matched_pred_scores = pred_boxes.new(batch_size, num_priors)
         matched_indexes = pred_boxes.new(batch_size, num_priors).long()
 
+        true_masks = []
         for i, target in enumerate(targets):
             true_boxes = target['boxes']
             true_labels[i] = target['labels']
+            true_masks.append(target['masks'])
 
             # crowds = target['crowds']
             # if crowds > 0:
@@ -253,6 +281,10 @@ class YolactLoss(LossFunction):
         losses['loss_boxes'] = F.smooth_l1_loss(pred_boxes, matched_pred_boxes, reduction='sum') * self.bbox_alpha
         print(losses)
 
+        # true_masks = torch.cat(true_masks)
+        # print(true_masks.size())
+        
+        print(pred_prototypes.size())
         score_data = None  # use_mask_scoring
         inst_data = None  # use_instance_coeff 
         losses['loss_masks'] = self.lincomb_mask_loss(
@@ -262,7 +294,7 @@ class YolactLoss(LossFunction):
             pred_masks,
             pred_priors,
             pred_prototypes,
-            targets['masks'],
+            true_masks,
             matched_true_boxes,
             score_data,
             inst_data,
@@ -280,14 +312,15 @@ class YolactLoss(LossFunction):
             true_masks,
             true_labels)
 
-        import sys
-        sys.exit()
+        # import sys
+        # sys.exit()
 
         # Divide all losses by the number of positives.
         # Don't do it for loss[P] because that doesn't depend on the anchors.
-        total_num_pos = num_pos.data.sum().float()
+        total_num_pos = num_positive_scores.data.sum().float()
         for k in losses:
-            if k not in ('P', 'E', 'S'):
+            # if k not in ('P', 'E', 'S'):
+            if k not in ('loss_semantic', ):
                 losses[k] /= total_num_pos
             else:
                 losses[k] /= batch_size
@@ -345,8 +378,10 @@ class YolactLoss(LossFunction):
 
         for idx in range(mask_data.size(0)):
             with torch.no_grad():
-                downsampled_masks = F.interpolate(masks[idx].unsqueeze(0), (mask_h, mask_w),
-                                                  mode=interpolation_mode, align_corners=False).squeeze(0)
+                print('lincomb masks[idx]', masks[idx].unsqueeze(0).size(), masks[idx].dtype)
+                # TODO: masks byte to long
+                downsampled_masks = F.interpolate(masks[idx].unsqueeze(0).float(), (mask_h, mask_w),
+                                                  mode=interpolation, align_corners=False).squeeze(0)
                 downsampled_masks = downsampled_masks.permute(1, 2, 0).contiguous()
 
                 # true, mask_proto_binarize_downsampled_gt
@@ -368,7 +403,10 @@ class YolactLoss(LossFunction):
              
             # If we have over the allowed number of masks, select a random sample
             old_num_pos = proto_coef.size(0)
-            if old_num_pos > self.masks_to_train:
+
+            # TODO: config
+            masks_to_train = 300
+            if old_num_pos > masks_to_train:
                 perm = torch.randperm(proto_coef.size(0))
                 select = perm[:self.masks_to_train]
 
@@ -385,15 +423,21 @@ class YolactLoss(LossFunction):
             # Size: [mask_h, mask_w, num_pos]
             pred_masks = proto_masks @ proto_coef.t()
             # pred_masks = cfg.mask_proto_mask_activation(pred_masks)
-
-            if self.mask_proto_crop:
+            
+            from ..utils.bbox import crop
+            # TODO
+            mask_proto_crop = True
+            if mask_proto_crop:
                 pred_masks = crop(pred_masks, pos_gt_box_t)
             
             pre_loss = F.binary_cross_entropy(torch.clamp(pred_masks, 0, 1), mask_t, reduction='none')
-            
-            if self.mask_proto_normalize_emulate_roi_pooling:
-                weight = mask_h * mask_w if cfg.mask_proto_crop else 1
-                pos_gt_csize = center_size(pos_gt_box_t)
+            # TODO:
+            from ..utils.bbox import xyxy_to_cxywh
+
+            mask_proto_normalize_emulate_roi_pooling = True
+            if mask_proto_normalize_emulate_roi_pooling:
+                weight = mask_h * mask_w if mask_proto_crop else 1
+                pos_gt_csize = xyxy_to_cxywh(pos_gt_box_t)
                 gt_box_width  = pos_gt_csize[:, 2] * mask_w
                 gt_box_height = pos_gt_csize[:, 3] * mask_h
                 pre_loss = pre_loss.sum(dim=(0, 1)) / gt_box_width / gt_box_height * weight
@@ -404,18 +448,27 @@ class YolactLoss(LossFunction):
 
             loss_m += torch.sum(pre_loss)
 
-        losses = {'M': loss_m * self.mask_alpha / mask_h / mask_w}
+        losses = loss_m * self.mask_alpha / mask_h / mask_w
         
         return losses
 
     def ohem_conf_loss(self, conf_data, conf_t, pos, num):
         # Compute max conf across batch for hard negative mining
-        batch_conf = conf_data.view(-1, self.num_classes)
+        print('OHEM'*100)
+        print(conf_data.size())
+        print(conf_t.size())
+        print(pos.size())
+        batch_conf = conf_data.view(-1, 81)
+        print(batch_conf.size(), batch_conf.dtype)
         # i.e. -softmax(class 0 confidence)
-        loss_c = log_sum_exp(batch_conf) - batch_conf[:, 0]
+        # TODO: remove squeeze(1)
+        loss_c = log_sum_exp(batch_conf).squeeze(1) - batch_conf[:, 0]
+        print(log_sum_exp(batch_conf).squeeze(1).size(), batch_conf[:, 0].size())
+        print(loss_c.size())
 
         # Hard Negative Mining
         loss_c = loss_c.view(num, -1)
+        print(loss_c.size())
         loss_c[pos]        = 0 # filter out pos boxes
         loss_c[conf_t < 0] = 0 # filter out neutrals (conf_t = -1)
         _, loss_idx = loss_c.sort(1, descending=True)
@@ -431,13 +484,17 @@ class YolactLoss(LossFunction):
         # Confidence Loss Including Positive and Negative Examples
         pos_idx = pos.unsqueeze(2).expand_as(conf_data)
         neg_idx = neg.unsqueeze(2).expand_as(conf_data)
-        conf_p = conf_data[(pos_idx + neg_idx).gt(0)].view(-1, self.num_classes)
-        targets_weighted = conf_t[(pos+neg).gt(0)]
+        conf_p = conf_data[(pos_idx + neg_idx).gt(0)].view(-1, 81)
+        targets_weighted = conf_t[(pos+neg).gt(0)].long()
+        print(conf_p.dtype, conf_p.size())
+        print(targets_weighted.dtype, targets_weighted.size())
         loss_c = F.cross_entropy(conf_p, targets_weighted, reduction='none')
 
         loss_c = loss_c.sum()
+        # TODO: self.
+        conf_alpha = 1
 
-        return self.conf_alpha * loss_c
+        return conf_alpha * loss_c
 
 
     def class_existence_loss(self, class_data, class_existence_t):
@@ -447,20 +504,26 @@ class YolactLoss(LossFunction):
         # Note num_classes here is without the background class so cfg.num_classes-1
         batch_size, num_classes, mask_h, mask_w = segment_data.size()
         loss_s = 0
+        print(len(segment_data), segment_data[0].size())
+        print(len(mask_t), mask_t[0].size())
+        print(len(class_t), class_t[0].size())
         
         for idx in range(batch_size):
             cur_segment = segment_data[idx]
             cur_class_t = class_t[idx]
+            print(cur_class_t)
 
             with torch.no_grad():
-                downsampled_masks = F.interpolate(mask_t[idx].unsqueeze(0), (mask_h, mask_w),
-                                                  mode=interpolation_mode, align_corners=False).squeeze(0)
+                downsampled_masks = F.interpolate(
+                    mask_t[idx].unsqueeze(0).float(), (mask_h, mask_w),
+                    mode=interpolation_mode, align_corners=False).squeeze(0)
                 downsampled_masks = downsampled_masks.gt(0.5).float()
-                
+                print(downsampled_masks.size())
                 # Construct Semantic Segmentation
                 segment_t = torch.zeros_like(cur_segment, requires_grad=False)
                 for obj_idx in range(downsampled_masks.size(0)):
-                    segment_t[cur_class_t[obj_idx]] = torch.max(segment_t[cur_class_t[obj_idx]], downsampled_masks[obj_idx])
+                    segment_t[cur_class_t[obj_idx]] = \
+                        torch.max(segment_t[cur_class_t[obj_idx]], downsampled_masks[obj_idx])
             
             loss_s += F.binary_cross_entropy_with_logits(cur_segment, segment_t, reduction='sum')
 

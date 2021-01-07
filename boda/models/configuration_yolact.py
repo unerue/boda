@@ -13,14 +13,18 @@ YOLACT_PRETRAINED_CONFIG = {
 class YolactConfig(BaseConfig):
     """Configuration for YOLACT
 
-    Arguments:
-        max_size (Union[int, Tuple[int]]):
-        num_classes (int):
+    Args:
+        max_size (:obj:`Union[int, Tuple[int]]`):
+        num_classes (:obj:`int`):
+        num_grids (:obj:`int`): 
+        padding (:obj:`int`):
+        use_conv_downsample (:obj:`bool`, defaults to `True`): 
     """
     model_name = 'yolact'
 
     def __init__(
         self,
+        num_classes=80,
         max_size=550,
         padding=1,
         use_conv_downsample=True,
@@ -37,7 +41,7 @@ class YolactConfig(BaseConfig):
         super().__init__(max_size=max_size, **kwargs)
         # self.selected_layers = list(range(1, 4))
         # self.num_boxes = None
-        self.num_classes = 7
+        self.num_classes = num_classes + 1
         # neck
         self.padding = 1
         self.aspect_ratios = [[[0.66685089, 1.7073535, 0.87508774, 1.16524493, 0.49059086]]]*6
@@ -80,3 +84,5 @@ class YolactConfig(BaseConfig):
         self.use_preapply_sqrt = True
         self.use_pixel_scales = True
         self.use_square_anchors = True
+
+        self.label_map = {}

@@ -18,29 +18,29 @@ from .backbone_resnet import resnet101
 class YolactPredictNeck(Neck):
     """Prediction Neck for YOLACT
 
-    Arguments:
-        in_channels ():
+    Args:
+        config (:class:`YolactConfig`): 
+        channels (:obj:`List[int]`): list of in_channels from backbone
     """
-    def __init__(self, config, in_channels: List[int]) -> None:
+    def __init__(self, config, channels: List[int]) -> None:
         super().__init__()
         self.config = config
         _selected_layers = list(range(len(config.selected_layers)
                                 + config.num_downsamples))
-        # TODO: channels or out_channels?
         self.channels = [config.fpn_out_channels] * len(_selected_layers)
 
         self.lateral_layers = nn.ModuleList([
             nn.Conv2d(
                 _in_channels,
                 config.fpn_out_channels,
-                kernel_size=1) for _in_channels in reversed(in_channels)])
+                kernel_size=1) for _in_channels in reversed(channels)])
 
         self.predict_layers = nn.ModuleList([
             nn.Conv2d(
                 config.fpn_out_channels,
                 config.fpn_out_channels,
                 kernel_size=3,
-                padding=config.padding) for _ in in_channels])
+                padding=config.padding) for _ in channels])
 
         self.downsample_layers = nn.ModuleList([
             nn.Conv2d(
@@ -93,6 +93,13 @@ def prior_cache(func):
 
 class PriorBox:
     """
+    Args:
+        aspect_ratios (:obj:`List[int]`): 
+        scales (:obj:),
+        max_size ():
+        use_preapply_sqrt ():
+        use_pixel_scales ():
+        use-square_anchors (:obj:`bool`) default `True`
     """
     def __init__(
         self,
@@ -113,12 +120,14 @@ class PriorBox:
     @prior_cache
     def generate(self, h: int, w: int, device='cuda') -> Tuple[int, Tensor]:
         """
-        Arguments:
-            h (int): feature map size
-            w (int): feature map size
+        Args:
+            h (:obj:`int`): feature map size
+            w (:obj:`int`): feature map size
+            device (:obj:`str`): default `cuda`
+
         Returns
-            feature map size (Tuple[int])
-            prior boxes (Tensor): Size[N, 4]
+            size (:obj:`Tuple[int]`): feature map size
+            prior_boxes (:obj:`FloatTensor[N, 4]`):
         """
         size = (h, w)
         prior_boxes = []
@@ -155,10 +164,10 @@ class ProtoNet(nn.Sequential):
     """ProtoNet of YOLACT
 
     Arguments:
-        config ()
-        in_channels ()
-        layers ()
-        include_last_relu ()
+        config (:class:`YolactConfig`)
+        in_channels (:obj:`int`):
+        layers ():
+        include_last_relu (Optional[bool]): 
     """
     def __init__(
         self,
@@ -219,14 +228,14 @@ class HeadBranch(nn.Sequential):
 class YolactPredictHead(Head):
     """Prediction Head for YOLACT
 
-    Arguments:
-        config
-        in_channles
-        out_channels
-        aspect_ratio
-        scales
-        parent
-        index
+    Args:
+        config (:class:`YolactConfig`): 
+        in_channles (:obj:`int`):
+        out_channels (:obj:`int`):
+        aspect_ratios (:obj:`List[int]`):
+        scales ():
+        parent ():
+        index ():
     """
     def __init__(
         self,
@@ -240,7 +249,7 @@ class YolactPredictHead(Head):
     ) -> None:
         super().__init__()
         self.config = config
-        self.num_classes = config.num_classes + 1
+        self.num_classes = config.num_classes
         self.prior_box = PriorBox(
             aspect_ratios,
             scales,
@@ -282,6 +291,8 @@ class YolactPredictHead(Head):
         in_channels: int,
         out_channels: int
     ) -> nn.Sequential:
+        """
+        """
         _predict_layers = []
         if num_extra_layers > 0:
             for _ in range(num_extra_layers):
@@ -300,10 +311,15 @@ class YolactPredictHead(Head):
 
     def forward(self, inputs: Tensor) -> Dict[str, Tensor]:
         """
-        Argument:
+        Args:
             inputs (FloatTensor[B, C, H, W]):
-        Return:
-            Dict[str, Tensor]
+
+        Returns:
+            return_dict (:obj:`Dict[str, Tensor]`):
+                `boxes` (:obj:`FloatTensor[N, 4]`): 
+                `masks` (:obj:`Tensor[N, H, W]`):
+                `scores` (:obj:`Tensor[N]`):
+                `priors` (:obj:`FloatTensor[N, 4]`):
         """
         pred = self if self.parent[0] is None else self.parent[0]
 
@@ -320,14 +336,14 @@ class YolactPredictHead(Head):
         masks = masks.permute(0, 2, 3, 1).contiguous().view(inputs.size(0), -1, self.config.mask_dim)
         _, priors = self.prior_box.generate(h, w)
 
-        preds = {
+        return_dict = {
             'boxes': boxes,
             'priors': priors,
             'masks': masks,
             'scores': scores,
         }
 
-        return preds
+        return return_dict
 
 
 class YolactPretrained(Model):
@@ -361,12 +377,18 @@ class YolactModel(YolactPretrained):
        ██║   ╚██████╔╝███████╗██║  ██║╚██████╗   ██║
        ╚═╝    ╚═════╝ ╚══════╝╚═╝  ╚═╝ ╚═════╝   ╚═╝
 
-    Arguments:
-        config ()
+    Args:
+        config (:class:`YolactConfig`):
         backbone ()
-        neck ()
-        head ()
+        neck (:class:`Neck`)
+        head (:class:`Head`)
+        num_classes (:obj:`int`):
 
+    Examples::
+        >>> from boda import YolactConfig, YolactModel
+
+        >>> config = YolactConfig()
+        >>> model = YolactModel(config)
     """
     model_name = 'yolact'
 
@@ -431,11 +453,15 @@ class YolactModel(YolactPretrained):
 
     def forward(self, inputs: List[Tensor]) -> Dict[str, List[Tensor]]:
         """
-        Arguments:
+        Args:
             inputs (List[Tensor]):
 
-        Return:
-            Dict[str, List[Tensor]]: number of batch size
+        Returns:
+            return_dict (:obj:`Dict[str, List[Tensor]]`):
+                `` (): number of batch size
+                `` ():
+                `` ():
+                `` ():
         """
         inputs = self.check_inputs(inputs)
         self.config.device = inputs.device
@@ -468,11 +494,21 @@ class YolactModel(YolactPretrained):
         for k, v in preds.items():
             print(k, v.size())
 
-        if self.training:
-            if self.use_semantic_segmentation:
-                preds['prototypes'] = self.proto_net(outputs[0])
-                preds['semantic'] = self.semantic_layer(outputs[0])
-        else:
-            preds['scores'] = F.softmax(preds['scores'], dim=-1)
+        use_semantic_segmentation = True
+        proto_masks = self.proto_net(outputs[0])
+        proto_masks = proto_masks.permute(0, 2, 3, 1).contiguous()
+        preds['prototypes'] = proto_masks
+        print('#'*100)
+        print(preds['prototypes'])
+        print()
+        preds['semantic'] = self.semantic_layer(outputs[0])
+
+        # if self.training:
+        #     # if self.use_semantic_segmentation:
+        #     if use_semantic_segmentation:
+        #         preds['prototypes'] = self.proto_net(outputs[0])
+        #         preds['semantic'] = self.semantic_layer(outputs[0])
+        # else:
+        #     preds['scores'] = F.softmax(preds['scores'], dim=-1)
 
         return preds
