@@ -28,19 +28,21 @@ from boda.models import YolactConfig, YolactModel, YolactLoss
 
 config = YolactConfig(num_classes=80)
 model = YolactModel(config)
+criterion = YolactLoss()
+
 outputs = model(images)
-losses = YolactLoss(outputs, targets)
+losses = criterion(outputs, targets)
 print(losses)
 ```
 
-|Model|Original|Ours|
+|Model|State|Original|Ours|
 |:----|-------:|---:|
-|YOLOv1|Rebuild||
-|SSD|Rebuild||
-|YOLOv4|Dev||
-|YOLACT|Rebuild||
-|SOLOv1|Dev||
-|CenterMask|Dev||
+|YOLOv1|Test|||
+|SSD|Rebuild|||
+|YOLOv4|Dev|||
+|YOLACT|Rebuild|||
+|SOLOv1|Dev|||
+|CenterMask|Dev|||
 
 
 ```python
