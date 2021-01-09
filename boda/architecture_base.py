@@ -106,6 +106,19 @@ class ModelMixin(ABC):
 
         return inputs
 
+    def freeze_bn(self, enable: bool = False):
+        """Freeze Batch Nomalization
+
+        Adapted from https://discuss.pytorch.org/t/how-to-train-with-frozen-batchnorm/12106/8 """
+        for module in self.modules():
+            if isinstance(module, nn.BatchNorm2d):
+                if enable:
+                    module.train()
+                else:
+                    module.eval()
+
+                module.weight.requires_grad = enable
+                module.bias.requires_grad = enable
 
 class Model(nn.Module, ModelMixin):
     config_class = None

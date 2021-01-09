@@ -56,12 +56,12 @@ def intersect(box_a: Tensor, box_b: Tensor) -> Tensor:
     A = box_a.size(1)
     B = box_b.size(1)
     max_xy = torch.min(
-        box_a[:, :, 2:].unsqueeze(2).expand(n, A, B, 2),
-        box_b[:, :, 2:].unsqueeze(1).expand(n, A, B, 2))
+        box_a[..., 2:].unsqueeze(2).expand(n, A, B, 2),
+        box_b[..., 2:].unsqueeze(1).expand(n, A, B, 2))
 
     min_xy = torch.max(
-        box_a[:, :, :2].unsqueeze(2).expand(n, A, B, 2),
-        box_b[:, :, :2].unsqueeze(1).expand(n, A, B, 2))
+        box_a[..., :2].unsqueeze(2).expand(n, A, B, 2),
+        box_b[..., :2].unsqueeze(1).expand(n, A, B, 2))
 
     return torch.clamp(max_xy - min_xy, min=0).prod(3)  # inter
 
@@ -74,15 +74,18 @@ def intersect_numpy(box_a, box_b):
 
 
 def jaccard(box_a: Tensor, box_b: Tensor, iscrowd: bool = False) -> Tensor:
-    """Compute the jaccard overlap of two sets of boxes.  The jaccard overlap
-    is simply the intersection over union of two boxes.  Here we operate on
+    """Compute the jaccard overlap of two sets of boxes. The jaccard overlap is
+    simply the intersection over union of two boxes.  Here we operate on 
     ground truth boxes and default boxes. If iscrowd=True, put the crowd in box_b.
-    E.g.:
-        A ∩ B / A ∪ B = A ∩ B / (area(A) + area(B) - A ∩ B)
+
     Args:
-        box_a: (tensor) Ground truth bounding boxes, Shape: [num_objects,4]
-        box_b: (tensor) Prior boxes from priorbox layers, Shape: [num_priors,4]
-    Return:
+        box_a (FloatTensor[4]): Ground truth bounding boxes, Shape: [num_objects, 4]
+        box_b (FloatTensor[4]): Prior boxes from prior_box layers, Shape: [num_priors, 4]
+
+    E.g.:
+        :math: A ∩ B / A ∪ B = A ∩ B / (area(A) + area(B) - A ∩ B)
+
+    Returns:
         jaccard overlap: (tensor) Shape: [box_a.size(0), box_b.size(0)]
     """
     use_batch = True

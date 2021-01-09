@@ -106,27 +106,18 @@ class Bottleneck(nn.Module):
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
 
-        self.conv1 = Conv2d1x1(
-            in_planes,
-            planes,
-            kernel_size=1,
-            bias=False)
+        self.conv1 = Conv2d1x1(in_planes, planes)
         self.bn1 = norm_layer(planes)
 
         self.conv2 = Conv2d3x3(
             planes,
             planes,
-            kernel_size=3,
-            stride=stride,
-            padding=1,
-            bias=False)
+            stride=stride)
         self.bn2 = norm_layer(planes)
 
         self.conv3 = Conv2d1x1(
             planes,
-            planes * self.expansion,
-            kernel_size=1,
-            bias=False)
+            planes * self.expansion)
         self.bn3 = norm_layer(planes * self.expansion)
 
         self.downsample = downsample
@@ -245,6 +236,7 @@ def resnet50(pretrained: bool = False):
 
 def resnet101(pretrained: bool = False):
     backbone = ResNet([3, 4, 23, 3])
+    backbone.from_pretrained('cache/resnet101_reducedfc.pth')
     # Add downsampling layers until we reach the number we need
     # selected_layers = [1, 2, 3]
     # # num_layers = max(cfg.selected_layers) + 1

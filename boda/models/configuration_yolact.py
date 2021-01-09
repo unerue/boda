@@ -55,7 +55,7 @@ class YolactConfig(BaseConfig):
         self.num_classes = num_classes + 1
         # neck
         self.padding = 1
-        self.aspect_ratios = [[[0.66685089, 1.7073535, 0.87508774, 1.16524493, 0.49059086]]]*6
+        self.aspect_ratios = [[[0.66685089, 1.7073535, 0.87508774, 1.16524493, 0.49059086]]] * 6
         # self.pred_scales = [[24], [48], [96], [192], [384]]
         # self.fpn_out_channels = 256
         # self.predict_channels = 256
@@ -73,7 +73,7 @@ class YolactConfig(BaseConfig):
         self.mask_type = 1
         self.mask_alpha = 6.125
         self.proto_src = 0
-        self.proto_net = [(256, 3, {'padding': 1})] * 3 + [(None, -2, {}), (256, 3, {'padding': 1})] + [(32, 1, {})]
+        self.proto_net = [(256, 3, {'padding': 1})]*3 + [(None, -2, {}), (256, 3, {'padding': 1})] + [(32, 1, {})]
         self.mask_proto_prototypes_as_features = None
         self.mask_proto_prototypes_as_features_no_grad = None
         self.mask_proto_coef_activation = None

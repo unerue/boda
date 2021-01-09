@@ -1,3 +1,4 @@
+import sys
 from collections import defaultdict
 from typing import Tuple, List, Dict, Union
 import numpy as np
@@ -7,7 +8,7 @@ from torch import nn, Tensor
 import torch.nn.functional as F
 
 from ..architecture_base import LossFunction
-from ..utils.bbox import elemwise_box_iou, jaccard, cxcywh_to_xyxy
+from ..utils.bbox import elemwise_box_iou, jaccard, cxcywh_to_xyxy, crop, xyxy_to_cxywh
 from ..utils.loss import log_sum_exp
 from ..utils.mask import elemwise_mask_iou
 
@@ -47,7 +48,7 @@ class Matcher:
         true_crowds,
     ) -> Tuple[Tensor]:
         """
-        Arguments:
+        Args:
             pred_boxes ():
             pred_priors ():
             true_boxes ():
@@ -55,13 +56,13 @@ class Matcher:
             true_crowds ():
 
         Returns:
-            boxes (FloatTensor[N, 4]): N is a number of prior boxes 
-            scores (LongTensor[N]): 
-            best_truth_index (LongTensor[N]): 
+            boxes (:obj:`FloatTensor[N, 4]`): N is a number of prior boxes 
+            scores (:obj:`LongTensor[N]`):
+            best_truth_index (:obj:`LongTensor[N]`):
         """
         # FloatTensor[N, 4]
         decoded_priors = self.decode(
-            pred_boxes, cxcywh_to_xyxy(pred_priors))
+            pred_boxes, pred_priors)
 
         # LongTensor[number of ground truths]
         overlaps = jaccard(true_boxes, decoded_priors)
@@ -70,7 +71,6 @@ class Matcher:
         for _ in range(overlaps.size(0)):
             best_prior_overlap, best_prior_index = overlaps.max(1)
             j = best_prior_overlap.max(0)[1]
-
             i = best_prior_index[j]
 
             overlaps[:, i] = -1
@@ -100,15 +100,12 @@ class Matcher:
 
     def decode(self, boxes, priors):
         """
-        Arguments:
-            boxes ():
-            priors ():
+        Args:
+            boxes (FloatTensor[N, 4]): N is the number of prior boxes
+            priors (FloatTensor[N, 4]):
         Return:
-            boxes ():
+            boxes (FloatTensor[N, 4]):
         """
-        print(boxes.size(), boxes.device)
-        print(priors.size(), priors.device)
-        print(self.variances)
         boxes = torch.cat((
             priors[:, :2] + boxes[:, :2] * self.variances[0] * priors[:, 2:],
             priors[:, 2:] * torch.exp(boxes[:, 2:] * self.variances[1])), dim=1)
@@ -116,11 +113,11 @@ class Matcher:
         boxes[:, :2] -= boxes[:, 2:] / 2
         boxes[:, 2:] += boxes[:, :2]
     
-        return boxes.double()
-    
+        return boxes
+
     def encode(self, matched, priors):
         """
-        Arguments:
+        Args:
             matched ()
             priors ()
 
@@ -141,7 +138,7 @@ class Matcher:
 
 
 def sigmoid(x):
-    return 1 / (1 + np.exp(-x))
+    return 1 / (1 + torch.exp(-x))
 
 
 class YolactLoss(LossFunction):
@@ -153,14 +150,12 @@ class YolactLoss(LossFunction):
     """
     def __init__(
         self,
-        num_classes: int = 80,
         pos_threshold: float = 0.5,
-        neg_threshold: float = 0.5,
+        neg_threshold: float = 0.4,
         neg_pos_ratio: float = 1.0,
-        mask_to_train: int = 300
+        masks_to_train: int = 300
     ) -> None:
         super().__init__()
-        self.num_classes = num_classes + 1
         self.pos_threshold = pos_threshold
         self.neg_threshold = neg_threshold
         self.negpos_ratio = neg_pos_ratio
@@ -168,15 +163,16 @@ class YolactLoss(LossFunction):
         self.conf_weight = 1.5
         self.confidence_weight = 1.5
         self.mask_weight = 1.5
-        
+
+        self.crowd_iou_threshold = 0.7
 
         self.bbox_alpha = 1.5
-        self.mask_alpha = 0.4 / 256 * 140 * 140
+        self.mask_alpha = 6.125
         self.score_alpha = 1.0
         self.semantic_segmentation_alpha = 1.0
         self.class_existence_alpha = 1.0
 
-        self.mask_to_train = mask_to_train
+        self.masks_to_train = masks_to_train
 
         self.l1_expected_area = 20 * 20 / 70 / 70
         self.l1_alpha = 0.1
@@ -187,133 +183,123 @@ class YolactLoss(LossFunction):
         targets: List[Dict[str, Tensor]],
     ) -> Dict[str, Tensor]:
         """
-        Arguments:
+        Args:
             inputs (Dict[str, List[Tensor]]):
-                - boxes (FloatTensor[B, N, 4]):
-                - masks ():
-                - scores ():
-                - priors ():
-                - semantic ():
+                `boxes` (:obj:`FloatTensor[B, N*S, 4]`): B is the number of batch size, S is the number of selected_layers
+                `masks` (:obj:`FloatTensor[B, N*S, P]`): P is the number of prototypes
+                `scores` (:obj:`FloatTensor[B, N*S, C]`): C is the number of classes with background e.g. 80 + 1
+                `priors` (:obj:`FloatTensor[N, 4]`):
+                `prototype_masks` (:obj:`FloatTensor[B, H, W, P]`):
+                `semantic_masks` (:obj:`FloatTensor[B, C, H, W]`)::
 
             targets (List[Dict[str, Tensor]]):
-                boxes (FloatTensor[N, 4]): the ground-truth boxes in [x1, y1, x2, y2]
-                masks (ByteTensor[N, H, W]): the segmentation binary masks for each instance
-                labels (LongTensor[N]): the class label for each ground-truth
-                crowds (LongTensor[N]):
-                areas (FloatTensor[N]): 
-        Return:
-            Dict[str, Tensor]
+                `boxes` (FloatTensor[N, 4]): the ground-truth boxes in [x1, y1, x2, y2]
+                `masks` (ByteTensor[N, H, W]): the segmentation binary masks for each instance
+                `labels` (LongTensor[N]): the class label for each ground-truth
+                `crowds` (LongTensor[N]):
+                `areas` (FloatTensor[N]):
+
+        Returns:
+            return_dict (:obj:`Dict[str, Tensor]`):
+                'boxes` ()
         """
         self.check_targets(targets)
         targets = self.copy_targets(targets)
 
+        losses = defaultdict()
+
         pred_boxes = inputs['boxes']
-        pred_scores = inputs['scores']
         pred_masks = inputs['masks']
+        pred_scores = inputs['scores']
         pred_priors = inputs['priors']
-        
-        pred_prototypes = inputs['prototypes']  # TODO: proto? prototypes?
-        pred_semantic = inputs['semantic']
+        pred_prototype_masks = inputs['prototype_masks']
+        pred_semantic_masks = inputs['semantic_masks']
 
         batch_size = len(targets)
         num_priors = pred_priors.size(0)
-
-        true_labels = [None] * len(targets)
-        true_masks = [None] * len(targets)
-
+        
         matched_pred_boxes = pred_boxes.new(batch_size, num_priors, 4)
         matched_true_boxes = pred_boxes.new(batch_size, num_priors, 4)
         matched_pred_scores = pred_boxes.new(batch_size, num_priors)
         matched_indexes = pred_boxes.new(batch_size, num_priors).long()
 
         true_masks = []
+        true_labels = []
         for i, target in enumerate(targets):
             true_boxes = target['boxes']
-            true_labels[i] = target['labels']
-            true_masks.append(target['masks'])
+            true_boxes /= torch.as_tensor([550, 550, 550, 550], dtype=torch.float32, device=pred_boxes.device)
 
-            # crowds = target['crowds']
-            # if crowds > 0:
+            true_masks.append(target['masks'])
+            true_labels.append(target['labels'])
+            # true_labels[i] = target['labels']
+            true_crowds = target['crowds']
+
+            # if true_crowds > 0:
             #     true_crowd_boxes = true_boxes[-crowds:]
             #     true_boxes = true_boxes[:-crowds]
             #     true_labels = true_labels[i][:-crowds]
             #     true_masks = target['masks'][:-crowds]
             # else:
             #     true_crowd_boxes = None
-            true_crowd_boxes = None
 
             matched_boxes, matched_scores, matched_index = Matcher()(
                 pred_boxes[i],
                 pred_priors,
                 true_boxes,
                 true_labels[i],
-                true_crowd_boxes)
+                true_crowds)
 
             matched_pred_boxes[i] = matched_boxes  # [num_priors,4] encoded offsets to learn
-            matched_indexes[i] = matched_index
-
-            matched_true_boxes[i, :, :] = true_boxes[matched_indexes[i]]
             matched_pred_scores[i] = matched_scores  # [num_priors] top class label for each prior
-            matched_indexes[i] = matched_index  # [num_priors] indices for lookup
-
+            matched_indexes[i] = matched_index
+            matched_true_boxes[i, :, :] = true_boxes[matched_indexes[i]]
+        
         matched_pred_boxes.required_grad = False
         matched_pred_scores.required_grad = False
         matched_indexes.required_grad = False
-
+    
         positive_scores = matched_pred_scores > 0
         num_positive_scores = positive_scores.sum(dim=1, keepdim=True)
 
         # Size([batch, num_priors, 4])
-        pos_index = positive_scores.unsqueeze(positive_scores.dim()).expand_as(pred_boxes)
+        positive_index = positive_scores.unsqueeze(positive_scores.dim()).expand_as(pred_boxes)
+    
+        pred_boxes = pred_boxes[positive_index].view(-1, 4)
+        matched_pred_boxes = matched_pred_boxes[positive_index].view(-1, 4)
 
-        losses = defaultdict()
+        # Localization loss (Smooth L1)
+        losses['B'] = \
+            F.smooth_l1_loss(
+                pred_boxes,
+                matched_pred_boxes, reduction='sum') * self.bbox_alpha
 
-        # Localization Loss (Smooth L1)
-
-        pred_boxes = pred_boxes[pos_index].view(-1, 4)
-        matched_pred_boxes = matched_pred_boxes[pos_index].view(-1, 4)
-        losses['loss_boxes'] = F.smooth_l1_loss(pred_boxes, matched_pred_boxes, reduction='sum') * self.bbox_alpha
-
-        # true_masks = torch.cat(true_masks)
-        # print(true_masks.size())
-        
-        score_data = None  # use_mask_scoring
-        inst_data = None  # use_instance_coeff 
-        losses['loss_masks'] = self.lincomb_mask_loss(
+        losses['M'] = self.lincomb_mask_loss(
             positive_scores,
             matched_indexes,
-            pred_boxes,
             pred_masks,
-            pred_priors,
-            pred_prototypes,
+            pred_prototype_masks,
             true_masks,
-            matched_true_boxes,
-            score_data,
-            inst_data,
-            true_labels)
-    
+            matched_true_boxes)
+
         # Confidence loss
-        losses['loss_conf'] = self.ohem_conf_loss(
+        losses['C'] = self.ohem_conf_loss(
             pred_scores,
             matched_pred_scores,
             positive_scores,
             batch_size)
 
-        losses['loss_semantic'] = self.semantic_segmentation_loss(
-            pred_semantic,
+        losses['S'] = self.semantic_segmentation_loss(
+            pred_semantic_masks,
             true_masks,
             true_labels)
 
-        # import sys
-        # sys.exit()
-
         # Divide all losses by the number of positives.
         # Don't do it for loss[P] because that doesn't depend on the anchors.
-        total_num_pos = num_positive_scores.data.sum().float()
+        total_num_positives = num_positive_scores.data.sum().float()
         for k in losses:
             # if k not in ('P', 'E', 'S'):
-            if k not in ('loss_semantic', ):
-                losses[k] /= total_num_pos
+            if k not in ('S', ):
+                losses[k] /= total_num_positives
             else:
                 losses[k] /= batch_size
 
@@ -321,127 +307,79 @@ class YolactLoss(LossFunction):
 
     def lincomb_mask_loss(
         self,
-        # prototypes,
-        # true_masks,
-        pos,
-        idx_t,
-        loc_data,
-        mask_data,
-        priors,
-        proto_data,
-        masks,
-        gt_box_t,
-        score_data,
-        inst_data,
-        labels,
-        interpolation='bilinear'
+        positive_scores,
+        matched_indexes,
+        pred_masks,
+        prototype_masks,
+        true_masks,
+        matched_true_boxes,
+        mode: str = 'bilinear'
     ) -> None:
         """
-        Arguments:
-
-        Return:
+        Args:
+            mode (:obj:`str`): interpolation mode
+        Returns:
         """
-        # h = prototypes.size(1)
-        # w = prototypes.size(2)
+        h = prototype_masks.size(1)
+        w = prototype_masks.size(2)
 
-        # for i, mask in enumerate(true_masks):
-        #     with torch.no_grad():
-        #         downsampled_masks = F.interpolate(
-        #             mask.unsqueeze(0), 
-        #             size=(h, w),
-        #             mode=interpolation,
-        #             align_corners=False).squeeze(0)
-
-        #         downsampled_masks = downsampled_masks.permute(1, 2, 0).contiguous()
-
-
-        mask_h = proto_data.size(1)
-        mask_w = proto_data.size(2)
-        # True
-        # process_gt_bboxes = self.mask_proto_normalize_emulate_roi_pooling or self.mask_proto_crop
-        process_gt_bboxes = True
-
-        loss_m = 0
-        loss_d = 0 # Coefficient diversity loss
-
-        maskiou_t_list = []
-        maskiou_net_input_list = []
-        label_t_list = []
-
-        for idx in range(mask_data.size(0)):
+        loss = 0
+        for i in range(pred_masks.size(0)):
             with torch.no_grad():
-                # TODO: masks byte to long
-                downsampled_masks = F.interpolate(masks[idx].unsqueeze(0).float(), (mask_h, mask_w),
-                                                  mode=interpolation, align_corners=False).squeeze(0)
+                downsampled_masks = F.interpolate(
+                    true_masks[i].unsqueeze(0).float(), (h, w),
+                    mode=mode, align_corners=False
+                ).squeeze(0)
                 downsampled_masks = downsampled_masks.permute(1, 2, 0).contiguous()
+                # mask_proto_binarize_downsampled_gt
+                downsampled_masks = downsampled_masks.gt(0.5).float()
 
-                # true, mask_proto_binarize_downsampled_gt
-                mask_proto_binarize_downsampled_gt = True
-                if mask_proto_binarize_downsampled_gt:
-                    downsampled_masks = downsampled_masks.gt(0.5).float()
+            j = positive_scores[i]  # current position
+            positive_index = matched_indexes[i, j]  # positive index
+            positive_true_boxes = matched_true_boxes[i, j]  # process_gt_boxes
 
-            cur_pos = pos[idx]
-            pos_idx_t = idx_t[idx, cur_pos]
-            
-            if process_gt_bboxes:
-                pos_gt_box_t = gt_box_t[idx, cur_pos]
-
-            if pos_idx_t.size(0) == 0:
+            if positive_index.size(0) == 0:
                 continue
 
-            proto_masks = proto_data[idx]
-            proto_coef  = mask_data[idx, cur_pos, :]
-             
+            proto_masks = prototype_masks[i]
+            proto_coef = pred_masks[i, j, :]
+
             # If we have over the allowed number of masks, select a random sample
-            old_num_pos = proto_coef.size(0)
-
-            # TODO: config
-            masks_to_train = 300
-            if old_num_pos > masks_to_train:
+            previous_num_positives = proto_coef.size(0)
+            if previous_num_positives > self.masks_to_train:
                 perm = torch.randperm(proto_coef.size(0))
-                select = perm[:self.masks_to_train]
+                selected_masks = perm[:self.masks_to_train]  # select masks to train
 
-                proto_coef = proto_coef[select, :]
-                pos_idx_t  = pos_idx_t[select]
+                proto_coef = proto_coef[selected_masks, :]
+                positive_index  = positive_index[selected_masks]
                 
-                if process_gt_bboxes:
-                    pos_gt_box_t = pos_gt_box_t[select, :]
+                positive_true_boxes = positive_true_boxes[selected_masks, :]  # process_gt_boxes
 
-            num_pos = proto_coef.size(0)
-            mask_t = downsampled_masks[:, :, pos_idx_t]     
-            label_t = labels[idx][pos_idx_t]
+            num_positives = proto_coef.size(0)
+            _true_masks = downsampled_masks[:, :, positive_index]
+            # Size([h, w, num_positives])
+            _pred_masks = proto_masks @ proto_coef.t()
+            _pred_masks = sigmoid(_pred_masks)
+            _pred_masks = crop(_pred_masks, positive_true_boxes)
 
-            # Size: [mask_h, mask_w, num_pos]
-            pred_masks = proto_masks @ proto_coef.t()
-            # pred_masks = cfg.mask_proto_mask_activation(pred_masks)
-            
-            from ..utils.bbox import crop
-            # TODO
-            mask_proto_crop = True
-            if mask_proto_crop:
-                pred_masks = crop(pred_masks, pos_gt_box_t)
-            
-            pre_loss = F.binary_cross_entropy(torch.clamp(pred_masks, 0, 1), mask_t, reduction='none')
-            # TODO:
-            from ..utils.bbox import xyxy_to_cxywh
+            _loss = F.binary_cross_entropy(
+                torch.clamp(_pred_masks, 0, 1), _true_masks, reduction='none')
 
-            mask_proto_normalize_emulate_roi_pooling = True
-            if mask_proto_normalize_emulate_roi_pooling:
-                weight = mask_h * mask_w if mask_proto_crop else 1
-                pos_gt_csize = xyxy_to_cxywh(pos_gt_box_t)
-                gt_box_width  = pos_gt_csize[:, 2] * mask_w
-                gt_box_height = pos_gt_csize[:, 3] * mask_h
-                pre_loss = pre_loss.sum(dim=(0, 1)) / gt_box_width / gt_box_height * weight
+            # mask_proto_normalize_emulate_roi_pooling
+            weight = h * w
+            positive_true_csize = xyxy_to_cxywh(positive_true_boxes)
+            true_boxes_width  = positive_true_csize[:, 2] * w
+            true_boxes_height = positive_true_csize[:, 3] * h
+
+            _loss = _loss.sum(dim=(0, 1)) / true_boxes_width / true_boxes_height * weight
 
             # If the number of masks were limited scale the loss accordingly
-            if old_num_pos > num_pos:
-                pre_loss *= old_num_pos / num_pos
+            if previous_num_positives > num_positives:
+                _loss *= previous_num_positives / num_positives
 
-            loss_m += torch.sum(pre_loss)
+            loss += torch.sum(_loss)
 
-        losses = loss_m * self.mask_alpha / mask_h / mask_w
-        
-        return losses
+        return loss * self.mask_alpha / h / w
 
     def ohem_conf_loss(self, conf_data, conf_t, pos, num):
         # Compute max conf across batch for hard negative mining
@@ -452,17 +390,17 @@ class YolactLoss(LossFunction):
         # Hard Negative Mining
         loss_c = loss_c.view(num, -1)
 
-        loss_c[pos]        = 0 # filter out pos boxes
+        loss_c[pos] = 0 # filter out pos boxes
         loss_c[conf_t < 0] = 0 # filter out neutrals (conf_t = -1)
         _, loss_idx = loss_c.sort(1, descending=True)
         _, idx_rank = loss_idx.sort(1)
         num_pos = pos.long().sum(1, keepdim=True)
         num_neg = torch.clamp(self.negpos_ratio * num_pos, max=pos.size(1)-1)
         neg = idx_rank < num_neg.expand_as(idx_rank)
-        
+
         # Just in case there aren't enough negatives, don't start using positives as negatives
         neg[pos] = 0
-        neg[conf_t < 0] = 0 # Filter out neutrals
+        neg[conf_t < 0] = 0  # Filter out neutrals
 
         # Confidence Loss Including Positive and Negative Examples
         pos_idx = pos.unsqueeze(2).expand_as(conf_data)
@@ -479,31 +417,42 @@ class YolactLoss(LossFunction):
 
 
     def class_existence_loss(self, class_data, class_existence_t):
-        return self.class_existence_alpha * F.binary_cross_entropy_with_logits(class_data, class_existence_t, reduction='sum')
+        return self.class_existence_alpha * F.binary_cross_entropy_with_logits(
+            class_data, class_existence_t, reduction='sum')
 
-    def semantic_segmentation_loss(self, segment_data, mask_t, class_t, interpolation_mode='bilinear'):
+    def semantic_segmentation_loss(
+        self,
+        segmentic_masks,
+        true_masks,
+        true_labels,
+        mode='bilinear'
+    ):
         # Note num_classes here is without the background class so cfg.num_classes-1
-        batch_size, num_classes, mask_h, mask_w = segment_data.size()
-        loss_s = 0
-
-        
-        for idx in range(batch_size):
-            cur_segment = segment_data[idx]
-            cur_class_t = class_t[idx]
-
+        batch_size, _, h, w = segmentic_masks.size()
+        loss = 0
+        for i in range(batch_size):
+            pred_segmentic_mask = segmentic_masks[i]
+            true_label = true_labels[i]
             with torch.no_grad():
                 downsampled_masks = F.interpolate(
-                    mask_t[idx].unsqueeze(0).float(), (mask_h, mask_w),
-                    mode=interpolation_mode, align_corners=False).squeeze(0)
+                    true_masks[i].unsqueeze(0).float(), (h, w),
+                    mode=mode, align_corners=False
+                ).squeeze(0)
                 downsampled_masks = downsampled_masks.gt(0.5).float()
-                # Construct Semantic Segmentation
-                segment_t = torch.zeros_like(cur_segment, requires_grad=False)
-                for obj_idx in range(downsampled_masks.size(0)):
-                    segment_t[cur_class_t[obj_idx]] = \
-                        torch.max(segment_t[cur_class_t[obj_idx]], downsampled_masks[obj_idx])
-            
-            loss_s += F.binary_cross_entropy_with_logits(cur_segment, segment_t, reduction='sum')
+                # Construct semantic segmentation
+                true_segmentic_mask = \
+                    torch.zeros_like(pred_segmentic_mask, requires_grad=False)
+                for j in range(downsampled_masks.size(0)):
+                    # print(true_label, j)
+                    true_segmentic_mask[true_label[j]] = \
+                        torch.max(
+                            true_segmentic_mask[true_label[j]],
+                            downsampled_masks[j])
 
-        return loss_s / mask_h / mask_w * self.semantic_segmentation_alpha
+            loss += F.binary_cross_entropy_with_logits(
+                pred_segmentic_mask, true_segmentic_mask, reduction='sum')
+
+        return loss / h / w * self.semantic_segmentation_alpha
+
 
 

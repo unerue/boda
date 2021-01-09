@@ -52,6 +52,11 @@ class YolactPredictNeck(Neck):
 
     def forward(self, inputs: List[Tensor]) -> List[Tensor]:
         """
+        Args:
+            inputs (:obj:`FloatTensor[B, C, H, W]`)
+
+        Returns:
+            outputs (:obj:`List[FloatTensor[B, C, H, W]]`)
         """
         x = torch.zeros(1, device=self.config.device)
         outputs = [x for _ in range(len(inputs))]
@@ -118,11 +123,16 @@ class PriorBox:
         self.use_square_anchors = use_square_anchors
 
     @prior_cache
-    def generate(self, h: int, w: int, device='cuda') -> Tuple[int, Tensor]:
+    def generate(
+        self,
+        h: int,
+        w: int,
+        device: str = 'cuda'
+    ) -> Tuple[Tuple[int], Tensor]:
         """
         Args:
-            h (:obj:`int`): feature map size
-            w (:obj:`int`): feature map size
+            h (:obj:`int`): feature map size from backbone
+            w (:obj:`int`): feature map size from backbone
             device (:obj:`str`): default `cuda`
 
         Returns
@@ -134,7 +144,6 @@ class PriorBox:
         for j, i in itertools.product(range(h), range(w)):
             x = (i + 0.5) / w
             y = (j + 0.5) / h
-
             for ratios in self.aspect_ratios:
                 for scale in self.scales:
                     for ratio in ratios:
@@ -142,19 +151,20 @@ class PriorBox:
                             ratio = math.sqrt(ratio)
 
                         if self.use_pixel_scales:
-                            w = scale * ratio / self.max_size[1]
-                            h = scale / ratio / self.max_size[0]
+                            _h = scale / ratio / self.max_size[0]
+                            _w = scale * ratio / self.max_size[1]
                         else:
-                            w = scale * ratio / h
-                            h = scale / ratio / w
+                            _h = scale / ratio / h
+                            _w = scale * ratio / w
 
                         if self.use_square_anchors:
-                            h = w
+                            _h = _w
 
-                        prior_boxes += [x, y, w, h]
-        # TODO: thinking processing to(device) 
-        # prior_boxes = torch.zeros(), torch.cat([torch.zeros, [x, y, w, h]])??
-        prior_boxes = torch.as_tensor(prior_boxes).view(-1, 4).to(device)
+                        prior_boxes += [x, y, _w, _h]
+        
+        # TODO: thinking processing to(device)
+        prior_boxes = \
+            torch.as_tensor(prior_boxes, dtype=torch.float32).view(-1, 4).to(device)
         prior_boxes.requires_grad = False
 
         return size, prior_boxes
@@ -258,7 +268,7 @@ class YolactPredictHead(Head):
             config.use_pixel_scales,
             config.use_square_anchors)
 
-        self.config.mask_dim = config.mask_dim
+        self.mask_dim = config.mask_dim
         self.num_priors = sum(len(x)*len(scales) for x in aspect_ratios)
         self.parent = [parent]
 
@@ -266,9 +276,9 @@ class YolactPredictHead(Head):
             if config.extra_head_net is None:
                 out_channels = in_channels
             else:
-                self.upfeature = ProtoNet(
+                self.upsample_layers = ProtoNet(
                     config, in_channels, config.extra_head_net)
-                out_channels = self.upfeature.channels[-1]
+                out_channels = self.upsample_layers.channels[-1]
 
             self.bbox_layers = self._make_layer(
                 config.num_extra_bbox_layers,
@@ -283,7 +293,7 @@ class YolactPredictHead(Head):
             self.mask_layers = self._make_layer(
                 config.num_extra_mask_layers,
                 out_channels,
-                self.num_priors * self.config.mask_dim)
+                self.num_priors * self.mask_dim)
 
     def _make_layer(
         self,
@@ -312,35 +322,36 @@ class YolactPredictHead(Head):
     def forward(self, inputs: Tensor) -> Dict[str, Tensor]:
         """
         Args:
-            inputs (FloatTensor[B, C, H, W]):
+            inputs (:obj:`FloatTensor[B, C, H, W]`):
 
         Returns:
             return_dict (:obj:`Dict[str, Tensor]`):
-                `boxes` (:obj:`FloatTensor[N, 4]`): 
-                `masks` (:obj:`Tensor[N, H, W]`):
-                `scores` (:obj:`Tensor[N]`):
+                `boxes` (:obj:`FloatTensor[B, N, 4]`): B is the number of batch size
+                `masks` (:obj:`FloatTensor[B, N, P]`): P is the number of prototypes
+                `scores` (:obj:`FloatTensor[B, N, C]`): C is the number of classes with background e.g. 80 + 1
                 `priors` (:obj:`FloatTensor[N, 4]`):
         """
-        pred = self if self.parent[0] is None else self.parent[0]
+        branches = self if self.parent[0] is None else self.parent[0]
 
         h, w = inputs.size(2), inputs.size(3)
 
-        inputs = pred.upfeature(inputs)
+        inputs = branches.upsample_layers(inputs)
 
-        boxes = pred.bbox_layers(inputs)
-        scores = pred.conf_layers(inputs)
-        masks = pred.mask_layers(inputs)
+        boxes = branches.bbox_layers(inputs)
+        masks = branches.mask_layers(inputs)
+        scores = branches.conf_layers(inputs)
 
         boxes = boxes.permute(0, 2, 3, 1).contiguous().view(inputs.size(0), -1, 4)
+        masks = masks.permute(0, 2, 3, 1).contiguous().view(inputs.size(0), -1, self.mask_dim)
+        masks = torch.tanh(masks)
         scores = scores.permute(0, 2, 3, 1).contiguous().view(inputs.size(0), -1, self.num_classes)
-        masks = masks.permute(0, 2, 3, 1).contiguous().view(inputs.size(0), -1, self.config.mask_dim)
-        _, priors = self.prior_box.generate(h, w)
+        _, priors = self.prior_box.generate(h, w, inputs.device)
 
         return_dict = {
             'boxes': boxes,
-            'priors': priors,
             'masks': masks,
             'scores': scores,
+            'priors': priors,
         }
 
         return return_dict
@@ -414,6 +425,8 @@ class YolactModel(YolactPretrained):
             while len(self.backbone.layers) < num_layers:
                 self.backbone.add_layer()
 
+        self.freeze_bn(True)
+
         self.config.mask_dim = config.mask_size**2
 
         in_channels = self.backbone.channels[config.proto_src]
@@ -450,18 +463,34 @@ class YolactModel(YolactPretrained):
             self.head_layers.append(head_layer)
 
         self.semantic_layer = nn.Conv2d(self.neck.channels[0], config.num_classes-1, kernel_size=1)
+        self.init_weights('cache/resnet101_reducedfc.pth')
+
+    def init_weights(self, path):
+        self.backbone.from_pretrained(path)
+
+        # for _, module in self.named_modules():
+        #     if isinstance(module, nn.Conv2d) and module not in self.backbone.backbone_modules:
+        #         nn.init.xavier_uniform_(module.weight.data)
+
+                # if module.bias is not None:
+                #     module.bias.data.zero_()
 
     def forward(self, inputs: List[Tensor]) -> Dict[str, List[Tensor]]:
         """
         Args:
-            inputs (List[Tensor]):
+            inputs (:obj:`List[FloatTensor[B, C, H, W]]`): 
+        
+        `check_inputs` returns :obj:`FloatTensor[B, C, H, W]`.
+        `backbone` returns :obj:`List[FloatTensor[B, C, H, W]`.
 
         Returns:
-            return_dict (:obj:`Dict[str, List[Tensor]]`):
-                `` (): number of batch size
-                `` ():
-                `` ():
-                `` ():
+            return_dict (:obj:`Dict[str, Tensor]`):
+                `boxes` (:obj:`FloatTensor[B, N*S, 4]`): B is the number of batch size, S is the number of selected_layers
+                `masks` (:obj:`FloatTensor[B, N*S, P]`): P is the number of prototypes
+                `scores` (:obj:`FloatTensor[B, N*S, C]`): C is the number of classes with background e.g. 80 + 1
+                `priors` (:obj:`FloatTensor[N, 4]`):
+                `prototype_masks` (:obj:`FloatTensor[B, H, W, P]`):
+                `semantic_masks` (:obj:`FloatTensor[B, C, H, W]`):
         """
         inputs = self.check_inputs(inputs)
         self.config.device = inputs.device
@@ -469,46 +498,28 @@ class YolactModel(YolactPretrained):
         self.config.size = (inputs.size(2), inputs.size(3))
 
         outputs = self.backbone(inputs)
-
         outputs = [outputs[i] for i in self.config.selected_layers]
         outputs = self.neck(outputs)
-        # for o in outputs:
-        #     print(o.size())
 
-        preds = defaultdict(list)
+        return_dict = defaultdict(list)
         for i, layer in zip(self.config.selected_layers, self.head_layers):
             output = layer(outputs[i])
 
             for k, v in output.items():
-                preds[k].append(v)
+                return_dict[k].append(v)
 
-        # for k, v in preds.items():
-        #     print()
-        #     print(k)
-        #     for j in v:
-        #         print(j.size())
+        for k, v in return_dict.items():
+            return_dict[k] = torch.cat(v, dim=-2)
 
-        for k, v in preds.items():
-            preds[k] = torch.cat(v, dim=-2)
+        prototype_masks = self.proto_net(outputs[0])
+        prototype_masks = F.relu(prototype_masks)
+        prototype_masks = prototype_masks.permute(0, 2, 3, 1).contiguous()
+        return_dict['prototype_masks'] = prototype_masks
+        return_dict['semantic_masks'] = self.semantic_layer(outputs[0])
 
-        for k, v in preds.items():
-            print(k, v.size())
-
-        use_semantic_segmentation = True
-        proto_masks = self.proto_net(outputs[0])
-        proto_masks = proto_masks.permute(0, 2, 3, 1).contiguous()
-        preds['prototypes'] = proto_masks
-        print('#'*100)
-        print(preds['prototypes'])
-        print()
-        preds['semantic'] = self.semantic_layer(outputs[0])
-
-        # if self.training:
-        #     # if self.use_semantic_segmentation:
-        #     if use_semantic_segmentation:
-        #         preds['prototypes'] = self.proto_net(outputs[0])
-        #         preds['semantic'] = self.semantic_layer(outputs[0])
-        # else:
-        #     preds['scores'] = F.softmax(preds['scores'], dim=-1)
-
-        return preds
+        if self.training:
+            return_dict['semantic'] = self.semantic_layer(outputs[0])
+            return return_dict
+        else:
+            return_dict['scores'] = F.softmax(return_dict['scores'], dim=-1)
+            return return_dict

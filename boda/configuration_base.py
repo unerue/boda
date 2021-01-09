@@ -8,9 +8,9 @@ from typing import Tuple, List, Dict, Any, Union
 class BaseConfig:
     """
     Class attributes:
-        model_type (str):
-    Arguments:
-        name_or_path (str):
+        model_type (:obj:`str`):
+    Args:
+        name_or_path (:obj:`str`):
     """
     model_name: str = ''
     cache_dir = 'cache'

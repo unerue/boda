@@ -1,6 +1,8 @@
+import math
 from typing import Tuple, List, Dict, Callable
 
 import cv2
+from numpy.core.fromnumeric import _resize_dispatcher
 import pycocotools
 import torch
 from torch import dtype, nn, Tensor
@@ -41,7 +43,6 @@ class ToTensor:
     ) -> Tuple[ndarray, Dict[str, Tensor]]:
         image = torch.as_tensor(image.transpose((2, 0, 1)), dtype=torch.float32)
         for key, value in targets.items():
-            print(key, value.shape)
             targets[key] = torch.as_tensor(value)
 
         return image, targets
@@ -52,12 +53,19 @@ class Resize:
         self.size = size
         self.interpolation = interpolation
 
+    def resize(self, h, w):
+        ratio = math.sqrt(w / h)
+        h = int(self.size[0] / ratio)
+        w = int(self.size[1] * ratio)
+        return h, w
+
     def __call__(
         self,
         image: ndarray,
         targets: Dict[str, ndarray]
     ) -> Tuple[ndarray, Dict[str, ndarray]]:
-        _, h, w = image.shape
+        # _, h, w = image.shape
+        h, w, _ = image.shape
         image = cv2.resize(image, dsize=self.size, interpolation=self.interpolation)
 
         targets['boxes'][:, [0, 2]] *= self.size[0] / w
@@ -66,7 +74,10 @@ class Resize:
         if targets['masks'] is not None:
             masks = targets['masks'].transpose((1, 2, 0))
             masks = cv2.resize(masks, dsize=self.size, interpolation=self.interpolation)
-            targets['masks'] = masks.transpose((2, 0, 1))
+            if masks.ndim != 3:
+                targets['masks'] = np.expand_dims(masks, 0)
+            else:
+                targets['masks'] = masks.transpose((2, 0, 1))
 
         return image, targets
 
