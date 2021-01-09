@@ -24,10 +24,13 @@ python setup.py
 ```
 
 ```python
-from boda.models import Yolov1Config, Yolov1Model, Yolov1Loss
+from boda.models import YolactConfig, YolactModel, YolactLoss
 
-config = Yolov1Config(num_classes=20)
-model = Yolov1Model(config)
+config = YolactConfig(num_classes=80)
+model = YolactModel(config)
+outputs = model(images)
+losses = YolactLoss(outputs, targets)
+print(losses)
 ```
 
 |Model|Original|Ours|
