@@ -150,17 +150,18 @@ class YolactLoss(LossFunction):
     """
     def __init__(
         self,
-        pos_threshold: float = 0.5,
-        neg_threshold: float = 0.4,
+        positive_threshold: float = 0.5,
+        negative_threshold: float = 0.4,
         neg_pos_ratio: float = 1.0,
-        masks_to_train: int = 300
+        masks_to_train: int = 100
     ) -> None:
         super().__init__()
-        self.pos_threshold = pos_threshold
-        self.neg_threshold = neg_threshold
+        self.pos_threshold = positive_threshold
+        self.neg_threshold = negative_threshold
         self.negpos_ratio = neg_pos_ratio
         self.bbox_weight = 1.5
-        self.conf_weight = 1.5
+        self.conf_weight = 1.0
+        self.score_weight = 1.0
         self.confidence_weight = 1.5
         self.mask_weight = 1.5
 
@@ -169,6 +170,7 @@ class YolactLoss(LossFunction):
         self.bbox_alpha = 1.5
         self.mask_alpha = 6.125
         self.score_alpha = 1.0
+        self.conf_alpha = 1.0
         self.semantic_segmentation_alpha = 1.0
         self.class_existence_alpha = 1.0
 
@@ -217,6 +219,7 @@ class YolactLoss(LossFunction):
 
         batch_size = len(targets)
         num_priors = pred_priors.size(0)
+        num_classes = pred_scores.size(2)
         
         matched_pred_boxes = pred_boxes.new(batch_size, num_priors, 4)
         matched_true_boxes = pred_boxes.new(batch_size, num_priors, 4)
@@ -286,7 +289,8 @@ class YolactLoss(LossFunction):
             pred_scores,
             matched_pred_scores,
             positive_scores,
-            batch_size)
+            batch_size,
+            num_classes)
 
         losses['S'] = self.semantic_segmentation_loss(
             pred_semantic_masks,
@@ -314,7 +318,7 @@ class YolactLoss(LossFunction):
         true_masks,
         matched_true_boxes,
         mode: str = 'bilinear'
-    ) -> None:
+    ) -> Tensor:
         """
         Args:
             mode (:obj:`str`): interpolation mode
@@ -359,7 +363,7 @@ class YolactLoss(LossFunction):
             _true_masks = downsampled_masks[:, :, positive_index]
             # Size([h, w, num_positives])
             _pred_masks = proto_masks @ proto_coef.t()
-            _pred_masks = sigmoid(_pred_masks)
+            _pred_masks = torch.sigmoid(_pred_masks)
             _pred_masks = crop(_pred_masks, positive_true_boxes)
 
             _loss = F.binary_cross_entropy(
@@ -381,44 +385,44 @@ class YolactLoss(LossFunction):
 
         return loss * self.mask_alpha / h / w
 
-    def ohem_conf_loss(self, conf_data, conf_t, pos, num):
+    def ohem_conf_loss(
+        self,
+        pred_scores,
+        matched_pred_scores,
+        positive_scores,
+        batch_size,
+        num_classes
+    ) -> Tensor:
         # Compute max conf across batch for hard negative mining
-        batch_conf = conf_data.view(-1, 81)
+        batch_scores = pred_scores.view(-1, num_classes)
         # i.e. -softmax(class 0 confidence)
         # TODO: remove squeeze(1)
-        loss_c = log_sum_exp(batch_conf).squeeze(1) - batch_conf[:, 0]
+        # batch_scores Size([N, C]) -> log_sum_exp(batch_scores) Size([N, 1])
+        loss = log_sum_exp(batch_scores).squeeze(1) - batch_scores[:, 0]
         # Hard Negative Mining
-        loss_c = loss_c.view(num, -1)
+        loss = loss.view(batch_size, -1)
 
-        loss_c[pos] = 0 # filter out pos boxes
-        loss_c[conf_t < 0] = 0 # filter out neutrals (conf_t = -1)
-        _, loss_idx = loss_c.sort(1, descending=True)
-        _, idx_rank = loss_idx.sort(1)
-        num_pos = pos.long().sum(1, keepdim=True)
-        num_neg = torch.clamp(self.negpos_ratio * num_pos, max=pos.size(1)-1)
-        neg = idx_rank < num_neg.expand_as(idx_rank)
+        loss[positive_scores] = 0  # filter out pos boxes
+        loss[matched_pred_scores < 0] = 0  # filter out neutrals (conf_t = -1)
+
+        _, loss_index = loss.sort(1, descending=True)
+        _, ranked_index = loss_index.sort(1)
+        num_positives = positive_scores.long().sum(1, keepdim=True)
+        num_negatives = torch.clamp(self.negpos_ratio * num_positives, max=positive_scores.size(1)-1)
+        negatives = ranked_index < num_negatives.expand_as(ranked_index)
 
         # Just in case there aren't enough negatives, don't start using positives as negatives
-        neg[pos] = 0
-        neg[conf_t < 0] = 0  # Filter out neutrals
+        negatives[positive_scores] = 0
+        negatives[matched_pred_scores < 0] = 0  # Filter out neutrals
 
         # Confidence Loss Including Positive and Negative Examples
-        pos_idx = pos.unsqueeze(2).expand_as(conf_data)
-        neg_idx = neg.unsqueeze(2).expand_as(conf_data)
-        conf_p = conf_data[(pos_idx + neg_idx).gt(0)].view(-1, 81)
-        targets_weighted = conf_t[(pos+neg).gt(0)].long()
-        loss_c = F.cross_entropy(conf_p, targets_weighted, reduction='none')
+        positive_index = positive_scores.unsqueeze(2).expand_as(pred_scores)
+        negative_index = negatives.unsqueeze(2).expand_as(pred_scores)
+        conf_p = pred_scores[(positive_index + negative_index).gt(0)].view(-1, num_classes)
+        targets_weighted = matched_pred_scores[(positive_scores+negatives).gt(0)].long()
+        loss = F.cross_entropy(conf_p, targets_weighted, reduction='none')
 
-        loss_c = loss_c.sum()
-        # TODO: self.
-        conf_alpha = 1
-
-        return conf_alpha * loss_c
-
-
-    def class_existence_loss(self, class_data, class_existence_t):
-        return self.class_existence_alpha * F.binary_cross_entropy_with_logits(
-            class_data, class_existence_t, reduction='sum')
+        return self.conf_alpha * loss.sum()
 
     def semantic_segmentation_loss(
         self,
@@ -426,7 +430,7 @@ class YolactLoss(LossFunction):
         true_masks,
         true_labels,
         mode='bilinear'
-    ):
+    ) -> Tensor:
         # Note num_classes here is without the background class so cfg.num_classes-1
         batch_size, _, h, w = segmentic_masks.size()
         loss = 0

@@ -47,7 +47,7 @@ class Trainer:
 
                 self.optimizer.step()
 
-                print(f'{epoch:>3}/{self.num_epochs} | T: {loss::7.4f}', end=' | ')
+                print(f'{epoch:>{len(str(self.num_epochs))}}/{self.num_epochs} | T: {loss::>7.4f}', end=' | ')
                 for k, v in losses.items():
                     print(f'{k}: {v.item():>7.4f}', end=' | ')
                 print()

@@ -130,15 +130,14 @@ class CocoDataset(Dataset):
 
         targets = {
             'boxes': boxes,
+            'masks': masks,
             'labels': labels,
             'crowds': crowds,
-            'masks': masks
         }
 
         if self.transforms is not None:
             image, targets = self.transforms(image, targets)
 
-        # image, targets = Resize((448, 448))(image, targets)
         # image = np.array(image).transpose(2, 0, 1)
         # image = image / 255.0
 

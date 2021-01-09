@@ -31,7 +31,7 @@ def collate_fn(batch):
 
 train_loader = DataLoader(dataset, batch_size=4, num_workers=0, collate_fn=collate_fn)
 
-config = YolactConfig()
+config = YolactConfig(num_classes=7)
 model = YolactModel(config).to('cuda')
 # print(summary(model, input_data=(3, 550, 550), verbose=0))
 

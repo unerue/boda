@@ -468,12 +468,12 @@ class YolactModel(YolactPretrained):
     def init_weights(self, path):
         self.backbone.from_pretrained(path)
 
-        # for _, module in self.named_modules():
-        #     if isinstance(module, nn.Conv2d) and module not in self.backbone.backbone_modules:
-        #         nn.init.xavier_uniform_(module.weight.data)
+        for _, module in self.named_modules():
+            if isinstance(module, nn.Conv2d) and module not in self.backbone.backbone_modules:
+                nn.init.xavier_uniform_(module.weight.data)
 
-                # if module.bias is not None:
-                #     module.bias.data.zero_()
+                if module.bias is not None:
+                    module.bias.data.zero_()
 
     def forward(self, inputs: List[Tensor]) -> Dict[str, List[Tensor]]:
         """
