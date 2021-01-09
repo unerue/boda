@@ -11,6 +11,18 @@ from numpy import ndarray
 from torch.nn.functional import interpolate
 
 
+def _check_image(image: ndarray):
+    """Check Image Shape
+
+    Args:
+        image (:obj:`ndarray[C, H, W]`)
+    Return:
+        image (:obj:`ndarray[H, W, C]`)
+    """
+    if image.shape[0] == 3:
+        return image.transpose((1, 2, 0))
+
+    
 class Compose:
     def __init__(self, transforms: List[Callable]) -> None:
         self.transforms = transforms
@@ -34,7 +46,11 @@ class Normalize:
 
 class ToTensor:
     def __init__(self) -> None:
-        pass
+        self.dtype = {
+            'boxes': torch.float32,
+            'masks': torch.uint8,
+            'scores': torch.int64,
+        }
 
     def __call__(
         self,
@@ -53,7 +69,7 @@ class Resize:
         self.size = size
         self.interpolation = interpolation
 
-    def resize(self, h, w):
+    def _resize(self, h, w):
         ratio = math.sqrt(w / h)
         h = int(self.size[0] / ratio)
         w = int(self.size[1] * ratio)
@@ -64,6 +80,12 @@ class Resize:
         image: ndarray,
         targets: Dict[str, ndarray]
     ) -> Tuple[ndarray, Dict[str, ndarray]]:
+        """
+        Args:
+            image (:obj:`ndarray[C, H, W]`)
+            targets (:obj:`Dict[str, ndarray]`):
+                `masks` (:obj:`ndarray[N, H, W]`):
+        """
         # _, h, w = image.shape
         h, w, _ = image.shape
         image = cv2.resize(image, dsize=self.size, interpolation=self.interpolation)

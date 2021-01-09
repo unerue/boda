@@ -96,7 +96,8 @@ class ModelMixin(ABC):
             for image in inputs:
                 if isinstance(image, Tensor):
                     if image.dim() != 3:
-                        raise ValueError(f'images is expected to be 3d tensors of shape [C, H, W] {image.size()}')
+                        raise ValueError(
+                    f'images is expected to be 3d tensors of shape [C, H, W] {image.size()}')
                 else:
                     raise ValueError('Expected image to be Tensor.')
             cls._checked_inputs = False
@@ -109,7 +110,9 @@ class ModelMixin(ABC):
     def freeze_bn(self, enable: bool = False):
         """Freeze Batch Nomalization
 
-        Adapted from https://discuss.pytorch.org/t/how-to-train-with-frozen-batchnorm/12106/8 """
+        Adapted from:
+        https://discuss.pytorch.org/t/how-to-train-with-frozen-batchnorm/12106/8
+        """
         for module in self.modules():
             if isinstance(module, nn.BatchNorm2d):
                 if enable:
@@ -119,6 +122,7 @@ class ModelMixin(ABC):
 
                 module.weight.requires_grad = enable
                 module.bias.requires_grad = enable
+
 
 class Model(nn.Module, ModelMixin):
     config_class = None
