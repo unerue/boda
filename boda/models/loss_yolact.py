@@ -153,7 +153,12 @@ class YolactLoss(LossFunction):
         positive_threshold: float = 0.5,
         negative_threshold: float = 0.4,
         neg_pos_ratio: float = 1.0,
-        masks_to_train: int = 100
+        masks_to_train: int = 100,
+        boxes_weight: float = 1.5,
+        score_weight: float = 1.0,
+        masks_weight: float = 6.125,
+        crowd_iou_threshold: float = 0.7,
+        semantic_segmentation_weight: float = 1.0
     ) -> None:
         super().__init__()
         self.pos_threshold = positive_threshold
@@ -220,11 +225,18 @@ class YolactLoss(LossFunction):
         batch_size = len(targets)
         num_priors = pred_priors.size(0)
         num_classes = pred_scores.size(2)
-        
+
+        # Match priors (default boxes) and ground truth boxes
         matched_pred_boxes = pred_boxes.new(batch_size, num_priors, 4)
         matched_true_boxes = pred_boxes.new(batch_size, num_priors, 4)
-        matched_pred_scores = pred_boxes.new(batch_size, num_priors)
+        matched_pred_scores = pred_boxes.new(batch_size, num_priors).long()
         matched_indexes = pred_boxes.new(batch_size, num_priors).long()
+
+        # Match priors (default boxes) and ground truth boxes
+        # matched_pred_boxes = torch.zeros((batch_size, num_priors, 4), dtype=torch.float32)
+        # matched_true_boxes = torch.zeros((batch_size, num_priors, 4), dtype=torch.float32)
+        # matched_pred_scores = torch.zeros((batch_size, num_priors), dtype=torch.int64)
+        # matched_indexes = torch.zeros((batch_size, num_priors), dtype=torch.int64)
 
         true_masks = []
         true_labels = []
@@ -238,22 +250,27 @@ class YolactLoss(LossFunction):
             true_crowds = target['crowds']
 
             # if true_crowds > 0:
-            #     true_crowd_boxes = true_boxes[-crowds:]
-            #     true_boxes = true_boxes[:-crowds]
-            #     true_labels = true_labels[i][:-crowds]
-            #     true_masks = target['masks'][:-crowds]
+            #     true_crowd_boxes = true_boxes[-true_crowds:]
+            #     true_boxes = true_boxes[:-true_crowds]
+            #     true_labels = true_labels[i][:-true_crowds]
+            #     true_masks = target['masks'][:-true_crowds]
             # else:
             #     true_crowd_boxes = None
+            true_crowd_boxes = None
 
             matched_boxes, matched_scores, matched_index = Matcher()(
                 pred_boxes[i],
                 pred_priors,
                 true_boxes,
                 true_labels[i],
-                true_crowds)
+                true_crowd_boxes)
 
-            matched_pred_boxes[i] = matched_boxes  # [num_priors,4] encoded offsets to learn
-            matched_pred_scores[i] = matched_scores  # [num_priors] top class label for each prior
+            # matched_pred_boxes[num_priors,4] encoded offsets to learn
+            # matched_pred_scroes[num_priors] top class label for each prior
+            # matched_indexes
+            # matched_true_boxes
+            matched_pred_boxes[i] = matched_boxes
+            matched_pred_scores[i] = matched_scores
             matched_indexes[i] = matched_index
             matched_true_boxes[i, :, :] = true_boxes[matched_indexes[i]]
         

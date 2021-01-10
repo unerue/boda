@@ -36,7 +36,7 @@ print(losses)
 ```
 
 |Model|State|Original|Ours|
-|:----|-------:|---:|
+|:----|:----|-------:|---:|
 |YOLOv1|Test|||
 |SSD|Rebuild|||
 |YOLOv4|Dev|||
