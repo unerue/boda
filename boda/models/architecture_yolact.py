@@ -25,9 +25,9 @@ class YolactPredictNeck(Neck):
     def __init__(self, config, channels: List[int]) -> None:
         super().__init__()
         self.config = config
-        _selected_layers = list(range(len(config.selected_layers)
+        self.selected_layers = list(range(len(config.selected_layers)
                                 + config.num_downsamples))
-        self.channels = [config.fpn_out_channels] * len(_selected_layers)
+        self.channels = [config.fpn_out_channels] * len(self.selected_layers)
 
         self.lateral_layers = nn.ModuleList([
             nn.Conv2d(
@@ -334,7 +334,6 @@ class YolactPredictHead(Head):
         branches = self if self.parent[0] is None else self.parent[0]
 
         h, w = inputs.size(2), inputs.size(3)
-
         inputs = branches.upsample_layers(inputs)
 
         boxes = branches.bbox_layers(inputs)
@@ -446,7 +445,7 @@ class YolactModel(YolactPretrained):
 
         self.head_layers = nn.ModuleList()
         self.config.num_heads = len(config.selected_layers)
-        for i, j in enumerate(config.selected_layers):
+        for i, j in enumerate(self.neck.selected_layers):
             parent = None
             if i > 0:
                 parent = self.head_layers[0]
@@ -502,7 +501,11 @@ class YolactModel(YolactPretrained):
         outputs = self.neck(outputs)
 
         return_dict = defaultdict(list)
-        for i, layer in zip(self.config.selected_layers, self.head_layers):
+        # TODO: self.neck.selected_layer...
+        for i, layer in zip(self.neck.selected_layers, self.head_layers):
+            if layer is not self.head_layers[0]:
+                layer.parent = [self.head_layers[0]]
+
             output = layer(outputs[i])
 
             for k, v in output.items():
@@ -515,10 +518,10 @@ class YolactModel(YolactPretrained):
         prototype_masks = F.relu(prototype_masks)
         prototype_masks = prototype_masks.permute(0, 2, 3, 1).contiguous()
         return_dict['prototype_masks'] = prototype_masks
-        return_dict['semantic_masks'] = self.semantic_layer(outputs[0])
 
         if self.training:
-            return_dict['semantic'] = self.semantic_layer(outputs[0])
+            return_dict['semantic_masks'] = self.semantic_layer(outputs[0])
+            # print(return_dict['semantic'].size())
             return return_dict
         else:
             return_dict['scores'] = F.softmax(return_dict['scores'], dim=-1)

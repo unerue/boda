@@ -53,10 +53,16 @@ class CocoParser:
 
 
 class CocoDataset(Dataset):
-    def __init__(self, image_dir, info_file, transforms=None):
+    def __init__(
+        self,
+        image_dir,
+        info_file,
+        mode: str = 'train',
+        transforms=None):
         self.image_dir = image_dir
         # self.coco = COCO(info_file)
         # self.image_ids = list(self.coco.imgToAnns.keys())
+        self.mode = mode
         self.transforms = transforms
         self.coco = CocoParser(info_file)
         self.image_ids = list(self.coco.image_info.keys())
@@ -142,8 +148,10 @@ class CocoDataset(Dataset):
         # image = image / 255.0
 
         # image = torch.as_tensor(image, dtype=torch.float32)
-
-        return image, targets
+        if self.mode == 'train':
+            return image, targets
+        else:
+            return image, targets, h, w
 
 
 if __name__ == '__main__':

@@ -61,8 +61,9 @@ class Matcher:
             best_truth_index (:obj:`LongTensor[N]`):
         """
         # FloatTensor[N, 4]
-        decoded_priors = self.decode(
-            pred_boxes, pred_priors)
+        # decoded_priors = self.decode(
+        #     pred_boxes, pred_priors)
+        decoded_priors = cxcywh_to_xyxy(pred_priors)
 
         # LongTensor[number of ground truths]
         overlaps = jaccard(true_boxes, decoded_priors)
@@ -221,6 +222,7 @@ class YolactLoss(LossFunction):
         pred_priors = inputs['priors']
         pred_prototype_masks = inputs['prototype_masks']
         pred_semantic_masks = inputs['semantic_masks']
+        # print(pred_semantic_masks)
 
         batch_size = len(targets)
         num_priors = pred_priors.size(0)
@@ -273,7 +275,7 @@ class YolactLoss(LossFunction):
             matched_pred_scores[i] = matched_scores
             matched_indexes[i] = matched_index
             matched_true_boxes[i, :, :] = true_boxes[matched_indexes[i]]
-        
+        # print(matched_pred_boxes.size(), matched_pred_scores.size(), matched_indexes.size())
         matched_pred_boxes.required_grad = False
         matched_pred_scores.required_grad = False
         matched_indexes.required_grad = False
@@ -286,12 +288,14 @@ class YolactLoss(LossFunction):
     
         pred_boxes = pred_boxes[positive_index].view(-1, 4)
         matched_pred_boxes = matched_pred_boxes[positive_index].view(-1, 4)
-
+        # print(pred_boxes.long())
+        # print(matched_pred_boxes.long())
+        # print(pred_boxes.size(), matched_pred_boxes.size())
         # Localization loss (Smooth L1)
         losses['B'] = \
             F.smooth_l1_loss(
                 pred_boxes,
-                matched_pred_boxes, reduction='sum') * self.bbox_alpha
+                matched_pred_boxes, reduction='sum') * self.bbox_weight
 
         losses['M'] = self.lincomb_mask_loss(
             positive_scores,

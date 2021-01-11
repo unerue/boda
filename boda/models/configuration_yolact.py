@@ -55,7 +55,7 @@ class YolactConfig(BaseConfig):
         self.num_classes = num_classes + 1
         # neck
         self.padding = 1
-        self.aspect_ratios = [[[0.66685089, 1.7073535, 0.87508774, 1.16524493, 0.49059086]]] * 6
+        self.aspect_ratios = [[[1, 1/2, 2]]] * 6
         # self.pred_scales = [[24], [48], [96], [192], [384]]
         # self.fpn_out_channels = 256
         # self.predict_channels = 256
@@ -92,7 +92,7 @@ class YolactConfig(BaseConfig):
         self.num_extra_mask_layers = 0
         self.freeze_bn = True
 
-        self.use_preapply_sqrt = True
+        self.use_preapply_sqrt = False
         self.use_pixel_scales = True
         self.use_square_anchors = True
 

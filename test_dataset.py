@@ -26,10 +26,19 @@ dataset = CocoDataset(
     info_file='./benchmarks/dataset/custom/train/annotations.json',
     transforms=transforms)
 
+validset = CocoDataset(
+    image_dir='./benchmarks/dataset/custom/valid/',
+    info_file='./benchmarks/dataset/custom/valid/annotations.json',
+    mode='valid',
+    transforms=transforms)
+
+
 def collate_fn(batch):
     return tuple(zip(*batch))
 
+
 train_loader = DataLoader(dataset, batch_size=4, num_workers=0, collate_fn=collate_fn)
+valid_loader = DataLoader(validset, batch_size=4, num_workers=0, collate_fn=collate_fn)
 
 config = YolactConfig(num_classes=7)
 model = YolactModel(config).to('cuda')
@@ -38,5 +47,6 @@ model = YolactModel(config).to('cuda')
 optimizer = optim.SGD(model.parameters(), 1e-4)
 criterion = YolactLoss()
 
-trainer = Trainer(train_loader, model, optimizer, criterion, num_epochs=100)
+trainer = Trainer(
+    train_loader, model, optimizer, criterion, valid_loader=valid_loader, num_epochs=100)
 trainer.train()
