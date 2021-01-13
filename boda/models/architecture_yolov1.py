@@ -13,12 +13,10 @@ from .configuration_yolov1 import Yolov1Config
 class Yolov1PredictNeck(Neck):
     """Prediction Neck for YOLOv1
 
-    Arguments:
+    Args:
         in_channels (int):
-
-    Keyword Arguments:
-        bn (bool)
-        relu (bool)
+        bn (bool):
+        relu (bool):
     """
     def __init__(self, config, in_channels: int = 1024, **kwargs) -> None:
         super().__init__()
@@ -79,7 +77,7 @@ class Yolov1PredictNeck(Neck):
 class Yolov1PredictHead(Head):
     """Prediction Neck for YOLOv1
 
-    Arguments:
+    Args:
         config
         in_channles (int):
         out_channels (int):
@@ -110,9 +108,10 @@ class Yolov1PredictHead(Head):
 
     def forward(self, inputs: Tensor) -> Dict[str, Tensor]:
         """
-        Argument:
+        Args:
             inputs (Tensor): Size([])
-        Return:
+
+        Returns:
             Dict[str, Tensor]:
                 boxes: Size([batch_size, num_boxes, 4])
                 scores: Size([batch_size, num_boxes])
@@ -172,7 +171,7 @@ class Yolov1Model(Yolov1Pretrained):
        ██║   ╚██████╔╝███████╗╚██████╔╝ ╚████╔╝  ██████╗
        ╚═╝    ╚═════╝ ╚══════╝ ╚═════╝   ╚═══╝   ╚═════╝
 
-    Arguments:
+    Args:
         image: a PIL Image of size (H, W)
         target: a dict containing the following fields
             boxes (FloatTensor[N, 4]): the coordinates of the N bounding boxes 

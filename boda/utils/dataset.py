@@ -58,11 +58,13 @@ class CocoDataset(Dataset):
         image_dir,
         info_file,
         mode: str = 'train',
+        use_mask: bool = True,
         transforms=None):
         self.image_dir = image_dir
         # self.coco = COCO(info_file)
         # self.image_ids = list(self.coco.imgToAnns.keys())
         self.mode = mode
+        self.use_mask = use_mask
         self.transforms = transforms
         self.coco = CocoParser(info_file)
         self.image_ids = list(self.coco.image_info.keys())
@@ -78,7 +80,7 @@ class CocoDataset(Dataset):
         #           74: 65, 75: 66, 76: 67, 77: 68, 78: 69, 79: 70, 80: 71, 81: 72,
         #           82: 73, 84: 74, 85: 75, 86: 76, 87: 77, 88: 78, 89: 79, 90: 80}
         self.label_map = {
-            1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6 
+            1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6
         }
         # print(self.image_ids)
 
@@ -112,18 +114,20 @@ class CocoDataset(Dataset):
             crowds.append(target['iscrowd'])
             areas.append(target['area'])
             
-            if target['segmentation'] is not None:
-                segment = target['segmentation']
-                if isinstance(segment, list):
-                    rles = mask.frPyObjects(segment, h, w)
-                    rle = mask.merge(rles)
-                elif isinstance(segment['counts'], list):
-                    rle = mask.frPyObjects(segment, h, w)
-                else:
-                    rle = segment
+            if self.use_mask:
+                if target['segmentation'] is not None:
+                    segment = target['segmentation']
+                    if isinstance(segment, list):
+                        rles = mask.frPyObjects(segment, h, w)
+                        rle = mask.merge(rles)
+                    elif isinstance(segment['counts'], list):
+                        rle = mask.frPyObjects(segment, h, w)
+                    else:
+                        rle = segment
 
-                masks.append(mask.decode(rle))
-
+                    masks.append(mask.decode(rle))
+                masks = np.vstack(masks).reshape(-1, h, w)
+    
         boxes = np.asarray(boxes, dtype=np.float32)
         boxes[:, 2] = boxes[:, 0] + boxes[:, 2]
         boxes[:, 3] = boxes[:, 1] + boxes[:, 3]
@@ -131,15 +135,22 @@ class CocoDataset(Dataset):
         labels = np.asarray(labels, dtype=np.int64)
         crowds = np.asarray(crowds, dtype=np.int64)
 
-        masks = np.vstack(masks).reshape(-1, h, w)
+        # masks = np.vstack(masks).reshape(-1, h, w)
         # image = image.transpose((2, 0, 1))
 
-        targets = {
-            'boxes': boxes,
-            'masks': masks,
-            'labels': labels,
-            'crowds': crowds,
-        }
+        if self.use_mask:
+            targets = {
+                'boxes': boxes,
+                'masks': masks,
+                'labels': labels,
+                'crowds': crowds,
+            }
+        else:
+            targets = {
+                'boxes': boxes,
+                'labels': labels,
+                'crowds': crowds,
+            }
 
         if self.transforms is not None:
             image, targets = self.transforms(image, targets)

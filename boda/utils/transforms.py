@@ -93,7 +93,7 @@ class Resize:
         targets['boxes'][:, [0, 2]] *= self.size[0] / w
         targets['boxes'][:, [1, 3]] *= self.size[1] / h
 
-        if targets['masks'] is not None:
+        if 'masks' in targets.keys():
             masks = targets['masks'].transpose((1, 2, 0))
             masks = cv2.resize(masks, dsize=self.size, interpolation=self.interpolation)
             if masks.ndim != 3:

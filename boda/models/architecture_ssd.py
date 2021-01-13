@@ -10,7 +10,7 @@ import torch.nn.functional as F
 import itertools 
 from ..architecture_base import Neck, Head, Model
 from .configuration_ssd import SsdConfig
-from .backbone.backbone_vgg import vgg16
+from .backbone_vggnet import vgg16
 
 
 STRUCTURES = {
@@ -31,6 +31,13 @@ STRUCTURES = {
 
 
 class L2Norm(nn.Module):
+    """ L2 Normalization
+
+    Args:
+        in_channels (:obj:`int`):
+        gamma ():
+        eps ():
+    """
     def __init__(
         self,
         in_channels: int = 512,
@@ -242,6 +249,7 @@ class SsdPredictHead(nn.Module):
             'scores': scores,
             'priors': priors
         }
+
         return boxes, scores, priors
 
 

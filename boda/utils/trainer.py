@@ -3,7 +3,9 @@ from collections import deque
 from typing import Tuple, List, Optional
 
 import numpy as np
+from numpy.core.defchararray import decode
 import torch
+from torch import nn, Tensor
 from torch.utils.data import DataLoader
 
 
@@ -80,6 +82,7 @@ class Trainer:
 
     def train(self):
         loss_averages = {k: MovingAverage(100) for k in ['B', 'M', 'C', 'S']}
+        loss_averages = {k: MovingAverage(100) for k in ['B', 'C', 'S']}
         self.model.train()
         for epoch in range(self.num_epochs):
             for i, (images, targets) in enumerate(self.train_loader):
@@ -123,184 +126,434 @@ class Trainer:
 
                 outputs = self.model(images)
 
-    def compute_map(self, outputs, targets, h, w):
-        true_boxes = targets['boxes']
-        true_boxes[:, [0, 2]] *= w
-        true_boxes[:, [1, 3]] *= h
-        true_labels = targets['labels']
+#     def compute_map(self, outputs, targets, h, w):
+#         true_boxes = targets['boxes']
+#         true_boxes[:, [0, 2]] *= w
+#         true_boxes[:, [1, 3]] *= h
+#         true_labels = targets['labels']
         
-        iou_thresholds = [x / 100 for x in range(50, 100, 5)]
+#         iou_thresholds = [x / 100 for x in range(50, 100, 5)]
         
-        pred_labels
-        true_labels
-        iou_types = [
-            ('box',  lambda i,j: bbox_iou_cache[i, j].item(),
-                     lambda i,j: crowd_bbox_iou_cache[i,j].item(),
-                     lambda i: box_scores[i], box_indices),
-            ('mask', lambda i,j: mask_iou_cache[i, j].item(),
-                     lambda i,j: crowd_mask_iou_cache[i,j].item(),
-                     lambda i: mask_scores[i], mask_indices)
-        ]
+#         pred_labels
+#         true_labels
+#         iou_types = [
+#             ('box',  lambda i,j: bbox_iou_cache[i, j].item(),
+#                      lambda i,j: crowd_bbox_iou_cache[i,j].item(),
+#                      lambda i: box_scores[i], box_indices),
+#             ('mask', lambda i,j: mask_iou_cache[i, j].item(),
+#                      lambda i,j: crowd_mask_iou_cache[i,j].item(),
+#                      lambda i: mask_scores[i], mask_indices)
+#         ]
 
-        for _class in set(pred_labels + true_labels):
-            ap_per_iou = []
-            num_true_for_class = sum([1 for x in true_labels if x == _class])
+#         for _class in set(pred_labels + true_labels):
+#             ap_per_iou = []
+#             num_true_for_class = sum([1 for x in true_labels if x == _class])
             
-            for iouIdx in range(len(iou_thresholds)):
-                iou_threshold = iou_thresholds[iouIdx]
+#             for iouIdx in range(len(iou_thresholds)):
+#                 iou_threshold = iou_thresholds[iouIdx]
 
-                for iou_type, iou_func, crowd_func, score_func, indices in iou_types:
-                    gt_used = [False] * len(true_labels)
+#                 for iou_type, iou_func, crowd_func, score_func, indices in iou_types:
+#                     gt_used = [False] * len(true_labels)
                     
-                    ap_obj = ap_data[iou_type][iouIdx][_class]
-                    ap_obj.add_gt_positives(num_true_for_class)
+#                     ap_obj = ap_data[iou_type][iouIdx][_class]
+#                     ap_obj.add_gt_positives(num_true_for_class)
 
-                    for i in indices:
-                        if classes[i] != _class:
-                            continue
+#                     for i in indices:
+#                         if classes[i] != _class:
+#                             continue
                         
-                        max_iou_found = iou_threshold
-                        max_match_idx = -1
-                        for j in range(num_gt):
-                            if gt_used[j] or gt_classes[j] != _class:
-                                continue
+#                         max_iou_found = iou_threshold
+#                         max_match_idx = -1
+#                         for j in range(num_gt):
+#                             if gt_used[j] or gt_classes[j] != _class:
+#                                 continue
                                 
-                            iou = iou_func(i, j)
+#                             iou = iou_func(i, j)
 
-                            if iou > max_iou_found:
-                                max_iou_found = iou
-                                max_match_idx = j
+#                             if iou > max_iou_found:
+#                                 max_iou_found = iou
+#                                 max_match_idx = j
                         
-                        if max_match_idx >= 0:
-                            gt_used[max_match_idx] = True
-                            ap_obj.push(score_func(i), True)
-                        else:
-                            # If the detection matches a crowd, we can just ignore it
-                            matched_crowd = False
+#                         if max_match_idx >= 0:
+#                             gt_used[max_match_idx] = True
+#                             ap_obj.push(score_func(i), True)
+#                         else:
+#                             # If the detection matches a crowd, we can just ignore it
+#                             matched_crowd = False
 
-                            if num_crowd > 0:
-                                for j in range(len(crowd_classes)):
-                                    if crowd_classes[j] != _class:
-                                        continue
+#                             if num_crowd > 0:
+#                                 for j in range(len(crowd_classes)):
+#                                     if crowd_classes[j] != _class:
+#                                         continue
                                     
-                                    iou = crowd_func(i, j)
+#                                     iou = crowd_func(i, j)
 
-                                    if iou > iou_threshold:
-                                        matched_crowd = True
-                                        break
+#                                     if iou > iou_threshold:
+#                                         matched_crowd = True
+#                                         break
 
-                            # All this crowd code so that we can make sure that our eval code gives the
-                            # same result as COCOEval. There aren't even that many crowd annotations to
-                            # begin with, but accuracy is of the utmost importance.
-                            if not matched_crowd:
-                                ap_obj.push(score_func(i), False)
-
-
-def postprocess(outputs, size, score_threshold=0):
-    return
+#                             # All this crowd code so that we can make sure that our eval code gives the
+#                             # same result as COCOEval. There aren't even that many crowd annotations to
+#                             # begin with, but accuracy is of the utmost importance.
+#                             if not matched_crowd:
+#                                 ap_obj.push(score_func(i), False)
 
 
-class APDataObject:
-    """
-    Stores all the information necessary to calculate the AP for one IoU and one class.
-    Note: I type annotated this because why not.
-    """
-    def __init__(self):
-        self.data_points = []
-        self.num_gt_positives = 0
+# class Detector:
+#     def __init__(self) -> None:
+#         self.num_classes
+#         self.background_label
+#         self.tok_k
+#         self.nms_threshold
+#         self.score_threshold
 
-    def push(self, score: float, is_true: bool):
-        self.data_points.append((score, is_true))
+#         self.use_cross_class_nms
+#         self.use_fast_nms
+
+#     def __call__(self, model, preds):
+#         pred_boxes = preds['boxes']
+#         pred_scores = preds['scores']
+
+#         if 'masks' in preds.keys():
+
+#         pred_priors = preds['priors']
+
+#         batch_size = preds['boxes'].size(0)
+#         num_prior_boxes = preds['priors'].size(0)
+
+#         pred_scores = preds['scores'].view(batch_size, num_prior_boxes, self.num_classes).transpose(2, 1).contiguous()
+
+#         for i in range(batch_size):
+#             decoded_boxes = self.decode()
+#             results = self.detect(i, pred_boxes, )
+
+#             if results is not None and proto_masks is not None:
+#                 results['proto_masks'] = proto_masks[i]
+            
+#         return results
+
+#     def decode(self, boxes, priors):
+#         variances = [0.1, 0.2]
+        
+#         boxes = torch.cat((
+#             priors[:, :2] + boxes[:, :2] * variances[0] * priors[:, 2:],
+#             priors[:, 2:] * torch.exp(boxes[:, 2:] * variances[1])), dim=1)
+#         boxes[:, :2] -= boxes[:, 2:] / 2
+#         boxes[:, 2:] += boxes[:, :2]
+
+#         return boxes
+
+#     def detect(self, batch_index, pred_boxes, pred_scores):
+#         pred_scores = pred_scores[batch_index, 1:, :]
+#         scores, _ = torch.max(pred_scores, dim=0)
+
+#         keep = (scores > self.score_threshhold)
+#         scores = pred_scores[:, keep]
+
+#         boxes = pred_boxes[keep, :]
+
+#         if scores.size(1) == 0:
+#             return None
+
+#         boxes, masks, classes, scores = self.nms(boxes, scores, masks)
+        
+#         return_dict = {
+#             'boxes': boxes,
+#             'masks': masks,
+#             'scores': scores,
+#             'labels': labels,
+#         }
+
+#         return return_dict
+
+#     def nms(
+#         self,
+#         pred_boxes: Tensor,
+#         pred_scores: Tensor,
+#         pred_masks: Tensor = None,
+#         iou_threshold: float = 0.5,
+#         scores_threshold: float = 0.05,
+#         max_num_detections: int = 200
+#     ) -> Tuple[Tensor]:
+#         import pyximport
+#         pyximport.install(setup_args={'include_dirs': np.get_include()}, reload_support=True)
+
+#         from cython_nms import nms
+
+#         num_classes = pred_scores.size(0)
+
+#         indexes = []
+#         labels = []
+#         scores = []
+
+#         max_size = 550
+#         pred_boxes = pred_boxes * max_size
+        
+#         for i in range(num_classes):
+#             score = scores[i, :]
+#             score_mask = score > scores_threshold
+#             index = torch.arange(score.size(0), device=pred_boxes.device)
+
+#             score = score[score_mask]
+#             index = index[score_mask]
+
+#             if score.size(0) == 0:
+#                 continue
+
+#             preds = torch.cat(
+#                 [pred_boxes[score_mask], score[:, None]], dim=1).cpu().numpy()
+#             keep = nms(preds, iou_threshold)
+#             keep = torch.Tensor(keep, device=pred_boxes.device).long()
+
+#             indexes.append(index[keep])
+#             labels.append(keep * 0 + i)
+#             scores.append(score[keep])
+        
+#         indexes = torch.cat(indexes, dim=0)
+#         labels = torch.cat(indexes, dim=0)
+#         scores = torch.cat(scores, dim=0)
+
+#         scores, sorted_index = scores.sort(0, descending=True)
+#         sorted_index = sorted_index[:max_num_detections]
+#         scores = scores[:max_num_detections]
+
+#         indexes = indexes[sorted_index]
+#         labels = labels[sorted_index]
+
+#         pred_boxes = pred_boxes[sorted_index] / max_size
+
+#         if pred_masks is not None:
+#             pred_masks = pred_masks[sorted_index]
+
+#             return pred_boxes, pred_masks, pred_scores, labels
+#         else:
+#             return pred_boxes, pred_scores, labels
+
+
+# def postprocess(det_output, w, h, batch_idx=0, interpolation_mode='bilinear',
+#                 visualize_lincomb=False, crop_masks=True, score_threshold=0):
+#     """
+#     Postprocesses the output of Yolact on testing mode into a format that makes sense,
+#     accounting for all the possible configuration settings.
+
+#     Args:
+#         - det_output: The lost of dicts that Detect outputs.
+#         - w: The real with of the image.
+#         - h: The real height of the image.
+#         - batch_idx: If you have multiple images for this batch, the image's index in the batch.
+#         - interpolation_mode: Can be 'nearest' | 'area' | 'bilinear' (see torch.nn.functional.interpolate)
+
+#     Returns 4 torch Tensors (in the following order):
+#         - classes [num_det]: The class idx for each detection.
+#         - scores  [num_det]: The confidence score for each detection.
+#         - boxes   [num_det, 4]: The bounding box for each detection in absolute point form.
+#         - masks   [num_det, h, w]: Full image masks for each detection.
+#     """
     
-    def add_gt_positives(self, num_positives: int):
-        """ Call this once per image. """
-        self.num_gt_positives += num_positives
+#     dets = det_output[batch_idx]
+#     net = dets['net']
+#     dets = dets['detection']
 
-    def is_empty(self) -> bool:
-        return len(self.data_points) == 0 and self.num_gt_positives == 0
+#     if dets is None:
+#         return [torch.Tensor()] * 4 # Warning, this is 4 copies of the same thing
 
-    def get_ap(self) -> float:
-        """ Warning: result not cached. """
+#     if score_threshold > 0:
+#         keep = dets['score'] > score_threshold
 
-        if self.num_gt_positives == 0:
-            return 0
+#         for k in dets:
+#             if k != 'proto':
+#                 dets[k] = dets[k][keep]
+        
+#         if dets['score'].size(0) == 0:
+#             return [torch.Tensor()] * 4
+    
+#     # Actually extract everything from dets now
+#     classes = dets['class']
+#     boxes   = dets['box']
+#     scores  = dets['score']
+#     masks   = dets['mask']
 
-        # Sort descending by score
-        self.data_points.sort(key=lambda x: -x[0])
+#     if cfg.mask_type == mask_type.lincomb and cfg.eval_mask_branch:
+#         # At this points masks is only the coefficients
+#         proto_data = dets['proto']
+        
+#         # Test flag, do not upvote
+#         if cfg.mask_proto_debug:
+#             np.save('scripts/proto.npy', proto_data.cpu().numpy())
+        
+#         if visualize_lincomb:
+#             display_lincomb(proto_data, masks)
 
-        precisions = []
-        recalls = []
-        num_true = 0
-        num_false = 0
+#         masks = proto_data @ masks.t()
+#         masks = cfg.mask_proto_mask_activation(masks)
 
-        # Compute the precision-recall curve. The x axis is recalls and the y axis precisions.
-        for datum in self.data_points:
-            # datum[1] is whether the detection a true or false positive
-            if datum[1]:
-                num_true += 1
-            else:
-                num_false += 1
+#         # Crop masks before upsampling because you know why
+#         if crop_masks:
+#             masks = crop(masks, boxes)
 
-            precision = num_true / (num_true + num_false)
-            recall = num_true / self.num_gt_positives
+#         # Permute into the correct output shape [num_dets, proto_h, proto_w]
+#         masks = masks.permute(2, 0, 1).contiguous()
 
-            precisions.append(precision)
-            recalls.append(recall)
+#         if cfg.use_maskiou:
+#             with timer.env('maskiou_net'):                
+#                 with torch.no_grad():
+#                     maskiou_p = net.maskiou_net(masks.unsqueeze(1))
+#                     maskiou_p = torch.gather(maskiou_p, dim=1, index=classes.unsqueeze(1)).squeeze(1)
+#                     if cfg.rescore_mask:
+#                         if cfg.rescore_bbox:
+#                             scores = scores * maskiou_p
+#                         else:
+#                             scores = [scores, scores * maskiou_p]
 
-        # Smooth the curve by computing [max(precisions[i:]) for i in range(len(precisions))]
-        # Basically, remove any temporary dips from the curve.
-        # At least that's what I think, idk. COCOEval did it so I do too.
-        for i in range(len(precisions)-1, 0, -1):
-            if precisions[i] > precisions[i-1]:
-                precisions[i-1] = precisions[i]
+#         # Scale masks up to the full image
+#         masks = F.interpolate(masks.unsqueeze(0), (h, w), mode=interpolation_mode, align_corners=False).squeeze(0)
 
-        # Compute the integral of precision(recall) d_recall from recall=0->1 using fixed-length riemann summation with 101 bars.
-        y_range = [0] * 101 # idx 0 is recall == 0.0 and idx 100 is recall == 1.00
-        x_range = np.array([x / 100 for x in range(101)])
-        recalls = np.array(recalls)
+#         # Binarize the masks
+#         masks.gt_(0.5)
 
-        # I realize this is weird, but all it does is find the nearest precision(x) for a given x in x_range.
-        # Basically, if the closest recall we have to 0.01 is 0.009 this sets precision(0.01) = precision(0.009).
-        # I approximate the integral this way, because that's how COCOEval does it.
-        indices = np.searchsorted(recalls, x_range, side='left')
-        for bar_idx, precision_idx in enumerate(indices):
-            if precision_idx < len(precisions):
-                y_range[bar_idx] = precisions[precision_idx]
+    
+#     boxes[:, 0], boxes[:, 2] = sanitize_coordinates(boxes[:, 0], boxes[:, 2], w, cast=False)
+#     boxes[:, 1], boxes[:, 3] = sanitize_coordinates(boxes[:, 1], boxes[:, 3], h, cast=False)
+#     boxes = boxes.long()
 
-        # Finally compute the riemann sum to get our integral.
-        # avg([precision(x) for x in 0:0.01:1])
-        return sum(y_range) / len(y_range)
+#     if cfg.mask_type == mask_type.direct and cfg.eval_mask_branch:
+#         # Upscale masks
+#         full_masks = torch.zeros(masks.size(0), h, w)
+
+#         for jdx in range(masks.size(0)):
+#             x1, y1, x2, y2 = boxes[jdx, :]
+
+#             mask_w = x2 - x1
+#             mask_h = y2 - y1
+
+#             # Just in case
+#             if mask_w * mask_h <= 0 or mask_w < 0:
+#                 continue
+            
+#             mask = masks[jdx, :].view(1, 1, cfg.mask_size, cfg.mask_size)
+#             mask = F.interpolate(mask, (mask_h, mask_w), mode=interpolation_mode, align_corners=False)
+#             mask = mask.gt(0.5).float()
+#             full_masks[jdx, y1:y2, x1:x2] = mask
+        
+#         masks = full_masks
+
+#     return classes, scores, boxes, masks
 
 
-class Detection:
-    def __init__(self) -> None:
-        self.boxes = []
-        self.masks = []
+# class APDataObject:
+#     """
+#     Stores all the information necessary to calculate the AP for one IoU and one class.
+#     Note: I type annotated this because why not.
+#     """
+#     def __init__(self):
+#         self.data_points = []
+#         self.num_gt_positives = 0
 
-    def add_boxes(
-        self,
-    ):
-        bbox = [bbox[0], bbox[1], bbox[2]-bbox[0], bbox[3]-bbox[1]]
+#     def push(self, score: float, is_true: bool):
+#         self.data_points.append((score, is_true))
+    
+#     def add_gt_positives(self, num_positives: int):
+#         """ Call this once per image. """
+#         self.num_gt_positives += num_positives
 
-        # Round to the nearest 10th to avoid huge file sizes, as COCO suggests
-        bbox = [round(float(x)*10)/10 for x in bbox]
+#     def is_empty(self) -> bool:
+#         return len(self.data_points) == 0 and self.num_gt_positives == 0
 
-        self.bbox_data.append({
-            'image_id': int(image_id),
-            'category_id': get_coco_cat(int(category_id)),
-            'bbox': bbox,
-            'score': float(score)
-        })
+#     def get_ap(self) -> float:
+#         """ Warning: result not cached. """
 
-    def add_masks(self):
-        rle = pycocotools.mask.encode(np.asfortranarray(segmentation.astype(np.uint8)))
-        rle['counts'] = rle['counts'].decode('ascii') # json.dump doesn't like bytes strings
+#         if self.num_gt_positives == 0:
+#             return 0
 
-        self.mask_data.append({
-            'image_id': int(image_id),
-            'category_id': get_coco_cat(int(category_id)),
-            'segmentation': rle,
-            'score': float(score)
-        })
+#         # Sort descending by score
+#         self.data_points.sort(key=lambda x: -x[0])
+
+#         precisions = []
+#         recalls = []
+#         num_true = 0
+#         num_false = 0
+
+#         # Compute the precision-recall curve. The x axis is recalls and the y axis precisions.
+#         for datum in self.data_points:
+#             # datum[1] is whether the detection a true or false positive
+#             if datum[1]:
+#                 num_true += 1
+#             else:
+#                 num_false += 1
+
+#             precision = num_true / (num_true + num_false)
+#             recall = num_true / self.num_gt_positives
+
+#             precisions.append(precision)
+#             recalls.append(recall)
+
+#         # Smooth the curve by computing [max(precisions[i:]) for i in range(len(precisions))]
+#         # Basically, remove any temporary dips from the curve.
+#         # At least that's what I think, idk. COCOEval did it so I do too.
+#         for i in range(len(precisions)-1, 0, -1):
+#             if precisions[i] > precisions[i-1]:
+#                 precisions[i-1] = precisions[i]
+
+#         # Compute the integral of precision(recall) d_recall from recall=0->1 using fixed-length riemann summation with 101 bars.
+#         y_range = [0] * 101 # idx 0 is recall == 0.0 and idx 100 is recall == 1.00
+#         x_range = np.array([x / 100 for x in range(101)])
+#         recalls = np.array(recalls)
+
+#         # I realize this is weird, but all it does is find the nearest precision(x) for a given x in x_range.
+#         # Basically, if the closest recall we have to 0.01 is 0.009 this sets precision(0.01) = precision(0.009).
+#         # I approximate the integral this way, because that's how COCOEval does it.
+#         indices = np.searchsorted(recalls, x_range, side='left')
+#         for bar_idx, precision_idx in enumerate(indices):
+#             if precision_idx < len(precisions):
+#                 y_range[bar_idx] = precisions[precision_idx]
+
+#         # Finally compute the riemann sum to get our integral.
+#         # avg([precision(x) for x in 0:0.01:1])
+#         return sum(y_range) / len(y_range)
+
+
+# class Evaluation:
+#     def __init__(self):
+#         pass
+
+#     def evaluate(self):
+#         return
+
+#     def postprocess(self):
+#         pass
+
+
+
+
+# class Detection:
+#     def __init__(self) -> None:
+#         self.boxes = []
+#         self.masks = []
+
+#     def add_boxes(
+#         self,
+#     ):
+#         bbox = [bbox[0], bbox[1], bbox[2]-bbox[0], bbox[3]-bbox[1]]
+
+#         # Round to the nearest 10th to avoid huge file sizes, as COCO suggests
+#         bbox = [round(float(x)*10)/10 for x in bbox]
+
+#         self.bbox_data.append({
+#             'image_id': int(image_id),
+#             'category_id': get_coco_cat(int(category_id)),
+#             'bbox': bbox,
+#             'score': float(score)
+#         })
+
+#     def add_masks(self):
+#         rle = pycocotools.mask.encode(np.asfortranarray(segmentation.astype(np.uint8)))
+#         rle['counts'] = rle['counts'].decode('ascii') # json.dump doesn't like bytes strings
+
+#         self.mask_data.append({
+#             'image_id': int(image_id),
+#             'category_id': get_coco_cat(int(category_id)),
+#             'segmentation': rle,
+#             'score': float(score)
+#         })
 
 
