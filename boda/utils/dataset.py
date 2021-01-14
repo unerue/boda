@@ -15,10 +15,11 @@ class CocoParser:
         self.coco = self._from_json(info_file)
         self.image_info = {
             c['id']: {
-                'file_name': c['file_name'], 
-                'height': c['height'], 
+                'file_name': c['file_name'],
+                'height': c['height'],
                 'width': c['width']} for c in self.coco['images']}
         self.annot_info = self._get_annot_info()
+        self.category_info = self.coco['categories']
         print(f'Attached dataset... {len(self.image_info):,}')
 
     def _from_json(self, info_file):
@@ -79,9 +80,10 @@ class CocoDataset(Dataset):
         #           62: 57, 63: 58, 64: 59, 65: 60, 67: 61, 70: 62, 72: 63, 73: 64,
         #           74: 65, 75: 66, 76: 67, 77: 68, 78: 69, 79: 70, 80: 71, 81: 72,
         #           82: 73, 84: 74, 85: 75, 86: 76, 87: 77, 88: 78, 89: 79, 90: 80}
-        self.label_map = {
-            1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6
-        }
+        # self.label_map = {
+        #     1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6
+        # }
+        self.label_map = {i: i for i in range(1, 21)}
         # print(self.image_ids)
 
     def __len__(self):
@@ -110,10 +112,13 @@ class CocoDataset(Dataset):
         for target in targets:
             boxes.append(target['bbox'])
             # labels.append(target['category_id'])
+            if target['category_id'] == 0:
+                print('!!!!' * 100)
+
             labels.append(self.label_map.get(target['category_id'])-1)
             crowds.append(target['iscrowd'])
             areas.append(target['area'])
-            
+
             if self.use_mask:
                 if target['segmentation'] is not None:
                     segment = target['segmentation']
@@ -127,7 +132,7 @@ class CocoDataset(Dataset):
 
                     masks.append(mask.decode(rle))
                 masks = np.vstack(masks).reshape(-1, h, w)
-    
+
         boxes = np.asarray(boxes, dtype=np.float32)
         boxes[:, 2] = boxes[:, 0] + boxes[:, 2]
         boxes[:, 3] = boxes[:, 1] + boxes[:, 3]

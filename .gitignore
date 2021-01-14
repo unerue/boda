@@ -41,3 +41,4 @@ logo.pptx
 test_ssd.py
 test_yolov1.py
 # .gitignore
+*.zip

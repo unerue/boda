@@ -23,11 +23,8 @@ class Backbone(nn.Module):
     def init_weights(self, *args):
         raise NotImplementedError
 
-    def from_pretrained(self, backbone_name, **kwargs):
-        from torch.hub import load_state_dict_from_url
-
-        # state_dict = load_state_dict_from_url(BACKBONE_ARCHIVE_MAP[backbone_name])
-        self.load_state_dict(state_dict)
+    def from_pretrained(self, path, **kwargs):
+        raise NotImplementedError
 
     def _from_state_dict(self, *args):
         raise NotImplementedError
@@ -74,8 +71,13 @@ class ModelMixin(ABC):
     def __init__(self, config, **kwargs):
         ...
 
-    def initialize(self, config, backbone, neck, head):
+    def init_structure(self, config, backbone, neck, head):
         pass
+
+    def update_config(self, config):
+        if config is not None:
+            for k, v in config.to_dict().items():
+                setattr(self, k, v)
 
     @classmethod
     @abstractmethod

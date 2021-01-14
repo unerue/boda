@@ -5,55 +5,52 @@ import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 
-# from ..base import Backbone
-
-DARKNET_PRETRAINED_CONFIG_MAP = {
-    'darknet-base': None,
-    'darknet19-base': None,
-    'darknet21': None,
-    'darknet53': None,
-}
-
-DARKNET_STRUCTURES = {
-    'darknet-base': [
-        [(64, {'kernel_size': 7, 'stride': 2, 'padding': 3}), 'M'],
-        [192, 'M'],
-        [(128, {'kernel_size': 1}), 256, (256, {'kernel_size': 1}), 512, 'M'],
-        [
-            (256, {'kernel_size': 1}), 512, 
-            (256, {'kernel_size': 1}), 512, 
-            (256, {'kernel_size': 1}), 512, 
-            (256, {'kernel_size': 1}), 512,
-            (512, {'kernel_size': 1}), 1024, 'M'],
-        [(512, {'kernel_size': 1}), 1024, (512, {'kernel_size': 1}), 'M', 1024, 1024, 1024]],
-
-    'darknet-tiny': [],
-    'darknet19-base': [
-        [32],
-        ['M', 64],
-        ['M', 128, (64, {'kernel_size': 1}), 128],
-        ['M', 256, (128, {'kernel_size': 1}), 256],
-        ['M', 512, (256, {'kernel_size': 1}), 512, (256, {'kernel_size': 1}), 512],
-        ['M', 1024, (512, {'kernel_size': 1}), 1024, (512, {'kernel_size': 1}), 1024]],
-    'darknet19-tiny': [],
-}
+from ..architecture_base import Backbone
 
 
-class DarkNet19(nn.Module):
+class Conv2dDynamicSamePadding(nn.Conv2d):
+    """2D Convolutions like TensorFlow, for a dynamic image size.
+       The padding is operated in forward function by calculating dynamically.
+    
+    Source from:
+    https://github.com/lukemelas/EfficientNet-PyTorch/blob/master/efficientnet_pytorch/utils.py
+    """
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, dilation=1, groups=1, bias=True):
+        super().__init__(in_channels, out_channels, kernel_size, stride, 0, dilation, groups, bias)
+        self.stride = self.stride if len(self.stride) == 2 else [self.stride[0]] * 2
+
+    def forward(self, x):
+        ih, iw = x.size()[-2:]
+        kh, kw = self.weight.size()[-2:]
+        sh, sw = self.stride
+        oh, ow = math.ceil(ih / sh), math.ceil(iw / sw)
+        pad_h = max((oh - 1) * self.stride[0] + (kh - 1) * self.dilation[0] + 1 - ih, 0)
+        pad_w = max((ow - 1) * self.stride[1] + (kw - 1) * self.dilation[1] + 1 - iw, 0)
+        if pad_h > 0 or pad_w > 0:
+            x = F.pad(x, [pad_w // 2, pad_w - pad_w // 2, pad_h // 2, pad_h - pad_h // 2])
+        return F.conv2d(x, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
+
+
+class DarkNet19(Backbone):
     """DarkNet19 for YOLOv1, v2 backbone
     """
     def __init__(
-        self, backbone_structure: List, bn: bool = False, relu: bool = False):
+        self,
+        backbone_structure: List,
+        in_channels: int = 3,
+        use_bn: bool = False,
+    ) -> None:
         super().__init__()
-        self.bn = bn
-        self.relu = relu
+        self.use_bn = use_bn
 
-        self._in_channels = 3
+        self._in_channels = in_channels
         self.channels = []
         self.layers = nn.ModuleList()
 
         for structure in backbone_structure:
             self._make_layers(structure)
+
+        # self.init_weights()
 
     def forward(self, inputs: Tensor) -> List[Tensor]:
         outputs = []
@@ -70,179 +67,84 @@ class DarkNet19(nn.Module):
             if isinstance(v, tuple):
                 kwargs = v[1]
                 v = v[0]
-            
+
             if v == 'M':
                 _layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
             else:
                 if kwargs is None:
-                    kwargs = {'kernel_size': 3, 'padding': 1}
-                
+                    # kwargs = {'kernel_size': 3, 'padding': 1}
+                    kwargs = {'kernel_size': 3}
+
                 _layers += [
-                    nn.Conv2d(
+                    Conv2dDynamicSamePadding(
                         in_channels=self._in_channels,
                         out_channels=v,
                         bias=False,
                         **kwargs)]
-                if self.bn:
+
+                if self.use_bn:
                     _layers += [
                         nn.BatchNorm2d(v),
-                        nn.LeakyReLU(0.1) if not self.relu else nn.ReLU()]
+                        nn.LeakyReLU(0.1)]
                 else:
-                    _layers += [
-                        nn.LeakyReLU(0.1) if not self.relu else nn.ReLU()]
+                    _layers += [nn.LeakyReLU(0.1)]
 
                 self._in_channels = v
 
         self.channels.append(self._in_channels)
         self.layers.append(nn.Sequential(*_layers))
 
-
-class Shortcut(nn.Module):
-    def __init__(
-        self, in_channels: int, out_channels: List[int], residual: bool = True):
-        super().__init__()
-        self.residual = residual
-        self.conv1 = nn.Conv2d(
-            in_channels=in_channels, 
-            out_channels=out_channels[0], 
-            kernel_size=1,
-            stride=1, 
-            padding=0,
-            bias=False)
-        self.bn1 = nn.BatchNorm2d(num_features=out_channels[0])
-        self.relu1 = nn.LeakyReLU(negative_slope=0.1)
-        
-        self.conv2 = nn.Conv2d(
-            in_channels=out_channels[0], 
-            out_channels=out_channels[1], 
-            kernel_size=3,
-            stride=1, 
-            padding=1, 
-            bias=False)
-        self.bn2 = nn.BatchNorm2d(out_channels[1])
-        self.relu2 = nn.LeakyReLU(0.1)
-
-    def forward(self, inputs: Tensor):
-        residual = inputs
-
-        out = self.conv1(inputs)
-        out = self.bn1(out)
-        out = self.relu1(out)
-
-        out = self.conv2(out)
-        out = self.bn2(out)
-        out = self.relu2(out)
-
-        if self.residual:
-            out += residual
-    
-        return out
-
-
-class DarkNet(nn.Module):
-    """
-    References:
-        https://github.com/pytorch/vision/blob/master/torchvision/models/resnet.py
-        https://arxiv.org/abs/1804.02767
-    """
-    def __init__(self, layers: List[int], block=Shortcut):
-        super().__init__()
-        self.in_channels = 32
-        self.conv = nn.Conv2d(
-            in_channels=3, 
-            out_channels=self.in_channels, 
-            kernel_size=3, 
-            stride=1, 
-            padding=1, 
-            bias=False)
-        self.bn = nn.BatchNorm2d(self.in_channels)
-        self.relu = nn.LeakyReLU(0.1)
-
-        self.layers = nn.ModuleList()
-        self.channels = []
-
-        self._make_layer(block, [32, 64], layers[0])
-        self._make_layer(block, [64, 128], layers[1])
-        self._make_layer(block, [128, 256], layers[2])
-        self._make_layer(block, [256, 512], layers[3])
-        self._make_layer(block, [512, 1024], layers[4])
-       
+    def init_weights(self):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                m.weight.data.normal_(0, math.sqrt(2. / n))
+                nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='leaky_relu')
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
             elif isinstance(m, nn.BatchNorm2d):
-                m.weight.data.fill_(1)
-                m.bias.data.zero_()
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, 0, 0.01)
+                nn.init.constant_(m.bias, 0)
 
-    def _make_layer(self, block, out_channels: List[int], blocks: List[int]):
-        layers = []
-        layers.append(nn.Conv2d(
-            self.in_channels, 
-            out_channels[1], 
-            kernel_size=3,
-            stride=2, 
-            padding=1, 
-            bias=False))
-        layers.append(nn.BatchNorm2d(out_channels[1]))
-        layers.append(nn.LeakyReLU(0.1))
-        
-        self.in_channels = out_channels[1]
-        for _ in range(0, blocks):
-            layers.append(block(self.in_channels, out_channels))
-        
-        self.layers.append(nn.Sequential(*layers))
-        self.channels.append(out_channels[1])
+    @classmethod
+    def from_pretrained(cls, path, **kwargs):
+        raise NotImplementedError
 
-    def forward(self, inputs: Tensor) -> List[Tensor]:
-        inputs = self.conv(inputs)
-        inputs = self.bn(inputs)
-        inputs = self.relu(inputs)
 
-        outputs = []
-        for layer in self.layers:
-            inputs = layer(inputs)
-            outputs.append(inputs)
+DARKNET_STRUCTURES = {
+    'darknet-base': [
+        [(64, {'kernel_size': 7, 'stride': 2, 'padding': 3}), 'M'],
+        [192, 'M'],
+        [(128, {'kernel_size': 1}), 256, (256, {'kernel_size': 1}), 512, 'M'],
+        [
+            (256, {'kernel_size': 1}), 512, 
+            (256, {'kernel_size': 1}), 512, 
+            (256, {'kernel_size': 1}), 512, 
+            (256, {'kernel_size': 1}), 512,
+            (512, {'kernel_size': 1}), 1024, 'M'],
+        [(512, {'kernel_size': 1}), 1024, (512, {'kernel_size': 1}), 'M', 1024, 1024, 1024]],
 
-        return outputs
+    'darknet-tiny': [],
+}
 
-    def initialize_weights(self, path):
-        state_dict = torch.load(path)
-        keys = list(state_dict)
-        for key in keys:
-            if key.startswith('layer'):
-                idx = int(key[5])
-                new_key = 'layers.' + str(idx-1) + key[6:]
-                state_dict[new_key] = state_dict.pop(key)
 
-        self.load_state_dict(state_dict, strict=False)
+DARKNET_STRUCTURES = {
+    'darknet-base': [
+        [(64, {'kernel_size': 7, 'stride': 2}), 'M'],
+        [192, 'M'],
+        [(128, {'kernel_size': 1}), 256, (256, {'kernel_size': 1}), 512, 'M'],
+        [(256, {'kernel_size': 1}), 512, (256, {'kernel_size': 1}), 512,
+         (256, {'kernel_size': 1}), 512, (256, {'kernel_size': 1}), 512,
+         (512, {'kernel_size': 1}), 1024, 'M'],
+        [(512, {'kernel_size': 1}), 1024, (512, {'kernel_size': 1}), 'M', 1024, 1024, 1024]],
+
+    'darknet-tiny': [],
+}
 
 
 def darknet(structure_or_name: str = 'darknet-base', pretrained: bool = False, **kwargs):
     if isinstance(structure_or_name, str):
         backbone = DarkNet19(DARKNET_STRUCTURES[structure_or_name], **kwargs)
-
-    return backbone
-
-
-def darknet19(structure_or_name: str = 'darknet19-base', pretrained: bool = False, **kwargs):
-    if isinstance(structure_or_name, str):
-        backbone = DarkNet19(DARKNET_STRUCTURES[structure_or_name], **kwargs)
-
-    return backbone
-
-
-def darknet21(pretrained=False, **kwargs):
-    backbone = DarkNet([1, 1, 2, 2, 1])
-    if pretrained:
-        backbone.load_state_dict(torch.load(pretrained))
-
-    return backbone
-
-
-def darknet53(pretrained=False, **kwargs):
-    backbone = DarkNet([1, 2, 8, 8, 4])
-    if pretrained:
-        backbone.load_state_dict(torch.load(pretrained))
 
     return backbone

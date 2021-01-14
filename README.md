@@ -40,7 +40,7 @@ print(losses)
 |YOLOv1|Test|||
 |SSD|Rebuild|||
 |YOLOv4|Dev|||
-|YOLACT|Rebuild|||
+|YOLACT|Test|||
 |SOLOv1|Dev|||
 |CenterMask|Dev|||
 

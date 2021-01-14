@@ -55,6 +55,7 @@ class MovingAverage():
 class Trainer:
     def __init__(
         self,
+        # config,
         train_loader,
         model,
         optimizer,
@@ -63,7 +64,8 @@ class Trainer:
         scheduler: Optional[str] = None,
         num_epochs = None,
         num_iterations = None,
-        device: str = None
+        device: str = None,
+        verbose: int = 1,
     ) -> None:
         self.train_loader = train_loader
         self.valid_loader = valid_loader
@@ -74,8 +76,13 @@ class Trainer:
         self.num_epochs = num_epochs
         self.num_iterations = num_iterations
         self.device = device
+        self.verbose = verbose
         if self.device is None:
             self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+        # if config is not None:
+        #     for key, value in config.items():
+        #         setattr(self, key, value)
 
     def _init_trainer(self):
         ...
@@ -103,13 +110,15 @@ class Trainer:
 
                 loss = sum([loss_averages[k].get_avg() for k in losses.keys()])
 
-                if (i+1) % 10 == 0:
+                if (i+1) % self.verbose == 0:
                     print(f'{epoch:>{len(str(self.num_epochs))}}/{self.num_epochs} | T: {loss::>7.4f}', end=' | ')
                     # for k, v in losses.items():
                     #     print(f'{k}: {v.item():>7.4f}', end=' | ')
                     for k, v in loss_averages.items():
                         print(f'{k}: {v.get_avg():>7.4f}', end=' | ')
                     print()
+
+            torch.save(self.model.state_dict(), 'test.pth')
 
     def train_one_step(self):
         raise NotImplementedError
@@ -201,6 +210,7 @@ class Trainer:
 
 # class Detector:
 #     def __init__(self) -> None:
+#         self.config
 #         self.num_classes
 #         self.background_label
 #         self.tok_k
@@ -215,8 +225,10 @@ class Trainer:
 #         pred_scores = preds['scores']
 
 #         if 'masks' in preds.keys():
+#             pred_masks = preds['masks']
 
-#         pred_priors = preds['priors']
+#         if 'priors' in preds.keys():
+#             pred_priors = preds['priors']
 
 #         batch_size = preds['boxes'].size(0)
 #         num_prior_boxes = preds['priors'].size(0)
