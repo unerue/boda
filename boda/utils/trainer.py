@@ -89,7 +89,7 @@ class Trainer:
 
     def train(self):
         loss_averages = {k: MovingAverage(100) for k in ['B', 'M', 'C', 'S']}
-        loss_averages = {k: MovingAverage(100) for k in ['B', 'C', 'S']}
+        # loss_averages = {k: MovingAverage(100) for k in ['B', 'C', 'S']}
         self.model.train()
         for epoch in range(self.num_epochs):
             for i, (images, targets) in enumerate(self.train_loader):
@@ -206,140 +206,6 @@ class Trainer:
 #                             # begin with, but accuracy is of the utmost importance.
 #                             if not matched_crowd:
 #                                 ap_obj.push(score_func(i), False)
-
-
-# class Detector:
-#     def __init__(self) -> None:
-#         self.config
-#         self.num_classes
-#         self.background_label
-#         self.tok_k
-#         self.nms_threshold
-#         self.score_threshold
-
-#         self.use_cross_class_nms
-#         self.use_fast_nms
-
-#     def __call__(self, model, preds):
-#         pred_boxes = preds['boxes']
-#         pred_scores = preds['scores']
-
-#         if 'masks' in preds.keys():
-#             pred_masks = preds['masks']
-
-#         if 'priors' in preds.keys():
-#             pred_priors = preds['priors']
-
-#         batch_size = preds['boxes'].size(0)
-#         num_prior_boxes = preds['priors'].size(0)
-
-#         pred_scores = preds['scores'].view(batch_size, num_prior_boxes, self.num_classes).transpose(2, 1).contiguous()
-
-#         for i in range(batch_size):
-#             decoded_boxes = self.decode()
-#             results = self.detect(i, pred_boxes, )
-
-#             if results is not None and proto_masks is not None:
-#                 results['proto_masks'] = proto_masks[i]
-            
-#         return results
-
-#     def decode(self, boxes, priors):
-#         variances = [0.1, 0.2]
-        
-#         boxes = torch.cat((
-#             priors[:, :2] + boxes[:, :2] * variances[0] * priors[:, 2:],
-#             priors[:, 2:] * torch.exp(boxes[:, 2:] * variances[1])), dim=1)
-#         boxes[:, :2] -= boxes[:, 2:] / 2
-#         boxes[:, 2:] += boxes[:, :2]
-
-#         return boxes
-
-#     def detect(self, batch_index, pred_boxes, pred_scores):
-#         pred_scores = pred_scores[batch_index, 1:, :]
-#         scores, _ = torch.max(pred_scores, dim=0)
-
-#         keep = (scores > self.score_threshhold)
-#         scores = pred_scores[:, keep]
-
-#         boxes = pred_boxes[keep, :]
-
-#         if scores.size(1) == 0:
-#             return None
-
-#         boxes, masks, classes, scores = self.nms(boxes, scores, masks)
-        
-#         return_dict = {
-#             'boxes': boxes,
-#             'masks': masks,
-#             'scores': scores,
-#             'labels': labels,
-#         }
-
-#         return return_dict
-
-#     def nms(
-#         self,
-#         pred_boxes: Tensor,
-#         pred_scores: Tensor,
-#         pred_masks: Tensor = None,
-#         iou_threshold: float = 0.5,
-#         scores_threshold: float = 0.05,
-#         max_num_detections: int = 200
-#     ) -> Tuple[Tensor]:
-#         import pyximport
-#         pyximport.install(setup_args={'include_dirs': np.get_include()}, reload_support=True)
-
-#         from cython_nms import nms
-
-#         num_classes = pred_scores.size(0)
-
-#         indexes = []
-#         labels = []
-#         scores = []
-
-#         max_size = 550
-#         pred_boxes = pred_boxes * max_size
-        
-#         for i in range(num_classes):
-#             score = scores[i, :]
-#             score_mask = score > scores_threshold
-#             index = torch.arange(score.size(0), device=pred_boxes.device)
-
-#             score = score[score_mask]
-#             index = index[score_mask]
-
-#             if score.size(0) == 0:
-#                 continue
-
-#             preds = torch.cat(
-#                 [pred_boxes[score_mask], score[:, None]], dim=1).cpu().numpy()
-#             keep = nms(preds, iou_threshold)
-#             keep = torch.Tensor(keep, device=pred_boxes.device).long()
-
-#             indexes.append(index[keep])
-#             labels.append(keep * 0 + i)
-#             scores.append(score[keep])
-        
-#         indexes = torch.cat(indexes, dim=0)
-#         labels = torch.cat(indexes, dim=0)
-#         scores = torch.cat(scores, dim=0)
-
-#         scores, sorted_index = scores.sort(0, descending=True)
-#         sorted_index = sorted_index[:max_num_detections]
-#         scores = scores[:max_num_detections]
-
-#         indexes = indexes[sorted_index]
-#         labels = labels[sorted_index]
-
-#         pred_boxes = pred_boxes[sorted_index] / max_size
-
-#         if pred_masks is not None:
-#             pred_masks = pred_masks[sorted_index]
-
-#             return pred_boxes, pred_masks, pred_scores, labels
-#         else:
-#             return pred_boxes, pred_scores, labels
 
 
 # def postprocess(det_output, w, h, batch_idx=0, interpolation_mode='bilinear',

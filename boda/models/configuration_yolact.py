@@ -50,13 +50,12 @@ class YolactConfig(BaseConfig):
         **kwargs
     ) -> None:
         super().__init__(max_size=max_size, **kwargs)
-        # self.selected_layers = list(range(1, 4))
-        # self.num_boxes = None
+        self.selected_layers = [1, 2, 3]
         self.num_classes = num_classes + 1
         # neck
         self.padding = 1
         self.aspect_ratios = [[[1, 1/2, 2]]] * 6
-        # self.pred_scales = [[24], [48], [96], [192], [384]]
+        self.pred_scales = [[24], [48], [96], [192], [384]]
         # self.fpn_out_channels = 256
         # self.predict_channels = 256
         # self.interpolate_mode = 'bilinear'

@@ -55,6 +55,7 @@ def intersect(box_a: Tensor, box_b: Tensor) -> Tensor:
     n = box_a.size(0)
     A = box_a.size(1)
     B = box_b.size(1)
+
     max_xy = torch.min(
         box_a[..., 2:].unsqueeze(2).expand(n, A, B, 2),
         box_b[..., 2:].unsqueeze(1).expand(n, A, B, 2))
@@ -92,8 +93,8 @@ def jaccard(box_a: Tensor, box_b: Tensor, iscrowd: bool = False) -> Tensor:
     if box_a.dim() == 2:
         use_batch = False
         box_a = box_a[None, ...]
-        box_b = box_b[None, ...]
-
+        box_b = box_b[None, ...]#.half()
+    # print(box_a.dtype, box_b.dtype)
     inter = intersect(box_a, box_b)
     area_a = (
         (box_a[:, :, 2]-box_a[:, :, 0]) *

@@ -1,47 +1,25 @@
 import math
-from typing import Tuple, List, Dict
+from typing import Tuple, List, Dict, Optional, Callable
 
 import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 
 from ..architecture_base import Backbone
+from ..modules import Conv2dDynamicSamePadding
 
 
-class Conv2dDynamicSamePadding(nn.Conv2d):
-    """2D Convolutions like TensorFlow, for a dynamic image size.
-       The padding is operated in forward function by calculating dynamically.
-    
-    Source from:
-    https://github.com/lukemelas/EfficientNet-PyTorch/blob/master/efficientnet_pytorch/utils.py
-    """
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, dilation=1, groups=1, bias=True):
-        super().__init__(in_channels, out_channels, kernel_size, stride, 0, dilation, groups, bias)
-        self.stride = self.stride if len(self.stride) == 2 else [self.stride[0]] * 2
-
-    def forward(self, x):
-        ih, iw = x.size()[-2:]
-        kh, kw = self.weight.size()[-2:]
-        sh, sw = self.stride
-        oh, ow = math.ceil(ih / sh), math.ceil(iw / sw)
-        pad_h = max((oh - 1) * self.stride[0] + (kh - 1) * self.dilation[0] + 1 - ih, 0)
-        pad_w = max((ow - 1) * self.stride[1] + (kw - 1) * self.dilation[1] + 1 - iw, 0)
-        if pad_h > 0 or pad_w > 0:
-            x = F.pad(x, [pad_w // 2, pad_w - pad_w // 2, pad_h // 2, pad_h - pad_h // 2])
-        return F.conv2d(x, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
-
-
-class DarkNet19(Backbone):
+class DarkNet(Backbone):
     """DarkNet19 for YOLOv1, v2 backbone
     """
     def __init__(
         self,
         backbone_structure: List,
         in_channels: int = 3,
-        use_bn: bool = False,
+        norm_layer: Optional[Callable[..., nn.Module]] = nn.BatchNorm2d
     ) -> None:
         super().__init__()
-        self.use_bn = use_bn
+        self.norm_layer = norm_layer
 
         self._in_channels = in_channels
         self.channels = []
@@ -82,9 +60,9 @@ class DarkNet19(Backbone):
                         bias=False,
                         **kwargs)]
 
-                if self.use_bn:
+                if self.norm_layer is not None:
                     _layers += [
-                        nn.BatchNorm2d(v),
+                        self.norm_layer(v),
                         nn.LeakyReLU(0.1)]
                 else:
                     _layers += [nn.LeakyReLU(0.1)]
@@ -112,22 +90,35 @@ class DarkNet19(Backbone):
         raise NotImplementedError
 
 
-DARKNET_STRUCTURES = {
-    'darknet-base': [
-        [(64, {'kernel_size': 7, 'stride': 2, 'padding': 3}), 'M'],
-        [192, 'M'],
-        [(128, {'kernel_size': 1}), 256, (256, {'kernel_size': 1}), 512, 'M'],
-        [
-            (256, {'kernel_size': 1}), 512, 
-            (256, {'kernel_size': 1}), 512, 
-            (256, {'kernel_size': 1}), 512, 
-            (256, {'kernel_size': 1}), 512,
-            (512, {'kernel_size': 1}), 1024, 'M'],
-        [(512, {'kernel_size': 1}), 1024, (512, {'kernel_size': 1}), 'M', 1024, 1024, 1024]],
+# DARKNET_STRUCTURES = {
+#     'darknet-base': [
+#         [(64, {'kernel_size': 7, 'stride': 2, 'padding': 3}), 'M'],
+#         [192, 'M'],
+#         [(128, {'kernel_size': 1}), 256, (256, {'kernel_size': 1}), 512, 'M'],
+#         [
+#             (256, {'kernel_size': 1}), 512, 
+#             (256, {'kernel_size': 1}), 512, 
+#             (256, {'kernel_size': 1}), 512, 
+#             (256, {'kernel_size': 1}), 512,
+#             (512, {'kernel_size': 1}), 1024, 'M'],
+#         [(512, {'kernel_size': 1}), 1024, (512, {'kernel_size': 1}), 'M', 1024, 1024, 1024]],
 
-    'darknet-tiny': [],
-}
+#     'darknet-tiny': [],
+# }
 
+
+# DARKNET_STRUCTURES = {
+#     'darknet-base': [
+#         [(64, {'kernel_size': 7, 'stride': 2}), 'M'],
+#         [192, 'M'],
+#         [(128, {'kernel_size': 1}), 256, (256, {'kernel_size': 1}), 512, 'M'],
+#         [(256, {'kernel_size': 1}), 512, (256, {'kernel_size': 1}), 512,
+#          (256, {'kernel_size': 1}), 512, (256, {'kernel_size': 1}), 512,
+#          (512, {'kernel_size': 1}), 1024, 'M'],
+#         [(512, {'kernel_size': 1}), 1024, (512, {'kernel_size': 1}), 'M', 1024, 1024, 1024]],
+
+#     'darknet-tiny': [],
+# }
 
 DARKNET_STRUCTURES = {
     'darknet-base': [
@@ -137,14 +128,12 @@ DARKNET_STRUCTURES = {
         [(256, {'kernel_size': 1}), 512, (256, {'kernel_size': 1}), 512,
          (256, {'kernel_size': 1}), 512, (256, {'kernel_size': 1}), 512,
          (512, {'kernel_size': 1}), 1024, 'M'],
-        [(512, {'kernel_size': 1}), 1024, (512, {'kernel_size': 1}), 'M', 1024, 1024, 1024]],
-
-    'darknet-tiny': [],
+        [(512, {'kernel_size': 1}), 1024, (512, {'kernel_size': 1}), 'M', 1024]],
 }
 
 
 def darknet(structure_or_name: str = 'darknet-base', pretrained: bool = False, **kwargs):
     if isinstance(structure_or_name, str):
-        backbone = DarkNet19(DARKNET_STRUCTURES[structure_or_name], **kwargs)
+        backbone = DarkNet(DARKNET_STRUCTURES[structure_or_name], norm_layer=nn.BatchNorm2d, **kwargs)
 
     return backbone

@@ -1,13 +1,12 @@
 import os
 import json
 from collections import defaultdict
-import torch
-import numpy as np
-from PIL import Image
-from torch.utils.data import Dataset
-from pycocotools.coco import COCO
-from pycocotools import mask
+
 import cv2
+import numpy as np
+from pycocotools import mask
+
+from torch.utils.data import Dataset
 
 
 class CocoParser:
@@ -45,7 +44,7 @@ class CocoParser:
     def get_annots(self, image_id):
         return self.annot_info.get(image_id)
 
-    # TODO: get_image_path or get_file_name    
+    # TODO: get_image_path or get_file_name
     def get_file_name(self, image_id):
         return self.image_info.get(image_id)['file_name']
 
@@ -80,10 +79,10 @@ class CocoDataset(Dataset):
         #           62: 57, 63: 58, 64: 59, 65: 60, 67: 61, 70: 62, 72: 63, 73: 64,
         #           74: 65, 75: 66, 76: 67, 77: 68, 78: 69, 79: 70, 80: 71, 81: 72,
         #           82: 73, 84: 74, 85: 75, 86: 76, 87: 77, 88: 78, 89: 79, 90: 80}
-        # self.label_map = {
-        #     1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6
-        # }
-        self.label_map = {i: i for i in range(1, 21)}
+        self.label_map = {
+            1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6
+        }
+        # self.label_map = {i: i-1 for i in range(1, 21)}
         # print(self.image_ids)
 
     def __len__(self):
@@ -100,7 +99,10 @@ class CocoDataset(Dataset):
 
         image = self.coco.get_file_name(image_id)
         # image = Image.open(os.path.join(self.image_dir, image)).convert('RGB')
-        image = cv2.imread(os.path.join(self.image_dir, image))
+        image = image.replace('\\', '/')
+        # print(os.path.join(self.image_dir, image))
+        image = cv2.imread(os.path.join(self.image_dir, image), cv2.COLOR_BGR2RGB)
+        # print(image)
         h, w, _ = image.shape
 
         boxes = []
@@ -112,9 +114,7 @@ class CocoDataset(Dataset):
         for target in targets:
             boxes.append(target['bbox'])
             # labels.append(target['category_id'])
-            if target['category_id'] == 0:
-                print('!!!!' * 100)
-
+            # print(target['category_id'])
             labels.append(self.label_map.get(target['category_id'])-1)
             crowds.append(target['iscrowd'])
             areas.append(target['area'])
@@ -131,9 +131,10 @@ class CocoDataset(Dataset):
                         rle = segment
 
                     masks.append(mask.decode(rle))
-                masks = np.vstack(masks).reshape(-1, h, w)
+        masks = np.vstack(masks).reshape(-1, h, w)
 
         boxes = np.asarray(boxes, dtype=np.float32)
+        # xywh to xyxy
         boxes[:, 2] = boxes[:, 0] + boxes[:, 2]
         boxes[:, 3] = boxes[:, 1] + boxes[:, 3]
 

@@ -2,8 +2,7 @@ import os
 import math
 import itertools
 import functools
-from collections import defaultdict
-from collections import OrderedDict
+from collections import defaultdict, OrderedDict
 from typing import Tuple, List, Dict, Any, Callable, TypeVar, Union
 
 import torch
@@ -19,7 +18,7 @@ class YolactPredictNeck(Neck):
     """Prediction Neck for YOLACT
 
     Args:
-        config (:class:`YolactConfig`): 
+        config (:class:`YolactConfig`):
         channels (:obj:`List[int]`): list of in_channels from backbone
     """
     def __init__(self, config, channels: List[int]) -> None:
@@ -99,8 +98,8 @@ def prior_cache(func):
 class PriorBox:
     """
     Args:
-        aspect_ratios (:obj:`List[int]`): 
-        scales (:obj:),
+        aspect_ratios (:obj:`List[int]`):
+        scales (:obj:):
         max_size ():
         use_preapply_sqrt ():
         use_pixel_scales ():
@@ -161,7 +160,7 @@ class PriorBox:
                             _h = _w
 
                         prior_boxes += [x, y, _w, _h]
-        
+
         # TODO: thinking processing to(device)
         prior_boxes = \
             torch.as_tensor(prior_boxes, dtype=torch.float32).view(-1, 4).to(device)
@@ -177,7 +176,7 @@ class ProtoNet(nn.Sequential):
         config (:class:`YolactConfig`)
         in_channels (:obj:`int`):
         layers ():
-        include_last_relu (Optional[bool]): 
+        include_last_relu (Optional[bool]):
     """
     def __init__(
         self,
@@ -239,7 +238,7 @@ class YolactPredictHead(Head):
     """Prediction Head for YOLACT
 
     Args:
-        config (:class:`YolactConfig`): 
+        config (:class:`YolactConfig`):
         in_channles (:obj:`int`):
         out_channels (:obj:`int`):
         aspect_ratios (:obj:`List[int]`):
@@ -344,13 +343,13 @@ class YolactPredictHead(Head):
         masks = masks.permute(0, 2, 3, 1).contiguous().view(inputs.size(0), -1, self.mask_dim)
         masks = torch.tanh(masks)
         scores = scores.permute(0, 2, 3, 1).contiguous().view(inputs.size(0), -1, self.num_classes)
-        _, priors = self.prior_box.generate(h, w, inputs.device)
+        _, prior_boxes = self.prior_box.generate(h, w, inputs.device)
 
         return_dict = {
             'boxes': boxes,
             'masks': masks,
             'scores': scores,
-            'priors': priors,
+            'prior_boxes': prior_boxes,
         }
 
         return return_dict
@@ -364,7 +363,7 @@ class YolactPretrained(Model):
     def from_pretrained(cls, name_or_path: Union[str, os.PathLike]):
         config = cls.config_class.from_pretrained(name_or_path)
         model = YolactModel(config)
-        # model.state_dict(torch.load('yolact.pth'))
+        # model.state_dict(torch.load('test.pth'))
         return model
 
     def _init_weights(self, module):
@@ -438,10 +437,10 @@ class YolactModel(YolactPretrained):
         in_channels = config.fpn_out_channels
         in_channels += config.num_grids
 
-        self.proto_net = ProtoNet(
+        self.proto_layer = ProtoNet(
             config, in_channels, config.proto_net, include_last_relu=False)
 
-        self.config.mask_dim = self.proto_net.channels[-1]
+        self.config.mask_dim = self.proto_layer.channels[-1]
 
         self.head_layers = nn.ModuleList()
         self.config.num_heads = len(config.selected_layers)
@@ -462,7 +461,7 @@ class YolactModel(YolactPretrained):
             self.head_layers.append(head_layer)
 
         self.semantic_layer = nn.Conv2d(self.neck.channels[0], config.num_classes-1, kernel_size=1)
-        self.init_weights('cache/resnet101_reducedfc.pth')
+        self.init_weights('cache/resnet50-19c8e357.pth')
 
     def init_weights(self, path):
         self.backbone.from_pretrained(path)
@@ -478,7 +477,7 @@ class YolactModel(YolactPretrained):
         """
         Args:
             inputs (:obj:`List[FloatTensor[B, C, H, W]]`): 
-        
+
         `check_inputs` returns :obj:`FloatTensor[B, C, H, W]`.
         `backbone` returns :obj:`List[FloatTensor[B, C, H, W]`.
 
@@ -514,14 +513,13 @@ class YolactModel(YolactPretrained):
         for k, v in return_dict.items():
             return_dict[k] = torch.cat(v, dim=-2)
 
-        prototype_masks = self.proto_net(outputs[0])
-        prototype_masks = F.relu(prototype_masks)
-        prototype_masks = prototype_masks.permute(0, 2, 3, 1).contiguous()
-        return_dict['prototype_masks'] = prototype_masks
+        proto_masks = self.proto_layer(outputs[0])
+        proto_masks = F.relu(proto_masks)
+        proto_masks = proto_masks.permute(0, 2, 3, 1).contiguous()
+        return_dict['proto_masks'] = proto_masks
 
         if self.training:
             return_dict['semantic_masks'] = self.semantic_layer(outputs[0])
-            # print(return_dict['semantic'].size())
             return return_dict
         else:
             return_dict['scores'] = F.softmax(return_dict['scores'], dim=-1)

@@ -219,20 +219,20 @@ class YolactLoss(LossFunction):
         pred_boxes = inputs['boxes']
         pred_masks = inputs['masks']
         pred_scores = inputs['scores']
-        pred_priors = inputs['priors']
-        pred_prototype_masks = inputs['prototype_masks']
+        prior_boxes = inputs['prior_boxes']
+        pred_proto_masks = inputs['proto_masks']
         pred_semantic_masks = inputs['semantic_masks']
         # print(pred_semantic_masks)
 
         batch_size = len(targets)
-        num_priors = pred_priors.size(0)
+        num_prior_boxes = prior_boxes.size(0)
         num_classes = pred_scores.size(2)
 
         # Match priors (default boxes) and ground truth boxes
-        matched_pred_boxes = pred_boxes.new(batch_size, num_priors, 4)
-        matched_true_boxes = pred_boxes.new(batch_size, num_priors, 4)
-        matched_pred_scores = pred_boxes.new(batch_size, num_priors).long()
-        matched_indexes = pred_boxes.new(batch_size, num_priors).long()
+        matched_pred_boxes = pred_boxes.new(batch_size, num_prior_boxes, 4)
+        matched_true_boxes = pred_boxes.new(batch_size, num_prior_boxes, 4)
+        matched_pred_scores = pred_boxes.new(batch_size, num_prior_boxes).long()
+        matched_indexes = pred_boxes.new(batch_size, num_prior_boxes).long()
 
         # Match priors (default boxes) and ground truth boxes
         # matched_pred_boxes = torch.zeros((batch_size, num_priors, 4), dtype=torch.float32)
@@ -262,7 +262,7 @@ class YolactLoss(LossFunction):
 
             matched_boxes, matched_scores, matched_index = Matcher()(
                 pred_boxes[i],
-                pred_priors,
+                prior_boxes,
                 true_boxes,
                 true_labels[i],
                 true_crowd_boxes)
@@ -279,13 +279,13 @@ class YolactLoss(LossFunction):
         matched_pred_boxes.required_grad = False
         matched_pred_scores.required_grad = False
         matched_indexes.required_grad = False
-    
+
         positive_scores = matched_pred_scores > 0
         num_positive_scores = positive_scores.sum(dim=1, keepdim=True)
 
         # Size([batch, num_priors, 4])
         positive_index = positive_scores.unsqueeze(positive_scores.dim()).expand_as(pred_boxes)
-    
+
         pred_boxes = pred_boxes[positive_index].view(-1, 4)
         matched_pred_boxes = matched_pred_boxes[positive_index].view(-1, 4)
         # print(pred_boxes.long())
@@ -301,7 +301,7 @@ class YolactLoss(LossFunction):
             positive_scores,
             matched_indexes,
             pred_masks,
-            pred_prototype_masks,
+            pred_proto_masks,
             true_masks,
             matched_true_boxes)
 
@@ -376,8 +376,8 @@ class YolactLoss(LossFunction):
                 selected_masks = perm[:self.masks_to_train]  # select masks to train
 
                 proto_coef = proto_coef[selected_masks, :]
-                positive_index  = positive_index[selected_masks]
-                
+                positive_index = positive_index[selected_masks]
+
                 positive_true_boxes = positive_true_boxes[selected_masks, :]  # process_gt_boxes
 
             num_positives = proto_coef.size(0)
@@ -393,7 +393,7 @@ class YolactLoss(LossFunction):
             # mask_proto_normalize_emulate_roi_pooling
             weight = h * w
             positive_true_csize = xyxy_to_cxywh(positive_true_boxes)
-            true_boxes_width  = positive_true_csize[:, 2] * w
+            true_boxes_width = positive_true_csize[:, 2] * w
             true_boxes_height = positive_true_csize[:, 3] * h
 
             _loss = _loss.sum(dim=(0, 1)) / true_boxes_width / true_boxes_height * weight

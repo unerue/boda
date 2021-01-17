@@ -1,12 +1,14 @@
 import os
-from typing import Tuple, List, Dict, Any, Union
+from typing import Tuple, List, Dict, Any, Union, Optional, Callable
 from collections import OrderedDict
 
 import torch
 from torch import nn, Tensor
 
 from ..architecture_base import Neck, Head, Model
-from .backbone_darknet import darknet, Conv2dDynamicSamePadding
+from ..modules import Conv2dDynamicSamePadding
+from .backbone_darknet import darknet
+from .backbone_resnet import resnet50, resnet34, resnet18
 from .configuration_yolov1 import Yolov1Config
 
 
@@ -18,32 +20,35 @@ class Yolov1PredictNeck(Neck):
         bn (bool):
         relu (bool):
     """
-    def __init__(self, config, in_channels: int = 1024, **kwargs) -> None:
+    def __init__(
+        self,
+        config,
+        channels: List[int],
+        in_channels: int = 1024,
+        norm_layer: Optional[Callable[..., nn.Module]] = nn.BatchNorm2d,
+        **kwargs
+    ) -> None:
         super().__init__()
         self.config = config
         self.selected_layers = kwargs.get('select_layers')
-        self.use_bn = kwargs.get('use_bn', False)
+        self.norm_layer = norm_layer
 
         if self.config is not None:
             for k, v in config.to_dict().items():
                 setattr(self, k, v)
 
-        if isinstance(self.selected_layers, list):
-            self.selected_layers = self.selected_layers[0]
-
         self.channels = []
         self._in_channels = in_channels
 
         self.layers = nn.ModuleList()
-        self._make_layer(in_channels, use_bn=False)
-        self._make_layer(in_channels, use_bn=False)
+        self._make_layer(channels[-1])
+        self._make_layer(in_channels)
         # self._make_layer(in_channels)
         # self._make_layer(in_channels)
 
     def _make_layer(
         self,
         out_channels,
-        use_bn: bool = False,
         **kwargs
     ) -> None:
         _layers = []
@@ -55,8 +60,8 @@ class Yolov1PredictNeck(Neck):
                 self._in_channels, out_channels,
                 kernel_size=3, **kwargs))
 
-        if use_bn:
-            _layers.append(nn.BatchNorm2d(out_channels))
+        if self.norm_layer is not None:
+            _layers.append(self.norm_layer(out_channels))
 
         _layers.append(nn.LeakyReLU(0.1))
 
@@ -72,7 +77,7 @@ class Yolov1PredictNeck(Neck):
         Return:
             (Tensor): Size([])
         """
-        inputs = inputs[self.selected_layers]
+        inputs = inputs[-1]
         for layer in self.layers:
             inputs = layer(inputs)
 
@@ -108,10 +113,14 @@ class Yolov1PredictHead(Head):
         self.channels = []
         self._out_channels = 5 * config.num_boxes + config.num_classes
         self.layers = nn.Sequential(
-            nn.Linear(
-                config.num_grids * config.num_grids * in_channels,
-                out_channels),
+            # nn.AdaptiveAvgPool2d((7, 7)),
+            nn.Flatten(),
+            # nn.Linear(
+            #     config.num_grids * config.num_grids * in_channels,
+            #     out_channels),
+            nn.Linear(100352, out_channels), 
             nn.LeakyReLU(0.1),
+            nn.Dropout(0.5),
             nn.Linear(
                 out_channels,
                 config.num_grids * config.num_grids * self._out_channels),
@@ -130,7 +139,12 @@ class Yolov1PredictHead(Head):
                 labels: Size([batch_size, num_boxes, 20])
         """
         batch_size = inputs.size(0)
-        inputs = inputs.view(batch_size, -1)
+        # print(inputs.size())
+        # inputs = nn.AdaptiveAvgPool2d((7, 7))(inputs)
+        # inputs = inputs.view(batch_size, -1)
+        # print('avg', inputs.size())
+        # inputs = nn.Flatten()(inputs)
+        # print(inputs.size())
         outputs = self.layers(inputs)
         outputs = outputs.view(
             -1, self.num_grids, self.num_grids, self._out_channels)
@@ -148,6 +162,7 @@ class Yolov1PredictHead(Head):
         #     'boxes': boxes,
         #     'scores': scores,
         #     'labels': labels}
+        # outputs = outputs.clamp(min=0)
 
         return outputs
 
@@ -212,13 +227,18 @@ class Yolov1Model(Yolov1Pretrained):
         self.score_threshold = kwargs.get('score_threshold', 0.2)
 
         if backbone is None:
-            self.backbone = darknet(pretrained=False)
+            # self.backbone = darknet(pretrained=False)
+            self.backbone = resnet34()
+            # self.backbone.from_pretrained('cache/resnet50-19c8e357.pth')
+            self.backbone.from_pretrained('cache/resnet34-333f7ec4.pth')
+            # self.backbone.from_pretrained('cache/resnet18-5c106cde.pth')
         if neck is None:
-            self.neck = Yolov1PredictNeck(config, self.backbone.channels[-1])
+            self.neck = Yolov1PredictNeck(config, self.backbone.channels, self.backbone.channels[-1])
         if head is None:
             self.head = Yolov1PredictHead(config, self.neck.channels[-1])
+            # self.head = Yolov1PredictHead(config, self.backbone.channels[-1])
 
-        self.init_weights()
+        # self.init_weights()
 
     def forward(self, inputs: List[Tensor]) -> List[Tensor]:
         """
@@ -234,30 +254,41 @@ class Yolov1Model(Yolov1Pretrained):
 
         if self.training:
             outputs = self.backbone(inputs)
-            outputs = self.neck(outputs)
-            outputs = self.head(outputs)
+            # for out in outputs:
+            #     print(out.size())
+            # outputs = self.neck(outputs)
+            outputs = self.head(outputs[-1])
+            # outputs = self.head(outputs)
 
-            outputs = outputs.view(
-                batch_size, -1, 5*self.num_boxes+self.num_classes)
-            boxes = outputs[..., :5*self.num_boxes].contiguous().view(batch_size, -1, 5)
-            scores = boxes[..., 4]
-            boxes = boxes[..., :4]
-            labels = outputs[..., 5*self.num_boxes:]
-            labels = labels.repeat(1, 2, 1)
+            # outputs = outputs.view(
+                # batch_size, -1, 5*self.num_boxes+self.num_classes)
 
-            return_dict = {
-                'boxes': boxes,
-                'scores': scores,
-                'labels': labels
-            }
+            # boxes = outputs[..., :5*self.num_boxes].contiguous().view(batch_size, -1, 5)
+            # scores = boxes[..., 4]
+            # boxes = boxes[..., :4]
 
-            return return_dict
+            # labels = outputs[..., 5*self.num_boxes:]
+            # # labels = labels.view(-1, self.num_classes)
+            # # labels = labels.contiguous().view(-1, self.num_classes)
+            # # repeat = torch.LongTensor([self.num_boxes]).repeat(labels.size(0)).to(inputs.device)
+            # # labels = torch.repeat_interleave(labels, repeat, dim=0)
+            # # labels = labels.view(batch_size, boxes.size(1), self.num_classes)
+
+            # return_dict = {
+            #     'boxes': boxes,
+            #     'scores': scores,
+            #     'labels': labels
+            # }
+
+            # return return_dict
+            return outputs
         else:
             outputs = self.backbone(inputs)
-            outputs = self.neck(outputs)
+            # outputs = self.neck(outputs)
+            # print(outputs.size())
             # TODO: return gpu? or cpu?
             # outputs = self.head(outputs).detach().cpu()
-            outputs = self.head(outputs)
+            outputs = self.head(outputs[-1])
 
             return outputs
 
@@ -303,14 +334,19 @@ class Yolov1Model(Yolov1Pretrained):
             #     }
 
     def init_weights(self):
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-                if m.bias is not None:
-                    nn.init.constant_(m.bias, 0)
-            elif isinstance(m, nn.BatchNorm2d):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
-            elif isinstance(m, nn.Linear):
-                nn.init.normal_(m.weight, 0, 0.01)
-                nn.init.constant_(m.bias, 0)
+        # print(self.backbone.backbone_modules)
+        for i, (name, module) in enumerate(self.named_modules()):
+            if i != 0 and module not in self.backbone.backbone_modules:
+                # print('\t', i)
+                if isinstance(module, nn.Conv2d):
+                    nn.init.kaiming_normal_(module.weight, mode='fan_in', nonlinearity='leaky_relu')
+                    if module.bias is not None:
+                        nn.init.constant_(module.bias, 0)
+                elif isinstance(module, nn.BatchNorm2d):
+                    nn.init.constant_(module.weight, 1)
+                    nn.init.constant_(module.bias, 0)
+                elif isinstance(module, nn.Linear):
+                    nn.init.normal_(module.weight, 0, 0.01)
+                    nn.init.constant_(module.bias, 0)
+
+        # print(self.backbone.backbone_modules)

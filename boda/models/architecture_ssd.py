@@ -13,23 +13,6 @@ from .configuration_ssd import SsdConfig
 from .backbone_vggnet import vgg16
 
 
-STRUCTURES = {
-    'ssd300': [
-        [('M', {'kernel_size': 3, 'stride': 1, 'padding': 1}), (1024, {'kernel_size': 3, 'padding': 6, 'dilation': 6}), (1024, {'kernel_size': 1})],
-        # [(1024, {'kernel_size': 1})],
-        [(256, {'kernel_size': 1}), (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
-        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
-        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3})],
-        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3})]],
-    'ssd512': [
-        [(256, {'kernel_size': 1}), (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
-        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
-        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
-        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride': 2, 'padding':  1})],
-        [(128, {'kernel_size': 1})]]
-}
-
-
 class L2Norm(nn.Module):
     """ L2 Normalization
 
@@ -49,9 +32,9 @@ class L2Norm(nn.Module):
         self.gamma = gamma
         self.eps = eps
         self.weight = nn.Parameter(torch.Tensor(in_channels))
-        self.reset_parameters()
+        self.init_weights()
 
-    def reset_parameters(self):
+    def init_weights(self):
         torch.nn.init.constant_(self.weight, self.gamma)
 
     def forward(self, inputs):
@@ -64,9 +47,9 @@ class L2Norm(nn.Module):
 class SsdPredictNeck(Neck):
     """Prediction Neck for SSD
 
-    Arguments:
+    Args:
         config
-        in_channels (int):
+        in_channels (:obj:`int`):
     """
     def __init__(
         self,
@@ -81,7 +64,7 @@ class SsdPredictNeck(Neck):
 
         self.norm = L2Norm(512, 10)
         self.selected_layers = config.selected_layers
-        self.layers = nn.ModuleList()  # layers or extra_layers?
+        self.layers = nn.ModuleList()  # TODO: layers or extra_layers?
         self._in_channels = in_channels
 
         # TODO: rename variable
@@ -146,7 +129,7 @@ def prior_cache(func):
 
 class PriorBox:
     """Prior Box
-    
+
     Compute priorbox coordinates in center-offset form for each source
     feature map.
     """
@@ -164,7 +147,7 @@ class PriorBox:
         for v in self.variance:
             if v <= 0:
                 raise ValueError('Variances must be greater than 0')
-    
+
     @prior_cache
     def generate(self, h, w):
         size = (h, w)
@@ -212,7 +195,7 @@ class SsdPredictHead(nn.Module):
         self.config = config
         self.num_classes = config.num_classes + 1
         self.boxes = boxes
-        
+
         self.prior_box = PriorBox(
             config, aspect_ratios, step, min_sizes, max_sizes)
 
@@ -226,14 +209,13 @@ class SsdPredictHead(nn.Module):
                 out_channels=self.boxes * out_channels, 
                 kernel_size=3,
                 padding=1)]
-        
+
         return nn.Sequential(*_layer)
 
     def forward(self, inputs):
         h, w = inputs.size(2), inputs.size(3)
         boxes = self.bbox_layers(inputs)
         scores = self.conf_layers(inputs)
-        
 
         _, priors = self.prior_box.generate(h, w)
         print(boxes.size(), scores.size(), priors.size())
@@ -312,6 +294,24 @@ class SsdModel(SsdPretrained):
                 preds[k].append(v)
 
         print('??', len(preds))
+
+
+STRUCTURES = {
+    'ssd300': [
+        [('M', {'kernel_size': 3, 'stride': 1, 'padding': 1}), (1024, {'kernel_size': 3, 'padding': 6, 'dilation': 6}), (1024, {'kernel_size': 1})],
+        # [(1024, {'kernel_size': 1})],
+        [(256, {'kernel_size': 1}), (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
+        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
+        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3})],
+        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3})]],
+    'ssd512': [
+        [(256, {'kernel_size': 1}), (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
+        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
+        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
+        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride': 2, 'padding':  1})],
+        [(128, {'kernel_size': 1})]]
+}
+
 
 
 EXTRA_LAYER_STRUCTURES = {

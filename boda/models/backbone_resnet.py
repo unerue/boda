@@ -157,7 +157,8 @@ class ResNet(nn.Module):
         self._make_layer(block, 256, layers[2], stride=2)
         self._make_layer(block, 512, layers[3], stride=2)
 
-        self.backbone_modules = [m for m in self.modules() if isinstance(m, nn.Conv2d)]
+        # self.backbone_modules = [m for m in self.modules() if isinstance(m, nn.Conv2d)]
+        self.backbone_modules = [m for m in self.modules()]
 
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
@@ -202,6 +203,12 @@ class ResNet(nn.Module):
     def from_pretrained(self, path):
         state_dict = torch.load(path)
 
+        try:
+            state_dict.pop('fc.weight')
+            state_dict.pop('fc.bias')
+        except KeyError:
+            pass
+
         keys = list(state_dict)
         for key in keys:
             if key.startswith('layer'):
@@ -213,12 +220,12 @@ class ResNet(nn.Module):
 
 
 def resnet18():
-    backbone = ResNet([2, 2, 2, 2])
+    backbone = ResNet([2, 2, 2, 2], BasicBlock)
     return backbone
 
 
 def resnet34():
-    backbone = ResNet([3, 4, 6, 3])
+    backbone = ResNet([3, 4, 6, 3], BasicBlock)
     return backbone
 
 

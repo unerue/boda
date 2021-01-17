@@ -37,20 +37,34 @@ def collate_fn(batch):
     return tuple(zip(*batch))
 
 
-train_loader = DataLoader(dataset, batch_size=4, num_workers=0, collate_fn=collate_fn)
+train_loader = DataLoader(dataset, batch_size=1, num_workers=0, collate_fn=collate_fn)
 # valid_loader = DataLoader(validset, batch_size=4, num_workers=0, collate_fn=collate_fn)
 
 config = YolactConfig(num_classes=7)
 model = YolactModel(config).to('cuda')
 # print(summary(model, input_data=(3, 550, 550), verbose=0))
 
-optimizer = optim.SGD(model.parameters(), 1e-4)
-criterion = YolactLoss()
 
-trainer = Trainer(
-    train_loader, model, optimizer, criterion, num_epochs=50)
-trainer.train()
+model.load_state_dict(torch.load('cache/test.pth'))
+model.eval()
 
+from boda.utils.detector import Detector
+
+for images, targets in train_loader:
+    images = [image.to('cuda') for image in images]
+    outputs = model(images)
+    outputs = Detector(7)(outputs)
+    print('Done!!!!!!!!!!')
+    break
+
+print('Done2')
+print(outputs.keys())
+print('boxes:', outputs['boxes'].device, outputs['boxes'].size())
+print('masks:', outputs['masks'].device, outputs['masks'].size())
+print('scores:', outputs['scores'].device, outputs['scores'].size())
+print('labels:', outputs['labels'].device, outputs['labels'].size())
+print('proto:', outputs['proto_masks'].device, outputs['proto_masks'].size())
+print('Done3')
 
 # config = YolactConfig()
 # model = YolactModel(config).to('cuda')

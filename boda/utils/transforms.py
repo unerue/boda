@@ -8,7 +8,6 @@ import torch
 from torch import dtype, nn, Tensor
 import numpy as np
 from numpy import ndarray
-from torch.nn.functional import interpolate
 
 
 def _check_image(image: ndarray):
@@ -22,7 +21,7 @@ def _check_image(image: ndarray):
     if image.shape[0] == 3:
         return image.transpose((1, 2, 0))
 
-    
+
 class Compose:
     def __init__(self, transforms: List[Callable]) -> None:
         self.transforms = transforms
