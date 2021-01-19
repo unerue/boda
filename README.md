@@ -2,7 +2,6 @@
   <img height=110em src="boda.png">
 </p>
 <p align="center">
-  <img alt="Kyungsu" src="https://img.shields.io/badge/Created%20by-Kyungsu-orange.svg?style=flat&colorA=gray&colorB=blue" />
   <img alt="Kyungsu" src="https://img.shields.io/badge/Version%20-0.0.1b-orange.svg?style=flat&colorA=E1523D&colorB=blue" />
   <!-- <img alt="SCIE" src="https://img.shields.io/badge/SCIE%20-orange.svg" /> -->
   <!-- <img alt="KCI" src="https://img.shields.io/badge/KCI%20-yellow.svg" /> -->
@@ -35,6 +34,7 @@ losses = criterion(outputs, targets)
 print(losses)
 ```
 
+## Comparison
 |Model|State|Original|Ours|
 |:----|:----|-------:|---:|
 |[SSD](boda/models/ssd/)|Test|||
@@ -44,6 +44,7 @@ print(losses)
 |[SOLOv1](boda/models/solov1/)|Test|||
 |CenterMask|Dev|||
 
+## Abstract Structure
 
 ```python
 class Backbone(nn.Module):
