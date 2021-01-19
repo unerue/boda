@@ -3,15 +3,15 @@ import math
 import itertools
 import functools
 from collections import defaultdict, OrderedDict
-from typing import Tuple, List, Dict, Any, Callable, TypeVar, Union
+from typing import Tuple, List, Dict, Any, Callable, TypeVar, Union, Sequence
 
 import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 
-from ..architecture_base import Neck, Head, Model
+from ...base_architecture import Backbone, Neck, Head, Model
 from .configuration_yolact import YolactConfig
-from .backbone_resnet import resnet101
+from ..backbone_resnet import resnet101
 
 
 class YolactPredictNeck(Neck):
@@ -21,33 +21,46 @@ class YolactPredictNeck(Neck):
         config (:class:`YolactConfig`):
         channels (:obj:`List[int]`): list of in_channels from backbone
     """
-    def __init__(self, config, channels: List[int]) -> None:
+    def __init__(
+        self,
+        config: YolactConfig,
+        channels: Sequence[int],
+        selected_layers: Sequence[int] = [1, 2, 3],
+        fpn_channels: int = 256,
+        num_extra_fpn_layers: int = 2,
+    ) -> None:
         super().__init__()
         self.config = config
-        self.selected_layers = list(range(len(config.selected_layers)
-                                + config.num_downsamples))
-        self.channels = [config.fpn_out_channels] * len(self.selected_layers)
+        self.selected_layers = selected_layers
+        self.fpn_channels = fpn_channels
+        self.num_extra_fpn_layers = num_extra_fpn_layers
+
+        self.selected_layers = \
+            list(range(len(self.selected_layers) + self.num_extra_fpn_layers))
 
         self.lateral_layers = nn.ModuleList([
             nn.Conv2d(
                 _in_channels,
-                config.fpn_out_channels,
+                self.fpn_channels,
                 kernel_size=1) for _in_channels in reversed(channels)])
 
         self.predict_layers = nn.ModuleList([
             nn.Conv2d(
-                config.fpn_out_channels,
-                config.fpn_out_channels,
+                self.fpn_channels,
+                self.fpn_channels,
                 kernel_size=3,
-                padding=config.padding) for _ in channels])
+                padding=1) for _ in channels])
 
-        self.downsample_layers = nn.ModuleList([
-            nn.Conv2d(
-                config.fpn_out_channels,
-                config.fpn_out_channels,
-                kernel_size=3,
-                stride=2,
-                padding=1) for _ in range(config.num_downsamples)])
+        if self.num_extra_fpn_layers > 0:
+            self.extra_layers = nn.ModuleList([
+                nn.Conv2d(
+                    self.fpn_channels,
+                    self.fpn_channels,
+                    kernel_size=3,
+                    stride=2,
+                    padding=1) for _ in range(self.num_extra_fpn_layers)])
+
+        self.channels = [self.fpn_channels] * len(self.selected_layers)
 
     def forward(self, inputs: List[Tensor]) -> List[Tensor]:
         """
@@ -60,24 +73,25 @@ class YolactPredictNeck(Neck):
         x = torch.zeros(1, device=self.config.device)
         outputs = [x for _ in range(len(inputs))]
 
-        j = len(inputs)
+        i = len(inputs)
         for lateral_layer in self.lateral_layers:
-            j -= 1
-            if j < len(inputs) - 1:
-                _, _, h, w = inputs[j].size()
+            i -= 1
+            if i < len(inputs) - 1:
+                _, _, h, w = inputs[i].size()
                 x = F.interpolate(
                     x, size=(h, w), mode='bilinear', align_corners=False)
 
-            x = x + lateral_layer(inputs[j])
-            outputs[j] = x
+            x = x + lateral_layer(inputs[i])
+            outputs[i] = x
 
-        j = len(inputs)
+        i = len(inputs)
         for predict_layer in self.predict_layers:
-            j -= 1
-            outputs[j] = F.relu(predict_layer(outputs[j]))
+            i -= 1
+            outputs[i] = F.relu(predict_layer(outputs[i]))
 
-        for downsample_layer in self.downsample_layers:
-            outputs.append(downsample_layer(outputs[-1]))
+        if self.num_extra_fpn_layers > 0:
+            for extra_layer in self.extra_layers:
+                outputs.append(extra_layer(outputs[-1]))
 
         return outputs
 
@@ -109,14 +123,14 @@ class PriorBox:
         self,
         aspect_ratios: List[int],
         scales: List[float],
-        max_size: int,
+        max_size: Tuple[int] = (550, 550),
         use_preapply_sqrt: bool = True,
         use_pixel_scales: bool = True,
         use_square_anchors: bool = True
     ) -> None:
-        self.max_size = max_size
         self.aspect_ratios = aspect_ratios
         self.scales = scales
+        self.max_size = max_size
         self.use_preapply_sqrt = use_preapply_sqrt
         self.use_pixel_scales = use_pixel_scales
         self.use_square_anchors = use_square_anchors
@@ -178,33 +192,47 @@ class ProtoNet(nn.Sequential):
         layers ():
         include_last_relu (Optional[bool]):
     """
+    structure = [
+        (256, 3, {'padding': 1}),
+        (256, 3, {'padding': 1}),
+        (256, 3, {'padding': 1}),
+        (None, 2, {}),
+        (256, 3, {'padding': 1}),
+        (32, 1, {})
+    ]
+
     def __init__(
         self,
         config,
         in_channels: int,
-        layers: List,
-        include_last_relu: bool = True
+        protonet_structure: List = None,
+        use_relu: bool = False
     ) -> None:
         self.config = config
         self.channels = []
-        # TODO: mask_layers or _layers?
-        mask_layers = OrderedDict()
-        for i, v in enumerate(layers):
+
+        _layers = OrderedDict()
+        if protonet_structure is not None:
+            self.structure = protonet_structure
+
+        for i, v in enumerate(self.structure):
             if isinstance(v[0], int):
-                mask_layers[f'{i}'] = nn.Conv2d(
+                _layers[f'{i}'] = nn.Conv2d(
                     in_channels, v[0], kernel_size=v[1], **v[2])
                 self.channels.append(v[0])
+
             elif v[0] is None:
-                mask_layers[f'{i}'] = nn.Upsample(
-                    scale_factor=-v[1],
+                _layers[f'{i}'] = nn.Upsample(
+                    scale_factor=v[1],
                     mode='bilinear',
                     align_corners=False,
                     **v[2])
 
-        if include_last_relu:
-            mask_layers[f'relu{len(mask_layers)+1}'] = nn.ReLU()
+        # if include_last_relu:
+        if use_relu:
+            _layers[f'relu{len(_layers)+1}'] = nn.ReLU()
 
-        super().__init__(mask_layers)
+        super().__init__(_layers)
 
 
 class HeadBranch(nn.Sequential):
@@ -254,11 +282,24 @@ class YolactPredictHead(Head):
         aspect_ratios: List[int],
         scales: List[float],
         parent: nn.Module,
-        index: int
+        index: int,
+        num_classes: int,
+        use_preapply_sqrt: bool = True,
+        use_pixel_scales: bool = False,
+        use_square_anchors: bool = True,
+        extra_head_layer_structure: List = [(256, 3, {'padding': 1})],
+        num_extra_box_layers: int = 0,
+        num_extra_mask_layers: int = 0,
+        num_extra_score_layers: int = 0
     ) -> None:
         super().__init__()
         self.config = config
         self.num_classes = config.num_classes
+        self.extra_head_layer_structure = extra_head_layer_structure
+        self.num_extra_box_layers = num_extra_box_layers
+        self.num_extra_mask_layers = num_extra_mask_layers
+        self.num_extra_score_layers = num_extra_score_layers
+
         self.prior_box = PriorBox(
             aspect_ratios,
             scales,
@@ -272,27 +313,27 @@ class YolactPredictHead(Head):
         self.parent = [parent]
 
         if parent is None:
-            if config.extra_head_net is None:
+            if self.extra_head_layer_structure is None:
                 out_channels = in_channels
             else:
                 self.upsample_layers = ProtoNet(
-                    config, in_channels, config.extra_head_net)
+                    config, in_channels, self.extra_head_layer_structure)
                 out_channels = self.upsample_layers.channels[-1]
 
-            self.bbox_layers = self._make_layer(
-                config.num_extra_bbox_layers,
+            self.box_layers = self._make_layer(
+                self.num_extra_box_layers,
                 out_channels,
                 self.num_priors * 4)
 
-            self.conf_layers = self._make_layer(
-                config.num_extra_conf_layers,
-                out_channels,
-                self.num_priors * self.num_classes)
-
             self.mask_layers = self._make_layer(
-                config.num_extra_mask_layers,
+                self.num_extra_mask_layers,
                 out_channels,
                 self.num_priors * self.mask_dim)
+
+            self.score_layers = self._make_layer(
+                self.num_extra_score_layers,
+                out_channels,
+                self.num_priors * self.num_classes)
 
     def _make_layer(
         self,
@@ -302,10 +343,10 @@ class YolactPredictHead(Head):
     ) -> nn.Sequential:
         """
         """
-        _predict_layers = []
+        _layers = []
         if num_extra_layers > 0:
             for _ in range(num_extra_layers):
-                _predict_layers += [
+                _layers += [
                     nn.Conv2d(
                         in_channels,
                         in_channels,
@@ -313,10 +354,10 @@ class YolactPredictHead(Head):
                         padding=1),
                     nn.ReLU()]
 
-        _predict_layers.append(
+        _layers.append(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1))
 
-        return nn.Sequential(*_predict_layers)
+        return nn.Sequential(*_layers)
 
     def forward(self, inputs: Tensor) -> Dict[str, Tensor]:
         """
@@ -328,16 +369,16 @@ class YolactPredictHead(Head):
                 `boxes` (:obj:`FloatTensor[B, N, 4]`): B is the number of batch size
                 `masks` (:obj:`FloatTensor[B, N, P]`): P is the number of prototypes
                 `scores` (:obj:`FloatTensor[B, N, C]`): C is the number of classes with background e.g. 80 + 1
-                `priors` (:obj:`FloatTensor[N, 4]`):
+                `prior_boxes` (:obj:`FloatTensor[N, 4]`):
         """
         branches = self if self.parent[0] is None else self.parent[0]
 
         h, w = inputs.size(2), inputs.size(3)
         inputs = branches.upsample_layers(inputs)
 
-        boxes = branches.bbox_layers(inputs)
+        boxes = branches.box_layers(inputs)
         masks = branches.mask_layers(inputs)
-        scores = branches.conf_layers(inputs)
+        scores = branches.score_layers(inputs)
 
         boxes = boxes.permute(0, 2, 3, 1).contiguous().view(inputs.size(0), -1, 4)
         masks = masks.permute(0, 2, 3, 1).contiguous().view(inputs.size(0), -1, self.mask_dim)
@@ -403,47 +444,69 @@ class YolactModel(YolactPretrained):
 
     def __init__(
         self,
-        config,
-        backbone = None,
-        neck: Neck = None,
-        head: Head = None,
+        config: YolactConfig,
+        backbone: Backbone = resnet101,
+        neck: Neck = YolactPredictNeck,
+        head: Head = YolactPredictHead,
         num_classes: int = None,
-        **kwargs
+        selected_layers: Sequence = [1, 2, 3],
+        fpn_channels: int = 256,
+        num_grids: int = 0,
+        mask_size: int = 16,
+        aspect_ratios: Sequence = [[[1, 1/2, 2]]] * 6,
+        scales: Sequence = [[24], [48], [96], [192], [384]]
     ) -> None:
         """
         """
         super().__init__(config)
         self.config = config
-        self.use_semantic_segmentation = config.use_semantic_segmentation
+        self.num_classes = num_classes
+        self.selected_layers = selected_layers
+        self.fpn_channels = fpn_channels
+        self.num_grids = num_grids
+        self.mask_size = mask_size
+        self.aspect_ratios = aspect_ratios
+        self.scales = scales
+        # self.proto
+
+        self.update_config(config)
 
         # TODO: rename backbone, neck, head layers
-        if backbone is None:
-            self.backbone = resnet101()
-            num_layers = max(config.selected_layers) + 1
-            while len(self.backbone.layers) < num_layers:
-                self.backbone.add_layer()
+        # if backbone is None:
+        #     self.backbone = resnet101()
+        #     num_layers = max(self.selected_layers) + 1
+        #     while len(self.backbone.layers) < num_layers:
+        #         self.backbone.add_layer()
+        self.backbone = resnet101()
+        num_layers = max(self.selected_layers) + 1
+        while len(self.backbone.layers) < num_layers:
+            self.backbone.add_layer()
 
-        self.freeze_bn(True)
+        # self.freeze_bn(True)
 
         self.config.mask_dim = config.mask_size**2
 
-        in_channels = self.backbone.channels[config.proto_src]
-        in_channels += config.num_grids
+        # ProtoNet in_channels
+        in_channels = self.backbone.channels[0]
+        in_channels += self.num_grids
 
-        if neck is None:
-            self.neck = YolactPredictNeck(
-                config, [self.backbone.channels[i] for i in config.selected_layers])
+        # if neck is None:
+        #     self.neck = YolactPredictNeck(
+        #         config,
+        #         [self.backbone.channels[i] for i in self.selected_layers])
+        self.neck = YolactPredictNeck(
+            config,
+            [self.backbone.channels[i] for i in self.selected_layers])
 
-        in_channels = config.fpn_out_channels
-        in_channels += config.num_grids
+        in_channels = self.fpn_channels
+        in_channels += self.num_grids
 
-        self.proto_layer = ProtoNet(
-            config, in_channels, config.proto_net, include_last_relu=False)
+        self.proto_layer = ProtoNet(config, in_channels)
 
         self.config.mask_dim = self.proto_layer.channels[-1]
 
         self.head_layers = nn.ModuleList()
-        self.config.num_heads = len(config.selected_layers)
+        self.config.num_heads = len(self.selected_layers)
         for i, j in enumerate(self.neck.selected_layers):
             parent = None
             if i > 0:
@@ -456,11 +519,15 @@ class YolactModel(YolactPretrained):
                 aspect_ratios=config.aspect_ratios[i],
                 scales=config.scales[i],
                 parent=parent,
-                index=i)
+                index=i,
+                num_classes=self.num_classes
+            )
 
             self.head_layers.append(head_layer)
 
-        self.semantic_layer = nn.Conv2d(self.neck.channels[0], config.num_classes-1, kernel_size=1)
+        self.semantic_layer = \
+            nn.Conv2d(self.neck.channels[0], self.num_classes-1, kernel_size=1)
+
         self.init_weights('cache/resnet50-19c8e357.pth')
 
     def init_weights(self, path):
@@ -515,7 +582,9 @@ class YolactModel(YolactPretrained):
 
         proto_masks = self.proto_layer(outputs[0])
         proto_masks = F.relu(proto_masks)
+        # print('?')
         proto_masks = proto_masks.permute(0, 2, 3, 1).contiguous()
+        # print('?')
         return_dict['proto_masks'] = proto_masks
 
         if self.training:

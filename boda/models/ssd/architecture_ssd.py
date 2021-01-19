@@ -8,7 +8,7 @@ from torch import nn, Tensor
 import torch.nn.functional as F
 
 import itertools 
-from ..architecture_base import Neck, Head, Model
+from ...architecture_base import Neck, Head, Model
 from .configuration_ssd import SsdConfig
 from .backbone_vggnet import vgg16
 

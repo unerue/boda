@@ -13,6 +13,7 @@ BACKBONE_ARCHIVE_MAP = {
     'resnet101': 'https://download.pytorch.org/models/resnet101-5d3b4d8f.pth',
 }
 
+
 class Conv2d1x1(nn.Sequential):
     """1x1 convolution"""
     def __init__(

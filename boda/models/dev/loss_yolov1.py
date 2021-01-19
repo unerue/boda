@@ -44,7 +44,17 @@ class Yolov1Loss(LossFunction):
     def encode(self, targets, num_grids, num_boxes, num_classes, device):
         """
         Args:
+            Pascal VOC 
+            targets ():
+                boxes (float): [min x, min y, max x max y] [300, 400, 500, 700]
+                labels (int): 10
+        
+        Returns:
+            boxes [0.0 ~ 1.0, , ,  ~]
+            labels [1]
 
+        Returns:
+            7 x 7 x 30
         """
         batch_size = len(targets)
 

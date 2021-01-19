@@ -3,9 +3,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from boda.utils.dataset import CocoDataset
 from boda.utils.transforms import Compose, Resize, ToTensor, Normalize
-from boda.models.configuration_yolact import YolactConfig
-from boda.models.architecture_yolact import YolactModel
-from boda.models.loss_yolact import YolactLoss
+from boda.models import YolactConfig, YolactModel, YolactLoss
 from boda.utils.trainer import Trainer
 from boda.lib.torchsummary import summary
 

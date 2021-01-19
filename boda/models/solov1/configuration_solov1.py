@@ -1,6 +1,6 @@
 import os
 from typing import Union, Any
-from ..configuration_base import BaseConfig
+from ...base_configuration import BaseConfig
 
 
 SOLOV1_PRETRAINED_CONFIG = {

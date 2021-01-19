@@ -7,10 +7,10 @@ import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 
-from ..architecture_base import LossFunction
-from ..utils.bbox import elemwise_box_iou, jaccard, cxcywh_to_xyxy, crop, xyxy_to_cxywh
-from ..utils.loss import log_sum_exp
-from ..utils.mask import elemwise_mask_iou
+from ...base_architecture import LossFunction
+from ...utils.bbox import elemwise_box_iou, jaccard, cxcywh_to_xyxy, crop, xyxy_to_cxywh
+from ...utils.loss import log_sum_exp
+from ...utils.mask import elemwise_mask_iou
 
 
 class Matcher:
@@ -26,17 +26,14 @@ class Matcher:
     """
     def __init__(
         self,
-        positive_margin: float = 0.5,
         positive_threshold: float = 0.5,
         negative_threshold: float = 0.5,
-        pos_thresh: float = 0.5,
-        neg_thresh: float = 0.5,
-        crowd_iou_thresh: int = 1,
+        crowd_iou_threshold: int = 1,
         variances: List[int] = [0.1, 0.2]
     ) -> None:
-        self.pos_thresh = pos_thresh
-        self.neg_thresh = neg_thresh
-        self.crowd_iou_thresh = crowd_iou_thresh
+        self.positive_threshold = positive_threshold
+        self.negative_threshold = negative_threshold
+        self.crowd_iou_threshold = crowd_iou_threshold
         self.variances = variances
 
     def __call__(
@@ -83,8 +80,8 @@ class Matcher:
         matches = true_boxes[best_truth_index]  # Size([num_priors,4])
         scores = true_labels[best_truth_index] + 1  # Size([num_priors])
 
-        scores[best_truth_overlap < self.pos_thresh] = -1  # label as neutral
-        scores[best_truth_overlap < self.neg_thresh] = 0  # label as background
+        scores[best_truth_overlap < self.positive_threshold] = -1  # label as neutral
+        scores[best_truth_overlap < self.negative_threshold] = 0  # label as background
 
         # Deal with crowd annotations for COCO
         # if crowd_boxes is not None and self.crowd_iou_threshold < 1:
@@ -113,7 +110,7 @@ class Matcher:
 
         boxes[:, :2] -= boxes[:, 2:] / 2
         boxes[:, 2:] += boxes[:, :2]
-    
+
         return boxes
 
     def encode(self, matched, priors):
@@ -138,10 +135,6 @@ class Matcher:
         return boxes
 
 
-def sigmoid(x):
-    return 1 / (1 + torch.exp(-x))
-
-
 class YolactLoss(LossFunction):
     """Loss Function for YOLACT
 
@@ -151,39 +144,28 @@ class YolactLoss(LossFunction):
     """
     def __init__(
         self,
+        max_size: Tuple[int] = (550, 550),
         positive_threshold: float = 0.5,
         negative_threshold: float = 0.4,
         neg_pos_ratio: float = 1.0,
         masks_to_train: int = 100,
-        boxes_weight: float = 1.5,
+        box_weight: float = 1.5,
+        mask_weight: float = 6.125,
         score_weight: float = 1.0,
-        masks_weight: float = 6.125,
+        semantic_weight: float = 1.0,
         crowd_iou_threshold: float = 0.7,
-        semantic_segmentation_weight: float = 1.0
     ) -> None:
         super().__init__()
+        self.max_size = max_size
         self.pos_threshold = positive_threshold
         self.neg_threshold = negative_threshold
         self.negpos_ratio = neg_pos_ratio
-        self.bbox_weight = 1.5
-        self.conf_weight = 1.0
-        self.score_weight = 1.0
-        self.confidence_weight = 1.5
-        self.mask_weight = 1.5
-
-        self.crowd_iou_threshold = 0.7
-
-        self.bbox_alpha = 1.5
-        self.mask_alpha = 6.125
-        self.score_alpha = 1.0
-        self.conf_alpha = 1.0
-        self.semantic_segmentation_alpha = 1.0
-        self.class_existence_alpha = 1.0
-
+        self.box_weight = box_weight
+        self.mask_weight = mask_weight
+        self.score_weight = score_weight
+        self.semantic_weight = semantic_weight
+        self.crowd_iou_threshold = crowd_iou_threshold
         self.masks_to_train = masks_to_train
-
-        self.l1_expected_area = 20 * 20 / 70 / 70
-        self.l1_alpha = 0.1
 
     def forward(
         self,
@@ -222,7 +204,6 @@ class YolactLoss(LossFunction):
         prior_boxes = inputs['prior_boxes']
         pred_proto_masks = inputs['proto_masks']
         pred_semantic_masks = inputs['semantic_masks']
-        # print(pred_semantic_masks)
 
         batch_size = len(targets)
         num_prior_boxes = prior_boxes.size(0)
@@ -242,9 +223,11 @@ class YolactLoss(LossFunction):
 
         true_masks = []
         true_labels = []
+        h, w = self.max_size
         for i, target in enumerate(targets):
             true_boxes = target['boxes']
-            true_boxes /= torch.as_tensor([550, 550, 550, 550], dtype=torch.float32, device=pred_boxes.device)
+            true_boxes /= \
+                torch.as_tensor([w, h, w, h], dtype=torch.float32, device=pred_boxes.device)
 
             true_masks.append(target['masks'])
             true_labels.append(target['labels'])
@@ -265,7 +248,8 @@ class YolactLoss(LossFunction):
                 prior_boxes,
                 true_boxes,
                 true_labels[i],
-                true_crowd_boxes)
+                true_crowd_boxes
+            )
 
             # matched_pred_boxes[num_priors,4] encoded offsets to learn
             # matched_pred_scroes[num_priors] top class label for each prior
@@ -295,15 +279,14 @@ class YolactLoss(LossFunction):
         losses['B'] = \
             F.smooth_l1_loss(
                 pred_boxes,
-                matched_pred_boxes, reduction='sum') * self.bbox_weight
-
+                matched_pred_boxes, reduction='sum') * self.box_weight
         losses['M'] = self.lincomb_mask_loss(
             positive_scores,
             matched_indexes,
             pred_masks,
             pred_proto_masks,
             true_masks,
-            matched_true_boxes)
+            matched_true_boxes) * self.mask_weight
 
         # Confidence loss
         losses['C'] = self.ohem_conf_loss(
@@ -311,12 +294,12 @@ class YolactLoss(LossFunction):
             matched_pred_scores,
             positive_scores,
             batch_size,
-            num_classes)
+            num_classes) * self.score_weight
 
         losses['S'] = self.semantic_segmentation_loss(
             pred_semantic_masks,
             true_masks,
-            true_labels)
+            true_labels) * self.semantic_weight
 
         # Divide all losses by the number of positives.
         # Don't do it for loss[P] because that doesn't depend on the anchors.
@@ -335,7 +318,7 @@ class YolactLoss(LossFunction):
         positive_scores,
         matched_indexes,
         pred_masks,
-        prototype_masks,
+        pred_proto_masks,
         true_masks,
         matched_true_boxes,
         mode: str = 'bilinear'
@@ -345,8 +328,8 @@ class YolactLoss(LossFunction):
             mode (:obj:`str`): interpolation mode
         Returns:
         """
-        h = prototype_masks.size(1)
-        w = prototype_masks.size(2)
+        h = pred_proto_masks.size(1)
+        w = pred_proto_masks.size(2)
 
         loss = 0
         for i in range(pred_masks.size(0)):
@@ -366,7 +349,7 @@ class YolactLoss(LossFunction):
             if positive_index.size(0) == 0:
                 continue
 
-            proto_masks = prototype_masks[i]
+            proto_masks = pred_proto_masks[i]
             proto_coef = pred_masks[i, j, :]
 
             # If we have over the allowed number of masks, select a random sample
@@ -404,7 +387,7 @@ class YolactLoss(LossFunction):
 
             loss += torch.sum(_loss)
 
-        return loss * self.mask_alpha / h / w
+        return loss / h / w
 
     def ohem_conf_loss(
         self,
@@ -443,7 +426,7 @@ class YolactLoss(LossFunction):
         targets_weighted = matched_pred_scores[(positive_scores+negatives).gt(0)].long()
         loss = F.cross_entropy(conf_p, targets_weighted, reduction='none')
 
-        return self.conf_alpha * loss.sum()
+        return loss.sum()
 
     def semantic_segmentation_loss(
         self,
@@ -477,7 +460,7 @@ class YolactLoss(LossFunction):
             loss += F.binary_cross_entropy_with_logits(
                 pred_segmentic_mask, true_segmentic_mask, reduction='sum')
 
-        return loss / h / w * self.semantic_segmentation_alpha
+        return loss / h / w
 
 
 
