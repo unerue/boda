@@ -37,11 +37,11 @@ print(losses)
 
 |Model|State|Original|Ours|
 |:----|:----|-------:|---:|
-|YOLOv1|Test|||
-|SSD|Rebuild|||
+|SSD|Test|||
+|RetinaNet|Dev|||
 |YOLOv4|Dev|||
-|[YOLACT](boda/models/yolact/README.md)|Test|||
-|SOLOv1|Dev|||
+|[YOLACT](boda/models/yolact/)|Test|||
+|[SOLOv1](boda/models/solov1/)|Test|||
 |CenterMask|Dev|||
 
 

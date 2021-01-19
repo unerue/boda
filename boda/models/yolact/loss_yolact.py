@@ -17,10 +17,8 @@ class Matcher:
     """
 
     Args:
-        pos_threshold ():
-        ? positive_threshold ():
-        neg_threshold ():
-        ? negative_threshold ():
+        positive_threshold ():
+        negative_threshold ():
         crowd_iou_threshold ():
         variances ():
     """
@@ -53,7 +51,7 @@ class Matcher:
             true_crowds ():
 
         Returns:
-            boxes (:obj:`FloatTensor[N, 4]`): N is a number of prior boxes 
+            boxes (:obj:`FloatTensor[N, 4]`): N is a number of prior boxes
             scores (:obj:`LongTensor[N]`):
             best_truth_index (:obj:`LongTensor[N]`):
         """
