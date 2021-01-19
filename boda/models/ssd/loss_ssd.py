@@ -4,9 +4,9 @@ import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 
-from ..architecture_base import LossFunction
-from ..utils.bbox import jaccard, cxcywh_to_xyxy
-from ..utils.loss import log_sum_exp
+from ...base_architecture import LossFunction
+from ...utils.bbox import jaccard, cxcywh_to_xyxy
+from ...utils.loss import log_sum_exp
 
 
 class Matcher:
@@ -19,7 +19,8 @@ class Matcher:
     def __init__(
         self,
         threshold: float = 0.5,
-        variances: List[float] = [0.1, 0.2]):
+        variances: List[float] = [0.1, 0.2]
+    ) -> None:
         self.threshold = threshold
         self.variances = variances
 

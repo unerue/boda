@@ -8,9 +8,9 @@ from torch import nn, Tensor
 import torch.nn.functional as F
 
 import itertools 
-from ...architecture_base import Neck, Head, Model
+from ...base_architecture import Neck, Head, Model
 from .configuration_ssd import SsdConfig
-from .backbone_vggnet import vgg16
+from ..backbone_vggnet import vgg16
 
 
 class L2Norm(nn.Module):
@@ -55,12 +55,13 @@ class SsdPredictNeck(Neck):
         self,
         config,
         in_channels: int,
-        extra_layers: Dict[str, List]
+        structure: Dict[str, List]
     ) -> None:
         super().__init__()
         self.config = config
         self.channels = []
         self.channels.append(in_channels)
+        self.extra_layers = nn.ModuleList()
 
         self.norm = L2Norm(512, 10)
         self.selected_layers = config.selected_layers
@@ -68,7 +69,7 @@ class SsdPredictNeck(Neck):
         self._in_channels = in_channels
 
         # TODO: rename variable
-        for layer in extra_layers:
+        for layer in structure:
             self._make_layer(layer)
 
     def _make_layer(self, config, **kwargs):
@@ -103,7 +104,7 @@ class SsdPredictNeck(Neck):
         outputs.append(self.norm(inputs[-2]))
 
         output = inputs[-1]
-        for layer in self.extra_layers:
+        for layer in self.layers:
             output = layer(output)
             outputs.append(output)
 
@@ -232,7 +233,7 @@ class SsdPredictHead(nn.Module):
             'priors': priors
         }
 
-        return boxes, scores, priors
+        return preds
 
 
 class SsdPretrained(Model):
@@ -257,6 +258,22 @@ class SsdModel(SsdPretrained):
      ╚═════╝  ╚═════╝ ╚══════╝
 
     """
+    structures = {
+        'ssd300': [
+            [('M', {'kernel_size': 3, 'stride': 1, 'padding': 1}), (1024, {'kernel_size': 3, 'padding': 6, 'dilation': 6}), (1024, {'kernel_size': 1})],
+            # [(1024, {'kernel_size': 1})],
+            [(256, {'kernel_size': 1}), (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
+            [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
+            [(128, {'kernel_size': 1}), (256, {'kernel_size': 3})],
+            [(128, {'kernel_size': 1}), (256, {'kernel_size': 3})]],
+        'ssd512': [
+            [(256, {'kernel_size': 1}), (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
+            [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
+            [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
+            [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride': 2, 'padding':  1})],
+            [(128, {'kernel_size': 1})]]
+    }
+
     def __init__(
         self,
         config,
@@ -270,7 +287,7 @@ class SsdModel(SsdPretrained):
         self.backbone = vgg16()
         print(config.selected_layers)
         print(self.backbone.channels)
-        self.neck = SsdPredictNeck(config, self.backbone.channels[-1], STRUCTURES['ssd300'])
+        self.neck = SsdPredictNeck(config, self.backbone.channels[-1], self.structures['ssd300'])
         print('neck', self.neck.channels)
 
         self.head_layers = nn.ModuleList()
@@ -287,6 +304,8 @@ class SsdModel(SsdPretrained):
         print(len(outputs))
 
         preds = defaultdict(list)
+        print('head_layer', len(self.head_layers))
+        print('outputs', len(outputs))
         for i, layer in enumerate(self.head_layers):
             output = layer(outputs[i])
 
@@ -314,16 +333,16 @@ STRUCTURES = {
 
 
 
-EXTRA_LAYER_STRUCTURES = {
-    'ssd300': [
-        [(256, {'kernel_size': 1}), (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
-        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
-        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3})],
-        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3})]],
-    'ssd512': [
-        [(256, {'kernel_size': 1}), (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
-        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
-        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
-        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride': 2, 'padding':  1})],
-        [(128, {'kernel_size': 1})]]
-}
+# EXTRA_LAYER_STRUCTURES = {
+#     'ssd300': [
+#         [(256, {'kernel_size': 1}), (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
+#         [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
+#         [(128, {'kernel_size': 1}), (256, {'kernel_size': 3})],
+#         [(128, {'kernel_size': 1}), (256, {'kernel_size': 3})]],
+#     'ssd512': [
+#         [(256, {'kernel_size': 1}), (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
+#         [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
+#         [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
+#         [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride': 2, 'padding':  1})],
+#         [(128, {'kernel_size': 1})]]
+# }

@@ -5,7 +5,7 @@ import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 
-from ..architecture_base import Backbone
+from ..base_architecture import Backbone
 
 
 class VGG(nn.Module):

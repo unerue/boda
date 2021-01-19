@@ -37,7 +37,7 @@ print(losses)
 
 |Model|State|Original|Ours|
 |:----|:----|-------:|---:|
-|SSD|Test|||
+|[SSD](boda/models/ssd/)|Test|||
 |RetinaNet|Dev|||
 |YOLOv4|Dev|||
 |[YOLACT](boda/models/yolact/)|Test|||
