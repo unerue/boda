@@ -1,0 +1,44 @@
+.ipynb_checkpoints/
+.vscode/
+__pycache__/
+
+misc/
+misc/yolov1/testimg/
+misc/yolov2/demo/
+misc/yolov3/data/custom/
+misc/yolov3/data/samples/
+misc/yolov3/assets/
+misc/ssd500/img/
+misc/ssd300/doc/
+misc/retinanet/images/
+
+benchmarks/data/
+benchmarks/*pth
+benchmarks/samples/
+benchmarks/dataset/
+
+doc/
+
+boda/__pycache__/
+boda/models/__pycache__/
+boda/lib/__pycache__/
+boda/experimental/__pycache__/
+boda/tests/__pycache__/
+boda/utils/__pycache__/
+boda/dev/
+boda/tests/yolact.pth
+boda/tests/resnet50_550_coco_972_70000.pth
+boda/tests/print_yolact.py
+
+old/
+cache/ 
+# tests/
+
+# test_yolact.py
+run.py
+logo.pptx
+*.pth
+test_ssd.py
+# test_yolov1.py
+# .gitignore
+*.zip
