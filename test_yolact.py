@@ -40,7 +40,7 @@ train_loader = DataLoader(dataset, batch_size=4, num_workers=0, collate_fn=colla
 
 config = YolactConfig(num_classes=80)
 model = YolactModel(config).to('cuda')
-print(summary(model, input_data=(3, 550, 550), verbose=0))
+print(summary(model, input_data=(3, 550, 550), depth=3, verbose=0))
 
 optimizer = optim.SGD(model.parameters(), 1e-4)
 criterion = YolactLoss()

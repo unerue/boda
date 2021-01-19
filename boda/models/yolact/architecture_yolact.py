@@ -235,34 +235,7 @@ class ProtoNet(nn.Sequential):
         super().__init__(_layers)
 
 
-class HeadBranch(nn.Sequential):
-    """
-    TODO: all replace
-    """
-    def __init__(
-        self,
-        num_extra_layers: int,
-        in_channels: int,
-        out_channels: int
-    ) -> None:
-        sub_layers = OrderedDict()
-        if num_extra_layers > 0:
-            for i in range(num_extra_layers):
-                sub_layers[f'{i}'] = [
-                    nn.Conv2d(
-                        in_channels,
-                        in_channels,
-                        kernel_size=3,
-                        padding=1),
-                    nn.ReLU()]
-
-        sub_layers[f'{len(sub_layers)+1}'] = nn.Conv2d(
-            in_channels, out_channels, kernel_size=3, padding=1)
-
-        super().__init__(sub_layers)
-
-
-class YolactPredictHead(Head):
+class HeadBranch(Head):
     """Prediction Head for YOLACT
 
     Args:
@@ -316,9 +289,13 @@ class YolactPredictHead(Head):
             if self.extra_head_layer_structure is None:
                 out_channels = in_channels
             else:
-                self.upsample_layers = ProtoNet(
-                    config, in_channels, self.extra_head_layer_structure)
-                out_channels = self.upsample_layers.channels[-1]
+                # self.upsample_layers = ProtoNet(
+                #     config, in_channels, self.extra_head_layer_structure)
+                # out_channels = self.upsample_layers.channels[-1]
+                self.upsample_layers = nn.Conv2d(
+                    in_channels, in_channels, kernel_size=3, padding=1
+                )
+                out_channels = in_channels
 
             self.box_layers = self._make_layer(
                 self.num_extra_box_layers,
@@ -394,6 +371,48 @@ class YolactPredictHead(Head):
         }
 
         return return_dict
+
+
+class YolactPredictHead(nn.Sequential):
+    """
+    TODO: all replace
+    """
+    def __init__(
+        self,
+        config,
+        selected_layers,
+        in_channels,
+        aspect_ratios: int,
+        scales: int,
+        num_classes: int,
+    ) -> None:
+        head_layers = []
+        for i, j in enumerate(selected_layers):
+            parent = None
+            if i > 0:
+                parent = head_layers[0]
+
+            head_layers.append(HeadBranch(
+                config,
+                in_channels[j],
+                in_channels[j],
+                aspect_ratios=aspect_ratios[i],
+                scales=scales[i],
+                parent=parent,
+                index=i,
+                num_classes=num_classes
+            ))
+
+            # head_layers.append(head_layer)
+            # head_layers.append(head_layer)
+        super().__init__(*head_layers)
+
+
+class SemanticSegmentation(nn.Sequential):
+    def __init__(self, in_channels, out_channels, kernel_size: int = 1):
+        super().__init__(
+            nn.Conv2d(in_channels, out_channels, kernel_size)
+        )
 
 
 class YolactPretrained(Model):
@@ -505,28 +524,34 @@ class YolactModel(YolactPretrained):
 
         self.config.mask_dim = self.proto_layer.channels[-1]
 
-        self.head_layers = nn.ModuleList()
-        self.config.num_heads = len(self.selected_layers)
-        for i, j in enumerate(self.neck.selected_layers):
-            parent = None
-            if i > 0:
-                parent = self.head_layers[0]
+        # self.head_layers = nn.ModuleList()
+        # self.config.num_heads = len(self.selected_layers)
+        # for i, j in enumerate(self.neck.selected_layers):
+        #     parent = None
+        #     if i > 0:
+        #         parent = self.head_layers[0]
 
-            head_layer = YolactPredictHead(
-                config,
-                self.neck.channels[j],
-                self.neck.channels[j],
-                aspect_ratios=config.aspect_ratios[i],
-                scales=config.scales[i],
-                parent=parent,
-                index=i,
-                num_classes=self.num_classes
-            )
+        #     head_layer = YolactPredictHead(
+        #         config,
+        #         self.neck.channels[j],
+        #         self.neck.channels[j],
+        #         aspect_ratios=config.aspect_ratios[i],
+        #         scales=config.scales[i],
+        #         parent=parent,
+        #         index=i,
+        #         num_classes=self.num_classes
+        #     )
 
-            self.head_layers.append(head_layer)
+        #     self.head_layers.append(head_layer)
+        self.head_layers = YolactPredictHead(
+            config, self.selected_layers, self.neck.channels,
+            self.aspect_ratios, self.scales, self.num_classes)
 
-        self.semantic_layer = \
-            nn.Conv2d(self.neck.channels[0], self.num_classes-1, kernel_size=1)
+        # self.semantic_layer = \
+        #     nn.Conv2d(self.neck.channels[0], self.num_classes-1, kernel_size=1)
+        self.semantic_layer = SemanticSegmentation(
+            self.neck.channels[0], self.num_classes-1, kernel_size=1
+        )
 
         self.init_weights('cache/resnet50-19c8e357.pth')
 
