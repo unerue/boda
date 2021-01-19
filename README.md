@@ -40,7 +40,7 @@ print(losses)
 |YOLOv1|Test|||
 |SSD|Rebuild|||
 |YOLOv4|Dev|||
-|YOLACT|Test|||
+|[YOLACT](boda/models/yolact/README.md)|Test|||
 |SOLOv1|Dev|||
 |CenterMask|Dev|||
 

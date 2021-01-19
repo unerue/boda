@@ -38,16 +38,16 @@ def collate_fn(batch):
 train_loader = DataLoader(dataset, batch_size=4, num_workers=0, collate_fn=collate_fn)
 # valid_loader = DataLoader(validset, batch_size=4, num_workers=0, collate_fn=collate_fn)
 
-config = YolactConfig(num_classes=7)
+config = YolactConfig(num_classes=80)
 model = YolactModel(config).to('cuda')
-# print(summary(model, input_data=(3, 550, 550), verbose=0))
+print(summary(model, input_data=(3, 550, 550), verbose=0))
 
 optimizer = optim.SGD(model.parameters(), 1e-4)
 criterion = YolactLoss()
 
-trainer = Trainer(
-    train_loader, model, optimizer, criterion, num_epochs=50)
-trainer.train()
+# trainer = Trainer(
+#     train_loader, model, optimizer, criterion, num_epochs=50)
+# trainer.train()
 
 
 # config = YolactConfig()
