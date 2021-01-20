@@ -292,9 +292,9 @@ class HeadBranch(Head):
                 # self.upsample_layers = ProtoNet(
                 #     config, in_channels, self.extra_head_layer_structure)
                 # out_channels = self.upsample_layers.channels[-1]
-                self.upsample_layers = nn.Conv2d(
-                    in_channels, in_channels, kernel_size=3, padding=1
-                )
+                self.upsample_layers = nn.Sequential(
+                    nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1),
+                    nn.ReLU())
                 out_channels = in_channels
 
             self.box_layers = self._make_layer(
@@ -423,7 +423,9 @@ class YolactPretrained(Model):
     def from_pretrained(cls, name_or_path: Union[str, os.PathLike]):
         config = cls.config_class.from_pretrained(name_or_path)
         model = YolactModel(config)
-        # model.state_dict(torch.load('test.pth'))
+        path = f'{cls.config_class.cache_dir}/{cls.base_model_prefix}/{name_or_path}.pth'
+        print(path)
+        model.load_weights(path)
         return model
 
     def _init_weights(self, module):
@@ -472,8 +474,8 @@ class YolactModel(YolactPretrained):
         fpn_channels: int = 256,
         num_grids: int = 0,
         mask_size: int = 16,
-        aspect_ratios: Sequence = [[[1, 1/2, 2]]] * 6,
-        scales: Sequence = [[24], [48], [96], [192], [384]]
+        aspect_ratios: Sequence = [1, 1/2, 2],
+        scales: Sequence = [24, 48, 96, 192, 384]
     ) -> None:
         """
         """
@@ -501,21 +503,16 @@ class YolactModel(YolactPretrained):
         while len(self.backbone.layers) < num_layers:
             self.backbone.add_layer()
 
-        # self.freeze_bn(True)
+        self.freeze(self.training)
 
         self.config.mask_dim = config.mask_size**2
-
-        # ProtoNet in_channels
-        in_channels = self.backbone.channels[0]
-        in_channels += self.num_grids
 
         # if neck is None:
         #     self.neck = YolactPredictNeck(
         #         config,
         #         [self.backbone.channels[i] for i in self.selected_layers])
         self.neck = YolactPredictNeck(
-            config,
-            [self.backbone.channels[i] for i in self.selected_layers])
+            config, [self.backbone.channels[i] for i in self.selected_layers])
 
         in_channels = self.fpn_channels
         in_channels += self.num_grids
@@ -543,8 +540,10 @@ class YolactModel(YolactPretrained):
         #     )
 
         #     self.head_layers.append(head_layer)
+        self.aspect_ratios = [[self.aspect_ratios]] * len(self.neck.selected_layers)
+        self.scales = [[scale] for scale in self.scales]
         self.head_layers = YolactPredictHead(
-            config, self.selected_layers, self.neck.channels,
+            config, self.neck.selected_layers, self.neck.channels,
             self.aspect_ratios, self.scales, self.num_classes)
 
         # self.semantic_layer = \
@@ -568,7 +567,7 @@ class YolactModel(YolactPretrained):
     def forward(self, inputs: List[Tensor]) -> Dict[str, List[Tensor]]:
         """
         Args:
-            inputs (:obj:`List[FloatTensor[B, C, H, W]]`): 
+            inputs (:obj:`List[FloatTensor[B, C, H, W]]`):
 
         `check_inputs` returns :obj:`FloatTensor[B, C, H, W]`.
         `backbone` returns :obj:`List[FloatTensor[B, C, H, W]`.
@@ -607,9 +606,7 @@ class YolactModel(YolactPretrained):
 
         proto_masks = self.proto_layer(outputs[0])
         proto_masks = F.relu(proto_masks)
-        # print('?')
         proto_masks = proto_masks.permute(0, 2, 3, 1).contiguous()
-        # print('?')
         return_dict['proto_masks'] = proto_masks
 
         if self.training:
@@ -617,4 +614,49 @@ class YolactModel(YolactPretrained):
             return return_dict
         else:
             return_dict['scores'] = F.softmax(return_dict['scores'], dim=-1)
+            from .inference_yolact import YolactInference
+            return_dict = YolactInference(81)(return_dict)
             return return_dict
+
+    def load_weights(self, path):
+        print(path)
+        loaded_state_dict = torch.load(path)
+        state_dict = {}
+        for k, v in loaded_state_dict.items():
+            parts = k.split('.')
+            if parts[0] == 'backbone':
+                if parts[1] == 'conv1':
+                    state_dict[f'backbone.conv.{parts[2]}'] = loaded_state_dict.get(k)
+                elif parts[1] == 'bn1':
+                    state_dict[f'backbone.bn.{parts[2]}'] = loaded_state_dict.get(k)
+                elif parts[4].startswith('conv'):
+                    state_dict[f'backbone.layers.{parts[2]}.{parts[3]}.{parts[4]}.0.{parts[5]}'] = loaded_state_dict.get(k)
+                else:
+                    state_dict[k] = loaded_state_dict.get(k)
+            elif parts[0] == 'fpn':
+                if parts[1] == 'lat_layers':
+                    state_dict[f'neck.lateral_layers.{parts[2]}.{parts[3]}'] = loaded_state_dict.get(k)
+                elif parts[1] == 'pred_layers':
+                    state_dict[f'neck.predict_layers.{parts[2]}.{parts[3]}'] = loaded_state_dict.get(k)
+                elif parts[1] == 'downsample_layers':
+                    state_dict[f'neck.extra_layers.{parts[2]}.{parts[3]}'] = loaded_state_dict.get(k)
+            elif parts[0] == 'prediction_layers':
+                if parts[2] == 'upfeature':
+                    state_dict[f'head_layers.0.upsample_layers.0.{parts[4]}'] = loaded_state_dict.get(k)
+                elif parts[2] == 'bbox_layer':
+                    state_dict[f'head_layers.0.box_layers.0.{parts[3]}'] = loaded_state_dict.get(k)
+                elif parts[2] == 'mask_layer':
+                    state_dict[f'head_layers.0.mask_layers.0.{parts[3]}'] = loaded_state_dict.get(k)
+                elif parts[2] == 'conf_layer':
+                    state_dict[f'head_layers.0.score_layers.0.{parts[3]}'] = loaded_state_dict.get(k)
+            elif parts[0] == 'proto_net':
+                state_dict[f'proto_layer.{int(parts[1])//2}.{parts[2]}'] = loaded_state_dict.get(k)
+            elif parts[0] == 'semantic_seg_conv':
+                state_dict[f'semantic_layer.0.{parts[1]}'] = loaded_state_dict.get(k)
+
+        for k in list(state_dict.keys()):
+            if k.startswith('neck.extra_layers.'):
+                if int(k.split('.')[2]) >= 2:
+                    del state_dict[k]
+
+        self.load_state_dict(state_dict)

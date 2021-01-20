@@ -109,22 +109,6 @@ class ModelMixin(ABC):
 
         return inputs
 
-    def freeze_bn(self, enable: bool = False):
-        """Freeze Batch Nomalization
-
-        Adapted from:
-        https://discuss.pytorch.org/t/how-to-train-with-frozen-batchnorm/12106/8
-        """
-        for module in self.modules():
-            if isinstance(module, nn.BatchNorm2d):
-                if enable:
-                    module.train()
-                else:
-                    module.eval()
-
-                module.weight.requires_grad = enable
-                module.bias.requires_grad = enable
-
 
 class Model(nn.Module, ModelMixin):
     config_class = None
@@ -138,6 +122,19 @@ class Model(nn.Module, ModelMixin):
     # @property
     # def base_model(self) -> nn.Module:
     #     return getattr(self, self.base_model_prefix, self)
+    def sibal(self):
+        print('sibal')
+
+    def freeze(self, enable: bool = False):
+        """Freeze Batch Nomalization
+
+        Adapted from:
+        https://discuss.pytorch.org/t/how-to-train-with-frozen-batchnorm/12106/8
+        """
+        for module in self.modules():
+            if isinstance(module, nn.BatchNorm2d):
+                module.weight.requires_grad = enable
+                module.bias.requires_grad = enable
 
     @classmethod
     def from_pretrained(
@@ -213,7 +210,7 @@ class LossFunction(nn.Module):
                 else:
                     raise ValueError('Expected target boxes to be Tensor.')
             cls._checked_targets = False
-    
+
     def decode(self, targets: List[Dict[str, Tensor]]) -> Dict[str, Tensor]:
         for target in targets:
             pass

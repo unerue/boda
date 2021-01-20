@@ -1,8 +1,64 @@
 import os
+import sys
 import copy
 import json
+import time
 from urllib.parse import urlparse
+from urllib.request import urlretrieve
 from typing import Tuple, List, Dict, Any, Union
+
+
+class DataEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, list):
+            return json.JSONEncoder(indent=None).encode(obj)
+
+        return json.JSONEncoder.default(self, obj)
+
+
+def progressbar(cur, total=100):
+    percent = '{:.2%}'.format(cur / total)
+    sys.stdout.write('\r')
+    # sys.stdout.write("[%-50s] %s" % ('=' * int(math.floor(cur * 50 / total)),percent))
+    sys.stdout.write("[%-100s] %s" % ('=' * int(cur), percent))
+    sys.stdout.flush()
+
+
+def schedule(blocknum, blocksize, totalsize):
+    """
+    blocknum: currently downloaded block
+         blocksize: block size for each transfer
+         totalsize: total size of web page files
+    """
+    if totalsize == 0:
+        percent = 0
+    else:
+        percent = blocknum * blocksize / totalsize
+    if percent > 1.0:
+        percent = 1.0
+
+    percent = percent * 100
+    print("download : %.2f%%" % (percent))
+    progressbar(percent)
+
+
+def reporthook(count, block_size, total_size):
+    """
+    https://blog.shichao.io/2012/10/04/progress_speed_indicator_for_urlretrieve_in_python.html
+    """
+    # global start_time
+    # if count == 0:
+    #     start_time = time.time()
+    #     return
+    # duration = time.time() - start_time
+    progress_size = int(count * block_size)
+    # speed = int(progress_size / (1024 * duration))
+    percent = int(count * block_size * 100 / total_size)
+    sys.stdout.write(f"\rDownload pretrained model: {percent}% {progress_size / (1024*1204):.1f} MB")
+
+    # sys.stdout.write("\rDownload pretrained model: %d%%, %d MB, %d KB/s, %d seconds passed" %
+    #                 (percent, progress_size / (1024 * 1024), speed, duration))
+    sys.stdout.flush()
 
 
 class BaseConfig:
@@ -16,19 +72,13 @@ class BaseConfig:
     cache_dir = 'cache'
 
     def __init__(self, **kwargs):
-        self.use_amp = kwargs.pop('use_amp', False)
-        self.use_jit = kwargs.pop('use_jit', False)
-        self.device = kwargs.pop('device', 'cpu')
-        self.freeze_bn = kwargs.pop('freeze_bn', False)
-
-        self.structures = kwargs.pop('structures', [])
-        self.num_classes = kwargs.pop('num_classes', 80)
+        self.num_classes = kwargs.pop('num_classes', 0)
         self.min_size = kwargs.pop('min_size', None)
         self.max_size = kwargs.pop('max_size', None)
-        if not isinstance(self.max_size, tuple):
+        if not isinstance(self.max_size, (tuple, list)):
             self.max_size = (self.max_size, self.max_size)
 
-        self.num_grids = 0
+        self.num_grids = kwargs.pop('num_grids', 0)
         self.top_k = kwargs.pop('top_k', 5)
         self.score_thresh = kwargs.pop('score_thresh', 0.15)
 
@@ -39,14 +89,15 @@ class BaseConfig:
         # neck
         self.neck_name = kwargs.pop('neck_name', 'fpn')
         self.selected_layers = kwargs.pop('selected_layers', [1, 2, 3])
-        self.aspect_ratios = kwargs.pop('aspect_ratios', [[[1/2, 1, 2]]]*5)
-        self.scales = kwargs.pop('scales', [[24], [48], [96], [192], [384]])
-        self.fpn_out_channels = kwargs.pop('fpn_out_channels', 256)
+        self.aspect_ratios = kwargs.pop('aspect_ratios', [1, 1/2, 2])
+        self.scales = kwargs.pop('scales', [24, 48, 96, 192, 384])
+        self.fpn_channels = kwargs.pop('fpn_channels', 256)
 
         # head
         self.anchors = kwargs.pop('anchors', None)
 
         for k, v in kwargs.items():
+            print(k, v)
             try:
                 setattr(k, v)
             except AttributeError as e:
@@ -57,7 +108,7 @@ class BaseConfig:
 
     def to_json(self):
         config_dict = self.to_dict()
-        return json.dumps(config_dict, indent=2, sort_keys=True)
+        return json.dumps(config_dict, indent=4, cls=DataEncoder)#, indent=2, sort_keys=True)
 
     def to_dict(self):
         output = copy.deepcopy(self.__dict__)
@@ -66,13 +117,14 @@ class BaseConfig:
         return output
 
     def save_json(self, path: str):
-        if os.path.isfile(path):
-            raise AssertionError
+        # if os.path.isfile(path):
+        #     raise AssertionError
 
-        os.makedirs(path, exist_ok=True)
+        # os.makedirs(path, exist_ok=True)
         # config_file = os.path.join(path, CONFIG_NAME)
         with open(path, 'w', encoding='utf-8') as writer:
             writer.write(self.to_json())
+            # json.dump(self.to_json, writer)
 
     def update(self, config_dict: Dict[str, Any]):
         for key, value in config_dict.items():
@@ -81,7 +133,6 @@ class BaseConfig:
     @classmethod
     def from_pretrained(cls, name_or_path: str, **kwargs):
         config_dict = cls._get_config_dict(name_or_path)
-        print(config_dict)
         return cls(**config_dict)
 
     @classmethod
@@ -99,15 +150,26 @@ class BaseConfig:
     @classmethod
     def _get_config_dict(cls, name_or_path, **kwargs):
         config_dir = os.path.join(cls.cache_dir, cls.model_name)
+        if not os.path.isfile(os.path.join(config_dir, f'{name_or_path}.pth')):
+            from urllib import request
+            from .models.yolact.configuration_yolact import yolact_pretrained_models
+
+            dd = urlparse(yolact_pretrained_models[name_or_path])
+            request.urlretrieve(
+                yolact_pretrained_models[name_or_path].replace('json', 'pth'),
+                'cache/yolact/yolact-base.pth', reporthook)
+
         if os.path.isdir(config_dir):
             config_file = os.path.join(config_dir, f'{name_or_path}.json')
             if os.path.isfile(config_file):
                 return cls._dict_from_json_file(config_file)
             else:
-                config_file = urlparse('https://')
+                config_file = urlparse()
         else:
             os.mkdir(config_dir)
             return
+        
+        
 
         # config_dict = cls._dict_from_json_file(config_file)
 

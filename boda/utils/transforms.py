@@ -6,6 +6,7 @@ from numpy.core.fromnumeric import _resize_dispatcher
 import pycocotools
 import torch
 from torch import dtype, nn, Tensor
+from torchvision import transforms
 import numpy as np
 from numpy import ndarray
 
@@ -38,8 +39,14 @@ class Compose:
 
 
 class Normalize:
+    def __init__(self):
+        self.channel_map = {c: idx for idx, c in enumerate('BGR')}
+        self.channel_permutation = [self.channel_map[c] for c in 'RGB']
+
     def __call__(self, image, targets):
-        image /= 255
+        image = transforms.Normalize(
+            (103.94, 116.78, 123.68), (57.38, 57.12, 58.40))(image)
+        image = image[self.channel_permutation, :, :]
         return image, targets
 
 
