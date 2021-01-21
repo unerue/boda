@@ -1,10 +1,11 @@
 import os
-from typing import Union, Any
+from typing import Sequence, Union, Any
 from ...base_configuration import BaseConfig
 
 
-SOLOV1_PRETRAINED_CONFIG = {
-    'solov1-base'
+solov1_pretrained_models = {
+    'solov1-base': '',
+    'solov1': ''
 }
 
 
@@ -20,61 +21,26 @@ class Solov1Config(BaseConfig):
 
     def __init__(
         self,
+        num_classes: int = 80,
         max_size=550,
-        padding=1,
-        use_conv_downsample=True,
-        num_features=256,
-        num_grids=0,
-        mask_size=16,
-        mask_dim=0,
-        proto_net_structure=None,
-        head_layer_params=None,
-        extra_layers=(0, 0, 0),
-        extra_net_structure=None,
+        selected_layers: Sequence[int] = [1, 2, 3],
+        fpn_channels: int = 256,
+        num_extra_fpn_layers: int = 1,
+        scales=[[8, 32], [16, 64], [32, 128], [64, 256], [128, 512]],
+        grids=[40, 36, 24, 16, 12],
+        strides: Sequence[int] = [4, 8, 16, 32, 64],
+        base_edges=[16, 32, 64, 128, 256],
         **kwargs
     ) -> None:
         super().__init__(max_size=max_size, **kwargs)
-        self.selected_layers = list(range(4))
-        # self.num_boxes = None
-        self.num_classes = 7
-        # neck
-        self.padding = 1
-        self.scales = ((1, 96), (48, 192), (96, 384), (192, 768), (384, 2048))
-        self.num_grids=[40, 36, 24, 16, 12]
-        self.aspect_ratios = [[[0.66685089, 1.7073535, 0.87508774, 1.16524493, 0.49059086]]]*6
-        # self.pred_scales = [[24], [48], [96], [192], [384]]
-        # self.fpn_out_channels = 256
-        # self.predict_channels = 256
-        # self.interpolate_mode = 'bilinear'
-        self.num_downsamples = 2
-        self.use_conv_downsample = True
-        # self.padding = True
-        self.padding = 1
-        self.relu_downsample_layers = False
-        self.relu_pred_layers = True
-        # head
-        self.num_grids = 0
-        self.mask_size = 16
-        self.mask_dim = None
-        self.mask_type = 1
-        self.mask_alpha = 6.125
-        self.proto_src = 0
-        self.proto_net = [(256, 3, {'padding': 1})] * 3 + [(None, -2, {}), (256, 3, {'padding': 1})] + [(32, 1, {})]
-        self.mask_proto_prototypes_as_features = None
-        self.mask_proto_prototypes_as_features_no_grad = None
-        self.mask_proto_coef_activation = None
-        self.mask_proto_normalize_emulate_roi_pooling = True
-        self.mask_proto_bias = None
-        self.head_layer_params = {'kernel_size': 3, 'padding': 1}
-        self.extra_head_net = [(256, 3, {'padding': 1})]
-        self.extra_layers = (0, 0, 0)
-        self.eval_mask_branch = True
+        self.num_classes = num_classes + 1
+        self.selected_layers = selected_layers
+        self.fpn_channels = fpn_channels
+        self.num_extra_fpn_layers = num_extra_fpn_layers
+        self.scales = scales
+        self.grids = grids
+        self.strides = strides
+        self.base_edges = base_edges
 
-        self.num_extra_bbox_layers = 0
-        self.num_extra_conf_layers = 0
-        self.num_extra_mask_layers = 0
-        self.freeze_bn = True
+        self.cate_down_pos = 0
 
-        self.preapply_sqrt = True
-        self.use_pixel_scales = True
-        self.use_square_anchors = True

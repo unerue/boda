@@ -8,6 +8,33 @@ from boda.models import YolactConfig, YolactModel, YolactLoss
 from boda.utils.trainer import Trainer
 from boda.lib.torchsummary import summary
 
+from urllib.request import urlopen
+
+# url = urlopen('https://unerue.synology.me/boda/models/yolact/yolact-base.json')
+# print(url)
+
+# from torch.utils import model_zoo
+
+# import shutil
+# import tempfile
+# import urllib.request
+# import os
+# url = 'https://unerue.synology.me/boda/models/yolact/yolact-base.json'
+# path = 'cache/yolact/'
+# path = 'yolact-base'
+
+# print(os.path.isfile(path))
+# print(os.path.isdir(path))
+
+# # with urllib.request.urlopen('https://unerue.synology.me/boda/models/yolact/yolact-base.json') as response:
+# #     shutil.copyfileobj(response, 'yolact.json')
+# #     # with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+# #         # shutil.copyfileobj(response, tmp_file)
+# model_zoo.load_url('https://unerue.synology.me/boda/models/yolact/yolact-base.pth')
+
+
+import sys
+
 
 transforms = Compose([
     Resize((550, 550)),
@@ -38,14 +65,18 @@ def collate_fn(batch):
 
 # train_loader = DataLoader(dataset, batch_size=4, num_workers=0, collate_fn=collate_fn)
 # valid_loader = DataLoader(validset, batch_size=4, num_workers=0, collate_fn=collate_fn)
-
+# config = YolactConfig.from_pretrained('yolact-base')
 config = YolactConfig(num_classes=80)
 # model = YolactModel(config).to('cuda')
-model = YolactModel.from_pretrained('yolact-base')
+# model = YolactModel.from_pretrained('yolact-base').to('cuda')
+model = YolactModel(config).to('cuda')
+print(model.device)
 print(summary(model, input_data=(3, 550, 550), depth=3, verbose=0))
 
 # model.load_weights('')
 model.eval()
+
+sys.exit()
 
 import cv2
 # image = cv2.imread('./benchmarks/dataset/voc/train/JPEGImages/2007_000274.jpg')

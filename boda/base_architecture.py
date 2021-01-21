@@ -1,89 +1,154 @@
 import os
-from abc import ABC, abstractmethod
-from typing import Tuple, List, Dict, Union
+import functools
+from abc import ABC, ABCMeta, abstractmethod
+from typing import Tuple, List, Dict, Union, Callable
 
 import torch
 from torch import nn, Tensor
 
 
-class Backbone(nn.Module):
-    backbone_name: str = ''
-
-    def __init__(self):
-        super().__init__()
-        self.channels: List[int] = []
-
-    def forward(self, inputs: Tensor) -> List[Tensor]:
-        raise NotImplementedError
-
-    @torch.jit.unused
-    def eager_outputs(self, *args):
-        raise NotImplementedError
-
-    def init_weights(self, *args):
-        raise NotImplementedError
-
-    def from_pretrained(self, path, **kwargs):
-        raise NotImplementedError
-
-    def _from_state_dict(self, *args):
-        raise NotImplementedError
-
-
-class Neck(nn.Module):
-    neck_type: str = ''
-
-    def __init__(self):
-        super().__init__()
-        self.channels: List[int] = []
-
-    def _add_extra_layer(self):
-        raise NotImplementedError
-
-    def eager_outputs(self, *args):
-        raise NotImplementedError
-
-    def forward(self, inputs: List[Tensor]) -> List[Tensor]:
-        raise NotImplementedError
-
-
-class Head(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.channels: List[int] = []
-
-    def _add_predict_layer(self):
-        raise NotImplementedError
-
-    def eager_outputs(self, *args):
-        raise NotImplementedError
-
-    def forward(self, inputs: Tensor) -> Dict[str, Tensor]:
-        raise NotImplementedError
-
-
-class ModelMixin(ABC):
-    """Base Model for Computer Vision Models
-    """
+class ModelMixin(metaclass=ABCMeta):
     model_name: str = ''
     _checked_inputs: bool = True
+    _url_map: Dict[str, str]
 
     def __init__(self, config, **kwargs):
         ...
-
-    def init_structure(self, config, backbone, neck, head):
-        pass
 
     def update_config(self, config):
         if config is not None:
             for k, v in config.to_dict().items():
                 setattr(self, k, v)
 
+    @property
+    def device(self) -> torch.device:
+        return next(self.parameters()).device
+
+    @classmethod
+    def multi_apply(cls, func: Callable, *args, **kwargs) -> List[Tensor]:
+        """Multiple apply
+
+        Adapted from:
+
+        Args:
+            func (:obj:`Callable`):
+        """
+        func = functools.partial(func, **kwargs) if kwargs else func
+        results = map(func, *args)
+
+        return map(list, zip(*results))
+
+    @abstractmethod
+    def forward(self, inputs) -> None:
+        ...
+
+
+class Backbone(nn.Module, ModelMixin):
+    backbone_name: str = ''
+
+    def __init__(self):
+        super().__init__()
+        self.channels: List[int] = []
+
+    def forward(self, inputs: List[Tensor]) -> List[Tensor]:
+        ...
+
+    @abstractmethod
+    def from_pretrained(self, name_or_path, **kwargs):
+        ...
+
+    def init_weights(self):
+        ...
+
+    @torch.jit.unused
+    def eager_outputs(self, *args):
+        raise NotImplementedError
+
+    def _from_state_dict(self, *args):
+        raise NotImplementedError
+
+
+class Neck(nn.Module, ModelMixin):
+    neck_type: str = ''
+
+    def __init__(self):
+        super().__init__()
+        self.channels: List[int] = []
+
+    def forward(self, inputs: List[Tensor]) -> List[Tensor]:
+        ...
+
+    def eager_outputs(self, *args):
+        ...
+
+
+class Head(nn.Module, ModelMixin):
+    def __init__(self):
+        super().__init__()
+        self.channels: List[int] = []
+
+    def forward(self, inputs: Tensor) -> Dict[str, Tensor]:
+        ...
+
+
+class Model(nn.Module, ModelMixin):
+    config_class = None
+    base_model_prefix: str = ''
+
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__()
+        self.config = config
+        self.name_or_path = ''
+
+    @property
+    def base_model(self) -> nn.Module:
+        return getattr(self, self.base_model_prefix, self)
+
+    
+
+    def freeze(self, enable: bool = False):
+        """Freeze Batch Nomalization
+
+        Adapted from:
+        https://discuss.pytorch.org/t/how-to-train-with-frozen-batchnorm/12106/8
+        """
+        for module in self.modules():
+            if isinstance(module, nn.BatchNorm2d):
+                module.weight.requires_grad = enable
+                module.bias.requires_grad = enable
+
     @classmethod
     @abstractmethod
-    def from_pretrained(cls):
+    def from_pretrained(
+        cls,
+        name_or_path: Union[str, os.PathLike],
+        **kwargs
+    ) -> None:
         """Create from pretrained model weights """
         ...
+
+    def load_weights(self, path):
+        raise NotImplementedError
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        name_or_path: Union[str, os.PathLike]
+    ) -> None:
+        if os.path.isfile(name_or_path):
+            state_dict = torch.load(name_or_path)
+            return state_dict
+        else:
+            cls._url_map[name_or_path]
+            pass
+
+    # def _check_pretrained_model_is_valid(self, model_name_or_path):
+    #     # if model_name_or_path not in
+    #     raise NotImplementedError
+
+    # @classmethod
+    # def get_config_dict(cls, model_name_or_path, **kwargs):
+    #     raise NotImplementedError
 
     @classmethod
     def check_inputs(cls, inputs):
@@ -108,52 +173,6 @@ class ModelMixin(ABC):
             inputs = torch.stack(inputs)
 
         return inputs
-
-
-class Model(nn.Module, ModelMixin):
-    config_class = None
-    base_model_prefix: str = ''
-
-    def __init__(self, config, *inputs, **kwargs):
-        super().__init__()
-        self.config = config
-        self.name_or_path = ''
-
-    # @property
-    # def base_model(self) -> nn.Module:
-    #     return getattr(self, self.base_model_prefix, self)
-    def sibal(self):
-        print('sibal')
-
-    def freeze(self, enable: bool = False):
-        """Freeze Batch Nomalization
-
-        Adapted from:
-        https://discuss.pytorch.org/t/how-to-train-with-frozen-batchnorm/12106/8
-        """
-        for module in self.modules():
-            if isinstance(module, nn.BatchNorm2d):
-                module.weight.requires_grad = enable
-                module.bias.requires_grad = enable
-
-    @classmethod
-    def from_pretrained(
-        cls,
-        model_name_or_path: Union[str, os.PathLike],
-        **kwargs
-    ):
-        raise NotImplementedError
-
-    # def load_weights(self, path):
-    #     raise NotImplementedError
-
-    # def _check_pretrained_model_is_valid(self, model_name_or_path):
-    #     # if model_name_or_path not in
-    #     raise NotImplementedError
-
-    # @classmethod
-    # def get_config_dict(cls, model_name_or_path, **kwargs):
-    #     raise NotImplementedError
 
 
 class Matcher(ABC):

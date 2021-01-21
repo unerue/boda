@@ -3,7 +3,7 @@ import math
 import itertools
 import functools
 from collections import defaultdict, OrderedDict
-from typing import Tuple, List, Dict, Any, Callable, TypeVar, Union
+from typing import Tuple, List, Dict, Any, Callable, TypeVar, Union, Sequence
 
 import torch
 from torch import nn, Tensor
@@ -13,92 +13,71 @@ from ...base_architecture import Neck, Head, Model
 from .configuration_solov1 import Solov1Config
 from ..backbone_resnet import resnet101, resnet50
 from ...utils.mask import points_nms
+from ..neck_fpn import FeaturePyramidNetwork
 
 
-class Solov1PredictNeck(Neck):
+class Solov1PredictNeck(FeaturePyramidNetwork):
     def __init__(
         self,
         config: Solov1Config = None,
-        channels: List[int] = [256, 512, 1024, 2048],
+        channels: Sequence[int] = [256, 512, 1024, 2048],
+        selected_layers: Sequence[int] = [1, 2, 3],
         fpn_channels: int = 256,
-        num_extra_layers: int = 1
+        num_extra_fpn_layers: int = 1
     ) -> None:
-        super().__init__()
-        self.config = config
-        self.fpn_channels = fpn_channels
-        self.num_extra_layers = num_extra_layers
-        # TODO: update config method
-        # self.update_config(config)
-
-        self.lateral_layers = nn.ModuleList([
-            nn.Conv2d(
-                in_channels,
-                self.fpn_channels,
-                kernel_size=1
-            ) for in_channels in reversed(channels)])
-
-        self.predict_layers = nn.ModuleList([
-            nn.Conv2d(
-                self.fpn_channels,
-                self.fpn_channels,
-                kernel_size=3,
-                padding=1) for _ in channels])
-
-        if self.num_extra_layers > 0:
-            self.extra_layers = nn.ModuleList([
-                nn.Conv2d(
-                    self.fpn_channels,
-                    self.fpn_channels,
-                    kernel_size=3,
-                    stride=2,
-                    padding=1) for _ in range(self.num_extra_layers)])
-
-    def forward(self, inputs: List[Tensor]):
-        device = inputs[0].device
-
-        x = torch.zeros(1, device=device)
-        outputs = [x for _ in range(len(inputs))]
-        i = len(inputs)
-        for lateral_layer in self.lateral_layers:
-            i -= 1
-            if i < len(inputs) - 1:
-                _, _, h, w = inputs[i].size()
-                x = F.interpolate(
-                    x, size=(h, w), mode='nearest')
-            x = x + lateral_layer(inputs[i])
-            outputs[i] = x
-
-        i = len(inputs)
-        for predict_layer in self.predict_layers:
-            i -= 1
-            outputs[i] = F.relu(predict_layer(outputs[i]))
-
-        if self.num_extra_layers > 0:
-            for extra_layer in self.extra_layers:
-                outputs.append(extra_layer(outputs[-1]))
-        print('out fpn', len(outputs))
-        return outputs
-
-
-def multi_apply(func: Callable, *args, **kwargs) -> List[Tensor]:
-    """Multiple apply
-
-    Args:
-        func (:obj:`Callable`):
-    """
-    pfunc = functools.partial(func, **kwargs) if kwargs else func
-    map_results = map(pfunc, *args)
-    return tuple(map(list, zip(*map_results)))
+        super().__init__(
+            config,
+            channels,
+            selected_layers,
+            fpn_channels,
+            num_extra_fpn_layers
+        )
 
 
 class CategoryLayer(nn.Sequential):
-    def __init__(self):
-        ...
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel_size,
+        stride,
+        padding,
+        bias,
+        num_groups,
+    ) -> None:
+        super().__init__(
+            nn.Conv2d(
+                in_channels,
+                out_channels,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=padding,
+                bias=bias),
+            nn.GroupNorm(num_groups, out_channels)
+        )
 
 
 class InstanceLayer(nn.Sequential):
-    def __init__(self):
-        ...
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel_size,
+        stride,
+        padding,
+        bias,
+        num_groups,
+    ) -> None:
+        super().__init__(
+            nn.Conv2d(
+                in_channels,
+                out_channels,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=padding,
+                bias=bias),
+            nn.GroupNorm(num_groups, out_channels)
+        )
 
 
 class Solov1PredictHead(Head):
@@ -111,7 +90,7 @@ class Solov1PredictHead(Head):
         grids: List = [40, 36, 24, 16, 12],
         strides: List = [4, 8, 16, 32, 64],
         base_edges: List = [16, 32, 64, 128, 256],
-        scales: List = ((8, 32), (16, 64), (32, 128), (64, 256), (128, 512)),
+        scales: List = [[8, 32], [16, 64], [32, 128], [64, 256], [128, 512]],
         num_classes: int = 80
     ) -> None:
         super().__init__()
@@ -136,37 +115,41 @@ class Solov1PredictHead(Head):
                 in_channels = self.fpn_channels
 
             self.instance_layers.append(
-                nn.Sequential(
-                    nn.Conv2d(
-                        in_channels,
-                        self.fpn_channels,
-                        kernel_size=3,
-                        stride=1,
-                        padding=1,
-                        bias=True),
-                    nn.GroupNorm(32, self.fpn_channels)))
+                InstanceLayer(
+                    in_channels,
+                    self.fpn_channels,
+                    kernel_size=3,
+                    stride=1,
+                    padding=1,
+                    bias=True,
+                    num_groups=32
+                )
+            )
 
             if i == 0:
                 in_channels = self.in_channels
             else:
                 in_channels = self.fpn_channels
-            self.category_layers.append(
-                nn.Sequential(
-                    nn.Conv2d(
-                        in_channels,
-                        self.fpn_channels,
-                        kernel_size=3,
-                        stride=1,
-                        padding=1,
-                        bias=True),
-                    nn.GroupNorm(32, self.fpn_channels)))
 
-        self.solo_instances = nn.ModuleList()
+            self.category_layers.append(
+                CategoryLayer(
+                    in_channels,
+                    self.fpn_channels,
+                    kernel_size=3,
+                    stride=1,
+                    padding=1,
+                    bias=True,
+                    num_groups=32
+                )
+            )
+
+        self.pred_instance_layers = nn.ModuleList()
         for grid in self.grids:
-            self.solo_instances.append(
+            self.pred_instance_layers.append(
                 nn.Conv2d(self.fpn_channels, grid**2, kernel_size=1)
             )
-        self.solo_category = nn.Conv2d(
+
+        self.pred_category_layer = nn.Conv2d(
             self.fpn_channels, self.num_classes-1, kernel_size=3, padding=1
         )
 
@@ -176,19 +159,18 @@ class Solov1PredictHead(Head):
         upsampled_size = \
             (feature_map_sizes[0][0] * 2, feature_map_sizes[0][1] * 2)
 
-        pred_instances, pred_categories = \
-            multi_apply(
+        pred_masks, pred_labels = \
+            self.multi_apply(
                 self.forward_single,
                 inputs,
                 list(range(len(self.grids))),
                 upsampled_size=upsampled_size)
 
-        return pred_instances, pred_categories
+        return pred_masks, pred_labels
 
     def split_feature_maps(self, inputs: List[Tensor]) -> Tuple[Tensor]:
         """
         Returns:
-            
         """
         return (
             F.interpolate(
@@ -218,7 +200,7 @@ class Solov1PredictHead(Head):
             instances = ins_layer(instances)
 
         instances = F.interpolate(instances, scale_factor=2.0, mode='bilinear', align_corners=False)
-        pred_instances = self.solo_instances[idx](instances)
+        pred_masks = self.pred_instance_layers[idx](instances)
 
         for i, cate_layer in enumerate(self.category_layers):
             if i == self.cate_down_pos:
@@ -226,11 +208,9 @@ class Solov1PredictHead(Head):
                 categories = F.interpolate(categories, size=seg_num_grid, mode='bilinear', align_corners=False)
             categories = cate_layer(categories)
 
-        pred_categories = self.solo_category(categories)
+        pred_labels = self.pred_category_layer(categories)
 
-       
-
-        return pred_instances, pred_categories
+        return pred_masks, pred_labels
 
 
 class Solov1Pretrained(Model):
@@ -241,18 +221,8 @@ class Solov1Pretrained(Model):
     def from_pretrained(cls, name_or_path: Union[str, os.PathLike]):
         config = cls.config_class.from_pretrained(name_or_path)
         model = Solov1Model(config)
-        # model.state_dict(torch.load('test.pth'))
-        return model
 
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=0.1)
-        elif isinstance(module, nn.BatchNorm2d):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
+        return model
 
 
 class Solov1Model(Solov1Pretrained):
@@ -263,11 +233,10 @@ class Solov1Model(Solov1Pretrained):
     def __init__(
         self,
         config: Solov1Config,
-        backbone=None, neck=None, head=None,
-        num_features=256,
-        out_channels_fpn=256,
-        num_grids=5,
-
+        backbone=None,
+        neck=None,
+        head=None,
+        fpn_channels=256,
     ) -> None:
         super().__init__(config)
         self.config = config
@@ -287,14 +256,8 @@ class Solov1Model(Solov1Pretrained):
         # self.config.size = (inputs.size(2), inputs.size(3))
 
         outputs = self.backbone(inputs)
-        print(len(outputs))
-        for o in outputs:
-            print(o.size())
         # outputs = [outputs[i] for i in self.config.selected_layers]
         outputs = self.neck(outputs)
-        for o in outputs:
-            print(o.size())
-        print('neck', len(outputs))
 
         outputs = self.head(outputs)
 

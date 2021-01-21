@@ -219,13 +219,9 @@ class SsdPredictHead(nn.Module):
         scores = self.conf_layers(inputs)
 
         _, priors = self.prior_box.generate(h, w)
-        print(boxes.size(), scores.size(), priors.size())
-
 
         boxes = boxes.view(boxes.size(0), -1, 4)
         scores = scores.view(scores.size(0), -1, self.num_classes)
-
-        print(boxes.size(), scores.size(), priors.size())
 
         preds = {
             'boxes': boxes,
@@ -285,10 +281,7 @@ class SsdModel(SsdPretrained):
         super().__init__(config)
         self.config = config
         self.backbone = vgg16()
-        print(config.selected_layers)
-        print(self.backbone.channels)
         self.neck = SsdPredictNeck(config, self.backbone.channels[-1], self.structures['ssd300'])
-        print('neck', self.neck.channels)
 
         self.head_layers = nn.ModuleList()
         for i, in_channels in enumerate(self.neck.channels):
@@ -299,50 +292,11 @@ class SsdModel(SsdPretrained):
 
     def forward(self, inputs):
         outputs = self.backbone(inputs)
-        print(len(outputs))
         outputs = self.neck(outputs)
-        print(len(outputs))
 
         preds = defaultdict(list)
-        print('head_layer', len(self.head_layers))
-        print('outputs', len(outputs))
         for i, layer in enumerate(self.head_layers):
             output = layer(outputs[i])
 
             for k, v in output.items():
                 preds[k].append(v)
-
-        print('??', len(preds))
-
-
-STRUCTURES = {
-    'ssd300': [
-        [('M', {'kernel_size': 3, 'stride': 1, 'padding': 1}), (1024, {'kernel_size': 3, 'padding': 6, 'dilation': 6}), (1024, {'kernel_size': 1})],
-        # [(1024, {'kernel_size': 1})],
-        [(256, {'kernel_size': 1}), (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
-        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
-        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3})],
-        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3})]],
-    'ssd512': [
-        [(256, {'kernel_size': 1}), (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
-        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
-        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
-        [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride': 2, 'padding':  1})],
-        [(128, {'kernel_size': 1})]]
-}
-
-
-
-# EXTRA_LAYER_STRUCTURES = {
-#     'ssd300': [
-#         [(256, {'kernel_size': 1}), (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
-#         [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
-#         [(128, {'kernel_size': 1}), (256, {'kernel_size': 3})],
-#         [(128, {'kernel_size': 1}), (256, {'kernel_size': 3})]],
-#     'ssd512': [
-#         [(256, {'kernel_size': 1}), (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
-#         [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
-#         [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
-#         [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride': 2, 'padding':  1})],
-#         [(128, {'kernel_size': 1})]]
-# }

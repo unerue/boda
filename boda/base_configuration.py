@@ -11,7 +11,7 @@ from typing import Tuple, List, Dict, Any, Union
 class DataEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, list):
-            return json.JSONEncoder(indent=None).encode(obj)
+            return json.JSONEncoder().encode(obj)
 
         return json.JSONEncoder.default(self, obj)
 
@@ -54,6 +54,7 @@ def reporthook(count, block_size, total_size):
     progress_size = int(count * block_size)
     # speed = int(progress_size / (1024 * duration))
     percent = int(count * block_size * 100 / total_size)
+    # min(int(count*blockSize*100/totalSize),100)
     sys.stdout.write(f"\rDownload pretrained model: {percent}% {progress_size / (1024*1204):.1f} MB")
 
     # sys.stdout.write("\rDownload pretrained model: %d%%, %d MB, %d KB/s, %d seconds passed" %
@@ -124,7 +125,6 @@ class BaseConfig:
         # config_file = os.path.join(path, CONFIG_NAME)
         with open(path, 'w', encoding='utf-8') as writer:
             writer.write(self.to_json())
-            # json.dump(self.to_json, writer)
 
     def update(self, config_dict: Dict[str, Any]):
         for key, value in config_dict.items():
