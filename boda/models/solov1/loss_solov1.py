@@ -7,12 +7,6 @@ from ...utils.bbox import jaccard, cxcywh_to_xyxy
 from ...utils.loss import log_sum_exp
 
 
-def multi_apply(func, *args, **kwargs):
-    pfunc = partial(func, **kwargs) if kwargs else func
-    map_results = map(pfunc, *args)
-    return tuple(map(list, zip(*map_results)))
-
-
 class Matcher:
     def __init__(self, config, threshold, variances):
         self.config = config

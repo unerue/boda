@@ -363,10 +363,9 @@ class YolactModel(YolactPretrained):
         num_grids: int = 0,
         mask_size: int = 16,
         aspect_ratios: Sequence = [1, 1/2, 2],
-        scales: Sequence = [24, 48, 96, 192, 384]
+        scales: Sequence = [24, 48, 96, 192, 384],
+        num_proto_masks: int = 32
     ) -> None:
-        """
-        """
         super().__init__(config)
         self.config = config
         self.num_classes = num_classes
@@ -376,7 +375,7 @@ class YolactModel(YolactPretrained):
         self.mask_size = mask_size
         self.aspect_ratios = aspect_ratios
         self.scales = scales
-        self.num_proto_masks = 32
+        self.num_proto_masks = num_proto_masks
 
         self.update_config(config)
 
