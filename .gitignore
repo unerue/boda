@@ -1,5 +1,6 @@
 .ipynb_checkpoints/
 .vscode/
+.DS_Store/
 __pycache__/
 
 misc/
@@ -39,6 +40,14 @@ run.py
 logo.pptx
 *.pth
 test_ssd.py
-# test_yolov1.py
+test_yolov1.py
+test_yolact.py
+test_solov1.py
+test_fcos.py
+test_backbone.py
+test_centermask.py
+
+eval_yolact.py
 # .gitignore
 *.zip
+*.jpg

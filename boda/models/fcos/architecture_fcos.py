@@ -94,7 +94,7 @@ class FcosPredictHead(nn.Module):
             padding=1
         )
 
-        self.ctrness_layer = nn.Conv2d(
+        self.pred_center_layer = nn.Conv2d(
             in_channels, 1, kernel_size=3,
             stride=1, padding=1
         )
@@ -104,19 +104,19 @@ class FcosPredictHead(nn.Module):
     def forward(self, inputs: List[Tensor]):
         boxes = []
         scores = []
-        ctrness = []
+        centerness = []
         for i, feature in enumerate(inputs):
             feature = self.share_layers(feature)
             pred_boxes = self.box_layers(feature)
             pred_scores = self.score_layers(feature)
 
             scores.append(self.pred_score_layer(pred_scores))
-            ctrness.append(self.pred_ctrness_layer(pred_boxes))
+            centerness.append(self.pred_ctrness_layer(pred_boxes))
             if self.scales it not None:
                 pred_boxes = self.scales[i](pred_boxes)
             boxes.append(self.pred_box_layer(pred_boxes))
 
-        return boxes, scores, ctrness
+        return boxes, scores, centerness
 
 
 class FcosModel(nn.Module):
@@ -178,46 +178,46 @@ class FcosModel(nn.Module):
         locations = self.compute_locations(features)
         logits_pred, reg_pred, ctrness_pred, bbox_towers = self.fcos_head(features)
 
-        if self.training:
-            pre_nms_thresh = self.pre_nms_thresh_train
-            pre_nms_topk = self.pre_nms_topk_train
-            post_nms_topk = self.post_nms_topk_train
-        else:
-            pre_nms_thresh = self.pre_nms_thresh_test
-            pre_nms_topk = self.pre_nms_topk_test
-            post_nms_topk = self.post_nms_topk_test
+        # if self.training:
+        #     pre_nms_thresh = self.pre_nms_thresh_train
+        #     pre_nms_topk = self.pre_nms_topk_train
+        #     post_nms_topk = self.post_nms_topk_train
+        # else:
+        #     pre_nms_thresh = self.pre_nms_thresh_test
+        #     pre_nms_topk = self.pre_nms_topk_test
+        #     post_nms_topk = self.post_nms_topk_test
 
-        outputs = FCOSOutputs(
-            images,
-            locations,
-            logits_pred,
-            reg_pred,
-            ctrness_pred,
-            self.focal_loss_alpha,
-            self.focal_loss_gamma,
-            self.iou_loss,
-            self.center_sample,
-            self.sizes_of_interest,
-            self.strides,
-            self.radius,
-            self.fcos_head.num_classes,
-            pre_nms_thresh,
-            pre_nms_topk,
-            self.nms_thresh,
-            post_nms_topk,
-            self.thresh_with_ctr,
-            gt_instances,
-        )
+        # outputs = FCOSOutputs(
+        #     images,
+        #     locations,
+        #     logits_pred,
+        #     reg_pred,
+        #     ctrness_pred,
+        #     self.focal_loss_alpha,
+        #     self.focal_loss_gamma,
+        #     self.iou_loss,
+        #     self.center_sample,
+        #     self.sizes_of_interest,
+        #     self.strides,
+        #     self.radius,
+        #     self.fcos_head.num_classes,
+        #     pre_nms_thresh,
+        #     pre_nms_topk,
+        #     self.nms_thresh,
+        #     post_nms_topk,
+        #     self.thresh_with_ctr,
+        #     gt_instances,
+        # )
 
-        if self.training:
-            losses, _ = outputs.losses()
-            if self.mask_on:
-                proposals = outputs.predict_proposals()
-                return proposals, losses
-            else:
-                return None, losses
-        else:
-            proposals = outputs.predict_proposals()
-            return proposals, {}
+        # if self.training:
+        #     losses, _ = outputs.losses()
+        #     if self.mask_on:
+        #         proposals = outputs.predict_proposals()
+        #         return proposals, losses
+        #     else:
+        #         return None, losses
+        # else:
+        #     proposals = outputs.predict_proposals()
+        #     return proposals, {}
 
 
