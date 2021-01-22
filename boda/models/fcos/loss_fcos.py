@@ -24,6 +24,32 @@ def compute_locations_per_level(self, h, w, stride, device):
     locations = torch.stack((shift_x, shift_y), dim=1) + stride // 2
     return locations
 
+     self.sizes_of_interest = soi
+ for s in [64, 128, 256, 512]:
+            soi.append([prev_size, s])
+            prev_size = s
+
+        soi.append([prev_size, 100000000])
+ 
+        # fmt: on
+        self.iou_loss = IOULoss('giou')
+        # generate sizes of interest
+        soi = []
+        prev_size = -1
+self.focal_loss_alpha = 0.25
+        self.focal_loss_gamma = 2.0
+        self.center_sample = True
+        self.strides = [8, 16, 32, 64, 128]
+        self.radius = 1.5
+        self.pre_nms_thresh_train = 0.05
+        self.pre_nms_thresh_test = 0.05
+        self.pre_nms_topk_train = 1000
+        self.pre_nms_topk_test = 1000
+        self.nms_thresh = 0.6
+        self.post_nms_topk_train = 100
+        self.post_nms_topk_test = 50
+        self.thresh_with_ctr = False
+        self.mask_on = True
 
 class FCOSOutputs:
     def __init__(

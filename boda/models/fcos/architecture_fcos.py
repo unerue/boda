@@ -1,14 +1,33 @@
-from boda.models.backbone_resnet import resnet101
+import os
 import math
-from typing import List
+from typing import List, Union
+
+from typing import Sequence
 
 import torch
 from torch import nn, Tensor
+from ...base_architecture import Neck, Head, Model
 from ..neck_fpn import FeaturePyramidNetwork
+from .configuration_fcos import FcosConfig
+from ..backbone_resnet import resnet101
 
 
 class FcosPredictNeck(FeaturePyramidNetwork):
-    ...
+    def __init__(
+        self,
+        config: FcosConfig = None,
+        channels: Sequence[int] = [256, 512, 1024, 2048],
+        selected_layers: Sequence[int] = [1, 2, 3],
+        fpn_channels: int = 256,
+        num_extra_fpn_layers: int = 1
+    ) -> None:
+        super().__init__(
+            config,
+            channels,
+            selected_layers,
+            fpn_channels,
+            num_extra_fpn_layers
+        )
 
 
 class Scale(nn.Module):
@@ -21,81 +40,76 @@ class Scale(nn.Module):
 
 
 class FcosPredictHead(nn.Module):
-    def __init__(self, config, channels, seletec_layers, input_shape: List[ShapeSpec]):
+    def __init__(
+        self,
+        config,
+        channels,
+        seletec_layers,
+        fpn_channels: int = 256
+    ) -> None:
         """
-        Arguments:
+        Args:
             in_channels (int): number of channels of the input feature
         """
         super().__init__()
         self.config = config
-        # TODO: Implement the sigmoid version first.
+        self.channels = channels,
+        self.selected_layers = seletec_layers
         self.num_classes = 80
+        self.fpn_channels = fpn_channels
         self.fpn_strides = [8, 16, 32, 64, 128]
         self.num_box_layers = 4
         self.num_score_layers = 4
-        self.num_share_layers = 0
+        self.num_share_layers = 1
 
-        # head_configs = {"cls": (4, False),
-        #                 "bbox": (4, False),
-        #                 "share": (0, False)}
-        # cfg.MODEL.FCOS.NORM = 'GN'
-        # norm = None if cfg.MODEL.FCOS.NORM == "none" else cfg.MODEL.FCOS.NORM
+        box_layers = []
+        for _ in range(self.num_box_layers):
+            box_layers += [
+                nn.Conv2d(
+                    self.fpn_channels, self.fpn_channels,
+                    kernel_size=3, stride=1,
+                    padding=1, bias=True),
+                nn.GroupNorm(32, self.fpn_channels),
+                nn.ReLU()
+            ]
+        self.add_module('box_layers', nn.Sequential(*box_layers))
 
-        in_channels = [s.channels for s in input_shape]
-        assert len(set(in_channels)) == 1, "Each level must have the same channel!"
-        in_channels = in_channels[0]
+        score_layers = []
+        for _ in range(self.num_score_layers):
+            score_layers += [
+                nn.Conv2d(
+                    self.fpn_channels, self.fpn_channels,
+                    kernel_size=3, stride=1,
+                    padding=1, bias=True),
+                nn.GroupNorm(32, self.fpn_channels),
+                nn.ReLU()
+            ]
+        self.add_module('score_layers', nn.Sequential(*score_layers))
 
-        self.box_layers = nn.ModuleList()
-        for _ in self.num_box_layers:
-            self.box_layers.append(
-                nn.Sequential(
-                    nn.Conv2d(
-                        in_channels, in_channels,
-                        kernel_size=3, stride=1,
-                        padding=1, bias=True),
-                    nn.GroupNorm(32, in_channels),
-                    nn.ReLU()
-                )
-            )
-
-        self.score_layers = nn.ModuleList()
-        for _ in self.num_score_layers:
-            self.score_layers.append(
-                nn.Sequential(
-                    nn.Conv2d(
-                        in_channels, in_channels,
-                        kernel_size=3, stride=1,
-                        padding=1, bias=True),
-                    nn.GroupNorm(32, in_channels),
-                    nn.ReLU()
-                )
-            )
-
-        self.share_layers = nn.ModuleList()
-        for _ in self.num_share_layers:
-            self.share_layers.append(
-                nn.Sequential(
-                    nn.Conv2d(
-                        in_channels, in_channels,
-                        kernel_size=3, stride=1,
-                        padding=1, bias=True),
-                    nn.GroupNorm(32, in_channels),
-                    nn.ReLU()
-                )
-            )
+        share_layers = []
+        for _ in range(self.num_share_layers):
+            share_layers += [
+                nn.Conv2d(
+                    self.fpn_channels, self.fpn_channels,
+                    kernel_size=3, stride=1,
+                    padding=1, bias=True),
+                nn.GroupNorm(32, self.fpn_channels),
+                nn.ReLU()
+            ]
+        self.add_module('share_layers', nn.Sequential(*share_layers))
 
         self.pred_box_layer = nn.Conv2d(
-            in_channels, 4, kernel_size=3,
+            self.fpn_channels, 4, kernel_size=3,
             stride=1, padding=1
         )
         self.pred_score_layer = nn.Conv2d(
-            in_channels, self.num_classes,
+            self.fpn_channels, self.num_classes,
             kernel_size=3, stride=1,
             padding=1
         )
 
         self.pred_center_layer = nn.Conv2d(
-            in_channels, 1, kernel_size=3,
+            self.fpn_channels, 1, kernel_size=3,
             stride=1, padding=1
         )
 
@@ -105,75 +119,86 @@ class FcosPredictHead(nn.Module):
         boxes = []
         scores = []
         centerness = []
+        print(len(inputs))
+        print(len(self.scales))
         for i, feature in enumerate(inputs):
             feature = self.share_layers(feature)
             pred_boxes = self.box_layers(feature)
             pred_scores = self.score_layers(feature)
 
             scores.append(self.pred_score_layer(pred_scores))
-            centerness.append(self.pred_ctrness_layer(pred_boxes))
-            if self.scales it not None:
+            centerness.append(self.pred_center_layer(pred_boxes))
+            if self.scales is not None:
                 pred_boxes = self.scales[i](pred_boxes)
+
             boxes.append(self.pred_box_layer(pred_boxes))
 
         return boxes, scores, centerness
 
 
-class FcosModel(nn.Module):
+class FcosPretrained(Model):
+    config_class = FcosConfig
+    base_model_prefix = 'fcos'
+
+    @classmethod
+    def from_pretrained(cls, name_or_path: Union[str, os.PathLike]):
+        config = cls.config_class.from_pretrained(name_or_path)
+        model = FcosModel(config)
+
+        return model
+
+
+class FcosModel(FcosPretrained):
     def __init__(
         self,
         config,
-        input_shape: Dict[str, ShapeSpec]
+        # channels,
+        selected_layers=[1, 2, 3],
+        strides=[8, 16, 32, 64, 128],
     ) -> None:
-        super().__init__()
-        # fmt: off
-        self.in_features = ["p3", "p4", "p5", "p6", "p7"]  # selected_layers 
+        super().__init__(config)
+        self.config = config
+        # self.channels = channels
+        self.selected_layers = selected_layers
         self.fpn_strides = [8, 16, 32, 64, 128]
-        self.focal_loss_alpha = 0.25
-        self.focal_loss_gamma = 2.0
-        self.center_sample = True
-        self.strides = [8, 16, 32, 64, 128]
-        self.radius = 1.5
-        self.pre_nms_thresh_train = 0.05
-        self.pre_nms_thresh_test = 0.05
-        self.pre_nms_topk_train = 1000
-        self.pre_nms_topk_test = 1000
-        self.nms_thresh = 0.6
-        self.post_nms_topk_train = 100
-        self.post_nms_topk_test = 50
-        self.thresh_with_ctr = False
-        self.mask_on = True
-        # fmt: on
-        self.iou_loss = IOULoss('giou')
-        # generate sizes of interest
-        soi = []
-        prev_size = -1
-        for s in [64, 128, 256, 512]:
-            soi.append([prev_size, s])
-            prev_size = s
 
-        soi.append([prev_size, 100000000])
-        self.sizes_of_interest = soi
+        self.update_config(config)
+
         self.backbone = resnet101()
-        self.neck = FcosPredictNeck(config, self.backbone.channels, selected_layers=[1, 2, 3])
-        self.heads = FcosPredictHead(config, self.neck.channels, self.neck.selected_layers)
+        self.neck = FcosPredictNeck(
+            config,
+            [self.backbone.channels[i] for i in self.selected_layers],
+            selected_layers=[1, 2, 3],
+            num_extra_fpn_layers=2
+        )
+
+        self.heads = FcosPredictHead(
+            config,
+            self.neck.channels,
+            self.neck.selected_layers
+        )
 
     def forward(self, inputs):
-        pass
+        inputs = self.check_inputs(inputs)
+        outputs = self.backbone(inputs)
+        outputs = [outputs[i] for i in self.selected_layers]
+        outputs = self.neck(outputs)
+        o1, o2, o3 = self.heads(outputs)
+        return o1, o2, o3
 
-    def forward(self, images, features, gt_instances):
-        """
-        Arguments:
-            images (list[Tensor] or ImageList): images to be processed
-            targets (list[BoxList]): ground-truth boxes present in the image (optional)
+    # def forward(self, images, features, gt_instances):
+    #     """
+    #     Arguments:
+    #         images (list[Tensor] or ImageList): images to be processed
+    #         targets (list[BoxList]): ground-truth boxes present in the image (optional)
 
-        Returns:
-            result (list[BoxList] or dict[Tensor]): the output from the model.
-                During training, it returns a dict[Tensor] which contains the losses.
-                During testing, it returns list[BoxList] contains additional fields
-                like `scores`, `labels` and `mask` (for Mask R-CNN models).
+    #     Returns:
+    #         result (list[BoxList] or dict[Tensor]): the output from the model.
+    #             During training, it returns a dict[Tensor] which contains the losses.
+    #             During testing, it returns list[BoxList] contains additional fields
+    #             like `scores`, `labels` and `mask` (for Mask R-CNN models).
 
-        """
+    #     """
         features = [features[f] for f in self.in_features]
         locations = self.compute_locations(features)
         logits_pred, reg_pred, ctrness_pred, bbox_towers = self.fcos_head(features)
@@ -219,5 +244,3 @@ class FcosModel(nn.Module):
         # else:
         #     proposals = outputs.predict_proposals()
         #     return proposals, {}
-
-

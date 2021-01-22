@@ -24,12 +24,11 @@ class ModelMixin(metaclass=ABCMeta):
     def device(self) -> torch.device:
         return next(self.parameters()).device
 
-    @classmethod
-    def multi_apply(cls, func: Callable, *args, **kwargs) -> List[Tensor]:
+    def partial_apply(self, func: Callable, *args, **kwargs) -> List[Tensor]:
         """Multiple apply
 
         Adapted from:
-
+            https://github.com/open-mmlab/mmdetection
         Args:
             func (:obj:`Callable`):
         """
@@ -104,13 +103,11 @@ class Model(nn.Module, ModelMixin):
     def base_model(self) -> nn.Module:
         return getattr(self, self.base_model_prefix, self)
 
-    
-
     def freeze(self, enable: bool = False):
         """Freeze Batch Nomalization
 
         Adapted from:
-        https://discuss.pytorch.org/t/how-to-train-with-frozen-batchnorm/12106/8
+            https://discuss.pytorch.org/t/how-to-train-with-frozen-batchnorm/12106/8
         """
         for module in self.modules():
             if isinstance(module, nn.BatchNorm2d):
