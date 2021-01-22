@@ -66,7 +66,7 @@ class MemoryEfficientMish(nn.Module):
 
 
 class FReLU(nn.Module):
-    """# FReLU https://arxiv.org/abs/2007.11824"""
+    """FReLU https://arxiv.org/abs/2007.11824"""
     def __init__(self, in_channels, kernel_size=3):
         super().__init__()
         self.conv = nn.Conv2d(
