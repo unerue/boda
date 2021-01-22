@@ -401,7 +401,7 @@ class YolactModel(YolactPretrained):
         # Preprocessing nested list
         self.aspect_ratios = [[self.aspect_ratios]] * len(self.neck.selected_layers)
         self.scales = [[scale] for scale in self.scales]
-        self.head_layers = YolactPredictHead(
+        self.heads = YolactPredictHead(
             config, self.neck.selected_layers, self.neck.channels,
             self.aspect_ratios, self.scales, self.num_classes
         )
@@ -450,11 +450,11 @@ class YolactModel(YolactPretrained):
 
         return_dict = defaultdict(list)
         # TODO: self.neck.selected_layer...
-        for i, layer in zip(self.neck.selected_layers, self.head_layers):
-            if layer is not self.head_layers[0]:
-                layer.parent = [self.head_layers[0]]
+        for i, head in zip(self.neck.selected_layers, self.heads):
+            if head is not self.heads[0]:
+                head.parent = [self.heads[0]]
 
-            output = layer(outputs[i])
+            output = head(outputs[i])
 
             for k, v in output.items():
                 return_dict[k].append(v)
