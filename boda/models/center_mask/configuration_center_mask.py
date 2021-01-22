@@ -11,7 +11,7 @@ class CenterMaskConfig(BaseConfig):
         padding ():
         proto_net_structure (List):
     """
-    config_name = 'solov1'
+    config_name = 'centermask'
 
     def __init__(
         self,

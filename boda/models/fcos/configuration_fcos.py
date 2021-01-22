@@ -11,7 +11,7 @@ class FcosConfig(BaseConfig):
         padding ():
         proto_net_structure (List):
     """
-    config_name = 'solov1'
+    config_name = 'fcos'
 
     def __init__(
         self,
