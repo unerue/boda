@@ -2,6 +2,9 @@
 .vscode/
 .DS_Store/
 __pycache__/
+boda.egg-info/
+build/
+dist/
 
 misc/
 misc/yolov1/testimg/
