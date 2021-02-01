@@ -27,6 +27,7 @@ class FeaturePyramidNetwork(nn.Module):
         channels: Sequence[int] = [256, 512, 1024, 2048],
         selected_layers: Sequence[int] = [1, 2, 3],
         fpn_channels: int = 256,
+        extra_layers: bool = False,
         num_extra_fpn_layers: int = 2,
     ) -> None:
         super().__init__()
@@ -35,6 +36,7 @@ class FeaturePyramidNetwork(nn.Module):
         self.selected_layers = selected_layers
         self.selected_backbones = selected_layers
         self.fpn_channels = fpn_channels
+        self.extra_layers = extra_layers
         self.num_extra_fpn_layers = num_extra_fpn_layers
 
         self.selected_layers = \
@@ -55,7 +57,7 @@ class FeaturePyramidNetwork(nn.Module):
                 padding=1) for _ in self.channels
         ])
 
-        if self.num_extra_fpn_layers > 0:
+        if self.extra_layers and self.num_extra_fpn_layers > 0:
             self.extra_layers = nn.ModuleList([
                 nn.Conv2d(
                     self.fpn_channels,
@@ -97,8 +99,11 @@ class FeaturePyramidNetwork(nn.Module):
             i -= 1
             outputs[i] = F.relu(predict_layer(outputs[i]))
 
-        if self.num_extra_fpn_layers > 0:
+        if self.extra_layers:
             for extra_layer in self.extra_layers:
                 outputs.append(extra_layer(outputs[-1]))
+        elif self.num_extra_fpn_layers > 0:
+            for _ in range(self.num_extra_fpn_layers):
+                outputs.append(self.predict_layers[-1](outputs[-1]))
 
         return outputs

@@ -11,7 +11,7 @@
   <img src="https://badgen.net/badge/icon/terminal?icon=terminal&label" />
 </p>
 
-## Deep learning-based Computer Vision Models for PyTorch 
+## Deep learning-based Computer Vision Models for PyTorch
 
 Boda (보다) means to see in Korean. This library was inspired by 🤗 Transformers.
 

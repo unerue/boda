@@ -186,7 +186,7 @@ class SsdPredictHead(nn.Module):
         self,
         config,
         in_channels: int,
-        boxes: int, 
+        boxes: int,
         aspect_ratios: List[int],
         step: int,
         min_sizes: int,
@@ -283,12 +283,12 @@ class SsdModel(SsdPretrained):
         self.backbone = vgg16()
         self.neck = SsdPredictNeck(config, self.backbone.channels[-1], self.structures['ssd300'])
 
-        self.head_layers = nn.ModuleList()
+        self.heads = nn.ModuleList()
         for i, in_channels in enumerate(self.neck.channels):
-            head_layer = SsdPredictHead(
+            head = SsdPredictHead(
                 config,
                 in_channels, config.boxes[i], config.aspect_ratios[i], config.steps[i], config.min_sizes[i], config.max_sizes[i])
-            self.head_layers.append(head_layer)
+            self.heads.append(head)
 
     def forward(self, inputs):
         outputs = self.backbone(inputs)

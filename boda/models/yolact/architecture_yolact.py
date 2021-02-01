@@ -22,6 +22,7 @@ class YolactPredictNeck(FeaturePyramidNetwork):
         channels: Sequence[int],
         selected_layers: Sequence[int] = [1, 2, 3],
         fpn_channels: int = 256,
+        extra_layers: bool = True,
         num_extra_fpn_layers: int = 2,
     ) -> None:
         super().__init__(
@@ -29,6 +30,7 @@ class YolactPredictNeck(FeaturePyramidNetwork):
             channels,
             selected_layers,
             fpn_channels,
+            extra_layers,
             num_extra_fpn_layers
         )
 
@@ -479,43 +481,58 @@ class YolactModel(YolactPretrained):
             return return_dict
 
     def load_weights(self, path):
-        loaded_state_dict = torch.load(path)
-        state_dict = {}
-        for k, v in loaded_state_dict.items():
-            parts = k.split('.')
-            if parts[0] == 'backbone':
-                if parts[1] == 'conv1':
-                    state_dict[f'backbone.conv.{parts[2]}'] = loaded_state_dict.get(k)
-                elif parts[1] == 'bn1':
-                    state_dict[f'backbone.bn.{parts[2]}'] = loaded_state_dict.get(k)
-                elif parts[4].startswith('conv'):
-                    state_dict[f'backbone.layers.{parts[2]}.{parts[3]}.{parts[4]}.0.{parts[5]}'] = loaded_state_dict.get(k)
+        state_dict = torch.load(path)
+        for key in list(state_dict.keys()):
+            p = key.split('.')
+            if p[0] == 'backbone':
+                if p[1] == 'conv1':
+                    new_key = f'backbone.conv.{p[2]}'
+                    state_dict[new_key] = state_dict.pop(key)
+                elif p[1] == 'bn1':
+                    new_key = f'backbone.bn.{p[2]}'
+                    state_dict[new_key] = state_dict.pop(key)
+                elif p[4].startswith('conv'):
+                    new_key = f'backbone.layers.{p[2]}.{p[3]}.{p[4]}.0.{p[5]}'
+                    state_dict[new_key] = state_dict.pop(key)
                 else:
-                    state_dict[k] = loaded_state_dict.get(k)
-            elif parts[0] == 'fpn':
-                if parts[1] == 'lat_layers':
-                    state_dict[f'neck.lateral_layers.{parts[2]}.{parts[3]}'] = loaded_state_dict.get(k)
-                elif parts[1] == 'pred_layers':
-                    state_dict[f'neck.predict_layers.{parts[2]}.{parts[3]}'] = loaded_state_dict.get(k)
-                elif parts[1] == 'downsample_layers':
-                    state_dict[f'neck.extra_layers.{parts[2]}.{parts[3]}'] = loaded_state_dict.get(k)
-            elif parts[0] == 'prediction_layers':
-                if parts[2] == 'upfeature':
-                    state_dict[f'head_layers.0.upsample_layers.0.{parts[4]}'] = loaded_state_dict.get(k)
-                elif parts[2] == 'bbox_layer':
-                    state_dict[f'head_layers.0.box_layers.0.{parts[3]}'] = loaded_state_dict.get(k)
-                elif parts[2] == 'mask_layer':
-                    state_dict[f'head_layers.0.mask_layers.0.{parts[3]}'] = loaded_state_dict.get(k)
-                elif parts[2] == 'conf_layer':
-                    state_dict[f'head_layers.0.score_layers.0.{parts[3]}'] = loaded_state_dict.get(k)
-            elif parts[0] == 'proto_net':
-                state_dict[f'proto_layer.{int(parts[1])//2}.{parts[2]}'] = loaded_state_dict.get(k)
-            elif parts[0] == 'semantic_seg_conv':
-                state_dict[f'semantic_layer.0.{parts[1]}'] = loaded_state_dict.get(k)
+                    state_dict[key] = state_dict.pop(key)
 
-        for k in list(state_dict.keys()):
-            if k.startswith('neck.extra_layers.'):
-                if int(k.split('.')[2]) >= 2:
-                    del state_dict[k]
+            elif p[0] == 'fpn':
+                if p[1] == 'lat_layers':
+                    new_key = f'neck.lateral_layers.{p[2]}.{p[3]}'
+                    state_dict[new_key] = state_dict.pop(key)
+                elif p[1] == 'pred_layers':
+                    new_key = f'neck.predict_layers.{p[2]}.{p[3]}'
+                    state_dict[new_key] = state_dict.pop(key)
+                elif p[1] == 'downsample_layers':
+                    new_key = f'neck.extra_layers.{p[2]}.{p[3]}'
+                    state_dict[new_key] = state_dict.pop(key)
+
+            elif p[0] == 'prediction_layers':
+                if p[2] == 'upfeature':
+                    new_key = f'head_layers.0.upsample_layers.0.{p[4]}'
+                    state_dict[new_key] = state_dict.pop(key)
+                elif p[2] == 'bbox_layer':
+                    new_key = f'head_layers.0.box_layers.0.{p[3]}'
+                    state_dict[new_key] = state_dict.pop(key)
+                elif p[2] == 'mask_layer':
+                    new_key = f'head_layers.0.mask_layers.0.{p[3]}'
+                    state_dict[new_key] = state_dict.pop(key)
+                elif p[2] == 'conf_layer':
+                    new_key = f'head_layers.0.score_layers.0.{p[3]}'
+                    state_dict[new_key] = state_dict.pop(key)
+
+            elif p[0] == 'proto_net':
+                new_key = f'proto_layer.{int(p[1])//2}.{p[2]}'
+                state_dict[new_key] = state_dict.pop(key)
+
+            elif p[0] == 'semantic_seg_conv':
+                new_key = f'semantic_layer.0.{p[1]}'
+                state_dict[new_key] = state_dict.pop(key)
+
+        for key in list(state_dict.keys()):
+            if key.startswith('neck.extra_layers.'):
+                if int(key.split('.')[2]) >= 2:
+                    state_dict.pop(key)
 
         self.load_state_dict(state_dict)

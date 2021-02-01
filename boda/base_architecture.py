@@ -25,7 +25,7 @@ class ModelMixin(metaclass=ABCMeta):
         return next(self.parameters()).device
 
     def partial_apply(self, func: Callable, *args, **kwargs) -> List[Tensor]:
-        """Multiple apply
+        """Partial apply
 
         Adapted from:
             https://github.com/open-mmlab/mmdetection

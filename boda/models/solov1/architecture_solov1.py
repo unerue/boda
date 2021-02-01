@@ -1,18 +1,14 @@
 import os
-import math
-import itertools
-import functools
-from collections import defaultdict, OrderedDict
+from collections import OrderedDict
 from typing import Tuple, List, Dict, Any, Callable, TypeVar, Union, Sequence
 
 import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 
-from ...base_architecture import Neck, Head, Model
+from ...base_architecture import Head, Model
 from .configuration_solov1 import Solov1Config
 from ..backbone_resnet import resnet101, resnet50
-from ...utils.mask import points_nms
 from ..neck_fpn import FeaturePyramidNetwork
 
 
@@ -21,8 +17,9 @@ class Solov1PredictNeck(FeaturePyramidNetwork):
         self,
         config: Solov1Config = None,
         channels: Sequence[int] = [256, 512, 1024, 2048],
-        selected_layers: Sequence[int] = [1, 2, 3],
+        selected_layers: Sequence[int] = [0, 1, 2, 3],
         fpn_channels: int = 256,
+        extra_layers: bool = False,
         num_extra_fpn_layers: int = 1
     ) -> None:
         super().__init__(
@@ -30,6 +27,7 @@ class Solov1PredictNeck(FeaturePyramidNetwork):
             channels,
             selected_layers,
             fpn_channels,
+            extra_layers,
             num_extra_fpn_layers
         )
 
@@ -45,16 +43,16 @@ class CategoryLayer(nn.Sequential):
         bias,
         num_groups,
     ) -> None:
-        super().__init__(
-            nn.Conv2d(
+        super().__init__(OrderedDict([
+            ('conv', nn.Conv2d(
                 in_channels,
                 out_channels,
                 kernel_size=kernel_size,
                 stride=stride,
                 padding=padding,
-                bias=bias),
-            nn.GroupNorm(num_groups, out_channels)
-        )
+                bias=bias)),
+            ('gn', nn.GroupNorm(num_groups, out_channels))
+        ]))
 
 
 class InstanceLayer(nn.Sequential):
@@ -68,16 +66,16 @@ class InstanceLayer(nn.Sequential):
         bias,
         num_groups,
     ) -> None:
-        super().__init__(
-            nn.Conv2d(
+        super().__init__(OrderedDict([
+            ('conv', nn.Conv2d(
                 in_channels,
                 out_channels,
                 kernel_size=kernel_size,
                 stride=stride,
                 padding=padding,
-                bias=bias),
-            nn.GroupNorm(num_groups, out_channels)
-        )
+                bias=bias)),
+            ('gn', nn.GroupNorm(num_groups, out_channels))
+        ]))
 
 
 class Solov1PredictHead(Head):
@@ -121,7 +119,7 @@ class Solov1PredictHead(Head):
                     kernel_size=3,
                     stride=1,
                     padding=1,
-                    bias=True,
+                    bias=False,
                     num_groups=32
                 )
             )
@@ -138,7 +136,7 @@ class Solov1PredictHead(Head):
                     kernel_size=3,
                     stride=1,
                     padding=1,
-                    bias=True,
+                    bias=False,
                     num_groups=32
                 )
             )
@@ -150,7 +148,7 @@ class Solov1PredictHead(Head):
             )
 
         self.pred_category_layer = nn.Conv2d(
-            self.fpn_channels, self.num_classes-1, kernel_size=3, padding=1
+            self.fpn_channels, self.num_classes, kernel_size=3, padding=1
         )
 
     def forward(self, inputs: List[Tensor]):
@@ -160,7 +158,7 @@ class Solov1PredictHead(Head):
             (feature_map_sizes[0][0] * 2, feature_map_sizes[0][1] * 2)
 
         pred_masks, pred_labels = \
-            self.multi_apply(
+            self.partial_apply(
                 self.forward_single,
                 inputs,
                 list(range(len(self.grids))),
@@ -245,7 +243,7 @@ class Solov1Model(Solov1Pretrained):
             self.backbone = resnet50()
 
         self.neck = Solov1PredictNeck(
-            config, self.backbone.channels)
+            config, self.backbone.channels, extra_layers=False, num_extra_fpn_layers=1)
 
         self.head = Solov1PredictHead(config)
 
@@ -256,6 +254,7 @@ class Solov1Model(Solov1Pretrained):
         # self.config.size = (inputs.size(2), inputs.size(3))
 
         outputs = self.backbone(inputs)
+        print(len(outputs))
         # outputs = [outputs[i] for i in self.config.selected_layers]
         outputs = self.neck(outputs)
 
@@ -278,3 +277,57 @@ class Solov1Model(Solov1Pretrained):
         #     output = layer(outputs[i])
 
         return outputs
+
+    def load_weights(self, path):
+        import re
+
+        try:
+            state_dict = torch.load(path)['state_dict']
+        except KeyError:
+            state_dict = torch.load(path)
+
+        numbering = {str(k): str(v) for k, v in enumerate([3, 2, 1, 0])}
+        for key in list(state_dict.keys()):
+            p = key.split('.')
+            if p[0] == 'backbone':
+                if p[1].startswith('layer'):
+                    i = int(p[1][5:])-1
+                    if p[3].startswith('conv'):
+                        new_key = f'backbone.layers.{i}.{p[2]}.{p[3]}.0.{p[4]}'
+                        state_dict[new_key] = state_dict.pop(key)
+                    elif p[3] == 'downsample':
+                        new_key = f'backbone.layers.{i}.{p[2]}.{p[3]}.{p[4]}.{p[5]}'
+                        state_dict[new_key] = state_dict.pop(key)
+                    else:
+                        new_key = f'backbone.layers.{i}.{p[2]}.{p[3]}.{p[4]}'
+                        state_dict[new_key] = state_dict.pop(key)
+                else:
+                    p1 = re.findall('[a-zA-Z]+', p[1])[0]
+                    new_key = f'backbone.{p1}.{p[2]}'
+                    state_dict[new_key] = state_dict.pop(key)
+
+            elif p[0] == 'neck':
+                if p[1] == 'lateral_convs':
+                    i = numbering.get(p[2])
+                    new_key = f'neck.lateral_layers.{i}.{p[4]}'
+                    state_dict[new_key] = state_dict.pop(key)
+                elif p[1] == 'fpn_convs':
+                    i = numbering.get(p[2])
+                    new_key = f'neck.predict_layers.{i}.{p[4]}'
+                    state_dict[new_key] = state_dict.pop(key)
+
+            elif p[0] == 'bbox_head':
+                if p[1] == 'ins_convs':
+                    new_key = f'head.instance_layers.{p[2]}.{p[3]}.{p[4]}'
+                    state_dict[new_key] = state_dict.pop(key)
+                elif p[1] == 'cate_convs':
+                    new_key = f'head.category_layers.{p[2]}.{p[3]}.{p[4]}'
+                    state_dict[new_key] = state_dict.pop(key)
+                elif p[1] == 'solo_ins_list':
+                    new_key = f'head.pred_instance_layers.{p[2]}.{p[3]}'
+                    state_dict[new_key] = state_dict.pop(key)
+                elif p[1] == 'solo_cate':
+                    new_key = f'head.pred_category_layer.{p[2]}'
+                    state_dict[new_key] = state_dict.pop(key)
+
+        self.load_state_dict(state_dict)

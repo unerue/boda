@@ -10,7 +10,6 @@ dependencies:
   - cudatoolkit=10.2
   - numpy
   - cython
-  - flake8
   # - pip:
     # - pycocotools
     # - opencv-python
