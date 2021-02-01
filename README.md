@@ -18,8 +18,10 @@ Boda (보다) means to see in Korean. This library was inspired by 🤗 Transfor
 ## Get started
 
 ```bash
-git clone && cd boda
-python setup.py
+git clone https://github.com/unerue/boda.git && cd boda
+conda env create -f environment.yml
+conda activate boda
+python setup.py install
 ```
 
 ```python

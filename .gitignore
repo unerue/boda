@@ -1,50 +1,26 @@
-.ipynb_checkpoints/
-.vscode/
-.DS_Store/
-__pycache__/
-boda.egg-info/
-build/
-dist/
-
-misc/
-misc/yolov1/testimg/
-misc/yolov2/demo/
-misc/yolov3/data/custom/
-misc/yolov3/data/samples/
-misc/yolov3/assets/
-misc/ssd500/img/
-misc/ssd300/doc/
-misc/retinanet/images/
+.ipynb_checkpoints
+.vscode
+.DS_Store
+__pycache__
+boda.egg-info
+build
+dist
+test
+misc
+doc
 
 benchmarks/data/
 benchmarks/*pth
 benchmarks/samples/
 benchmarks/dataset/
-
-tests/
 benchmarks/benchmark_yolov1.py
 benchmarks/benchmark_backbone.py
-doc/
 
-boda/__pycache__/
-boda/models/__pycache__/
-boda/lib/__pycache__/
-boda/experimental/__pycache__/
-boda/tests/__pycache__/
-boda/utils/__pycache__/
 boda/dev/
-boda/tests/yolact.pth
-boda/tests/resnet50_550_coco_972_70000.pth
-boda/tests/print_yolact.py
-
 old/
-cache/ 
-# tests/
+cache/
 
-# test_yolact.py
 run.py
-logo.pptx
-*.pth
 test_ssd.py
 test_yolov1.py
 test_yolact.py
@@ -52,8 +28,9 @@ test_solov1.py
 test_fcos.py
 test_backbone.py
 test_centermask.py
-
 eval_yolact.py
-# .gitignore
+
+logo.pptx
+*.pth
 *.zip
 *.jpg
