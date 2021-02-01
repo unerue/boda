@@ -40,8 +40,9 @@ print(losses)
 |[SSD](boda/models/ssd/)|Test|||
 |FCIS|Dev|||
 |Mask R-CNN|Dev|||
+|[FCOS](boda/models/fcos/)|Dev|||
 |PolarMask|Dev|||
 |YOLOv4|Dev|||
 |[YOLACT](boda/models/yolact/)|Test|||
 |[SOLOv1](boda/models/solov1/)|Test|||
-|CenterMask|Dev|||
+|[CenterMask]()|Dev|||

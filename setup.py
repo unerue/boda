@@ -15,7 +15,7 @@ def configuration(parent_package='', top_path=None):
         assume_default_configuration=True,
         delegate_options_to_subpackages=True,
         quiet=True)
-    config.add_subpackage('seelab')
+    config.add_subpackage('boda')
 
     return config
 
@@ -53,17 +53,16 @@ cmdclass = {'clean': CleanCommand, 'sdist': sdist}
 
 def setup_packages():
     metadata = dict(
-        name='seelab',
+        name='boda',
         version='0.0.1',
-        install_requires=['Cython', 'pytorch', 'numpy'],
-        author='Kyungsu',
+        install_requires=['torch', 'numpy', 'cython'],
+        author='Kang, Kyung-Su',
         author_email='unerue@me.com',
-        maintainer='Kyungsu',
+        maintainer='Kang, Kyung-Su',
         maintainer_email='unerue@me.com',
         description='boda is a library for instance segmentation.',
         packages=find_packages(),
         # include_package_data=True,
-        entry_points={'console_scripts': ['seelab=seelab.cli.command:main']},
         classifiers=[
             'Programming Language :: C',
             'Programming Language :: Python',

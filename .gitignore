@@ -18,6 +18,9 @@ benchmarks/*pth
 benchmarks/samples/
 benchmarks/dataset/
 
+tests/
+benchmarks/benchmark_yolov1.py
+benchmarks/benchmark_backbone.py
 doc/
 
 boda/__pycache__/

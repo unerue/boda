@@ -1,0 +1,18 @@
+Metadata-Version: 1.2
+Name: boda
+Version: 0.0.1
+Summary: boda is a library for instance segmentation.
+Home-page: UNKNOWN
+Author: Kang, Kyung-Su
+Author-email: unerue@me.com
+Maintainer: Kang, Kyung-Su
+Maintainer-email: unerue@me.com
+License: UNKNOWN
+Description: UNKNOWN
+Platform: UNKNOWN
+Classifier: Programming Language :: C
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Requires-Python: >=3.6
