@@ -1,5 +1,5 @@
 import os
-from typing import Optional, Tuple, List, Union, Any, Dict
+from typing import Optional, Tuple, List, Union, Any
 from ...base_configuration import BaseConfig
 
 
@@ -14,27 +14,26 @@ class YolactConfig(BaseConfig):
     """Configuration for YOLACT
 
     Args:
-        max_size (:obj:`Union[int, Tuple[int]]`):
         num_classes (:obj:`int`):
+        max_size (:obj:`Union[int, Tuple[int]]`):
         num_grids (:obj:`int`):
         num_grid_sizes (:obj:`int`):
         num_mask_dim (:obj:`int`):
-
-        extra_layers (:obj:`int`):
-        extra_layer_structure (:obj:`int`):
-        proto_layer_structure (:obj:`List[]):
+        fpn_channels (:obj:`int`):
+        extra_fpn_layers (:obj:`bool`):
+        num_extra_fpn_layers (:obj:`int`):
         mask_dim (:obj:`int`):
         num_grid_sizes (:obj:`int`):
         num_mask_dim (:obj:`int`):
-
     """
-    model_name = 'yolact'
+    model_name = 'yolact-base'
 
     def __init__(
         self,
         num_classes: int = 80,
         max_size: Tuple[int] = (550, 550),
         fpn_channels: int = 256,
+        extra_fpn_layers: bool = True,
         num_extra_fpn_layers: int = 2,
         selected_layers: List[int] = [1, 2, 3],
         aspect_ratios: List = [1, 1/2, 2],
@@ -58,6 +57,7 @@ class YolactConfig(BaseConfig):
         self.num_classes = num_classes + 1
         self.label_map = {}
         self.fpn_channels = fpn_channels
+        self.extra_fpn_layers = extra_fpn_layers
         self.num_extra_fpn_layers = num_extra_fpn_layers
         self.selected_layers = selected_layers
         self.aspect_ratios = aspect_ratios

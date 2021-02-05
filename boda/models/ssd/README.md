@@ -51,3 +51,12 @@ Forward/backward pass size (MB): 200.19
 Params size (MB): 100.27
 Estimated Total Size (MB): 301.49
 ```
+
+weight https://s3.amazonaws.com/amdegroot-models/ssd300_mAP_77.43_v2.pth
+
+
+## References
+
+[](https://github.com/amdegroot/ssd.pytorch)
+[](https://github.com/open-mmlab/mmdetection)
+[]()

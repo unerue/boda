@@ -109,7 +109,7 @@ class BaseConfig:
 
     def to_json(self):
         config_dict = self.to_dict()
-        return json.dumps(config_dict, indent=4, cls=DataEncoder)#, indent=2, sort_keys=True)
+        return json.dumps(config_dict, indent=4, cls=DataEncoder)
 
     def to_dict(self):
         output = copy.deepcopy(self.__dict__)
@@ -168,13 +168,10 @@ class BaseConfig:
         else:
             os.mkdir(config_dir)
             return
-        
-        
 
         # config_dict = cls._dict_from_json_file(config_file)
 
-            # return config_dict, kwargs
-
+        # return config_dict, kwargs
     # @classmethod
     # def from_json(cls, json_file: str):
     #     with open(path, 'r') as json_file:

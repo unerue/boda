@@ -150,18 +150,17 @@ class Model(nn.Module, ModelMixin):
     @classmethod
     def check_inputs(cls, inputs):
         """
-        Argument:
+        Args:
             inputs (List[Tensor]): Size([C, H, W])
+
         Return:
             outputs (Tensor): Size([B, C, H, W])
         """
         if cls._checked_inputs:
-            print('Check!!')
             for image in inputs:
                 if isinstance(image, Tensor):
                     if image.dim() != 3:
-                        raise ValueError(
-                    f'images is expected to be 3d tensors of shape [C, H, W] {image.size()}')
+                        raise ValueError(f'images is expected to be 3d tensors of shape [C, H, W] {image.size()}')
                 else:
                     raise ValueError('Expected image to be Tensor.')
             cls._checked_inputs = False
@@ -170,6 +169,14 @@ class Model(nn.Module, ModelMixin):
             inputs = torch.stack(inputs)
 
         return inputs
+
+    def __repr__(self):
+        return_str = str(self.config.model_name) + '\n'
+        for k, v in self.config.to_dict().items():
+            if k not in ['label_map'] and v is not None:
+                return_str += f'{k}: {v}\n'
+
+        return return_str
 
 
 class Matcher(ABC):

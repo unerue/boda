@@ -5,6 +5,14 @@ import matplotlib.pyplot as plt
 import torch
 
 
+def draw_masks(masks):
+    return masks
+
+
+def draw_boxes(boxes):
+    return boxes
+
+
 def get_color(j, on_gpu=None):
     global color_cache
     color_idx = (classes[j] * 5 if class_color else j * 5) % len(COLORS)

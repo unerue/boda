@@ -414,7 +414,7 @@ class YolactModel(YolactPretrained):
             self.neck.channels[0], self.num_classes-1, kernel_size=1
         )
 
-        self.init_weights('cache/resnet50-19c8e357.pth')
+        self.init_weights('cache/backbones/resnet50-19c8e357.pth')
 
     def init_weights(self, path):
         self.backbone.from_pretrained(path)

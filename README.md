@@ -37,14 +37,17 @@ print(losses)
 ```
 
 ## Comparison
-|Model|State|Original|Ours|
-|:----|:----|-------:|---:|
-|[SSD](boda/models/ssd/)|Test|||
-|FCIS|Dev|||
-|Mask R-CNN|Dev|||
-|[FCOS](boda/models/fcos/)|Dev|||
-|PolarMask|Dev|||
-|YOLOv4|Dev|||
-|[YOLACT](boda/models/yolact/)|Test|||
-|[SOLOv1](boda/models/solov1/)|Test|||
-|[CenterMask]()|Dev|||
+
+|Model|State|Training|Inference|Original|Ours|
+|:----|:---:|:------:|:-------:|-------:|---:|
+|[SSD](boda/models/ssd/)|🙂|❌|✔️|||
+|FCIS|😡|❌|❌|||
+|Mask R-CNN|😡|❌|❌|||
+|[FCOS](boda/models/fcos/)|🙂|❌|✔️|||
+|PolarMask|😡|❌|❌|||
+|YOLOv4|😡|❌|❌|||
+|[YOLACT](boda/models/yolact/)|😆|✔️|✔️|||
+|[SOLOv1](boda/models/solov1/)|🙂|❌|✔️|||
+|SOLOv2|🙂|❌|✔️|||
+|[CenterMask]()|😡|❌|❌|||
+|YOLACT EDGE|😡|❌|❌|||

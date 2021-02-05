@@ -51,7 +51,8 @@ class CategoryLayer(nn.Sequential):
                 stride=stride,
                 padding=padding,
                 bias=bias)),
-            ('gn', nn.GroupNorm(num_groups, out_channels))
+            ('gn', nn.GroupNorm(num_groups, out_channels)),
+            ('relu', nn.ReLU())
         ]))
 
 
@@ -74,7 +75,8 @@ class InstanceLayer(nn.Sequential):
                 stride=stride,
                 padding=padding,
                 bias=bias)),
-            ('gn', nn.GroupNorm(num_groups, out_channels))
+            ('gn', nn.GroupNorm(num_groups, out_channels)),
+            ('relu', nn.ReLU())
         ]))
 
 
@@ -154,6 +156,7 @@ class Solov1PredictHead(Head):
     def forward(self, inputs: List[Tensor]):
         inputs = self.split_feature_maps(inputs)
         feature_map_sizes = [feature_map.size()[-2:] for feature_map in inputs]
+        # print(feature_map_sizes)
         upsampled_size = \
             (feature_map_sizes[0][0] * 2, feature_map_sizes[0][1] * 2)
 
@@ -173,42 +176,81 @@ class Solov1PredictHead(Head):
         return (
             F.interpolate(
                 inputs[0], scale_factor=0.5, mode='bilinear',
-                align_corners=False, recompute_scale_factor=True),
+                align_corners=False),#, recompute_scale_factor=True),
             inputs[1],
             inputs[2],
             inputs[3],
             F.interpolate(
                 inputs[4], size=inputs[3].shape[-2:],
-                mode='bilinear', align_corners=False)
+                mode='bilinear')#, align_corners=False)
         )
+
+    # def split_feature_maps(self, inputs: List[Tensor]) -> Tuple[Tensor]:
+    #     """
+    #     Returns:
+    #     """
+    #     return (
+    #         F.interpolate(
+    #             inputs[0], scale_factor=0.5, mode='bilinear',
+    #             align_corners=False),#, recompute_scale_factor=True),
+    #         inputs[1],
+    #         inputs[2],
+    #         inputs[3],
+    #         F.interpolate(
+    #             inputs[4], size=inputs[3].shape[-2:],
+    #             mode='bilinear')#, align_corners=False)
+    #     )
 
     def forward_single(self, inputs, idx, upsampled_size: Tuple = None):
         instances = inputs
         categories = inputs
+        print('instance size()', instances.size())  # [B, C, H, W]
 
-        x_range = torch.linspace(-1, 1, instances.shape[-1], device=instances.device)
-        y_range = torch.linspace(-1, 1, instances.shape[-2], device=categories.device)
+        x_range = torch.linspace(-1, 1, instances.size(3), device=instances.device)
+        y_range = torch.linspace(-1, 1, instances.size(2), device=categories.device)
         y, x = torch.meshgrid(y_range, x_range)
-        y = y.expand([instances.shape[0], 1, -1, -1])
-        x = x.expand([instances.shape[0], 1, -1, -1])
-        coords = torch.cat([x, y], 1)
+        y = y.expand([instances.size(0), 1, -1, -1])
+        x = x.expand([instances.size(0), 1, -1, -1])
+        coords = torch.cat([x, y], dim=1)
         instances = torch.cat([instances, coords], 1)
 
         for i, ins_layer in enumerate(self.instance_layers):
             instances = ins_layer(instances)
 
-        instances = F.interpolate(instances, scale_factor=2.0, mode='bilinear', align_corners=False)
+        instances = F.interpolate(instances, scale_factor=2.0, mode='bilinear')#, align_corners=False)
         pred_masks = self.pred_instance_layers[idx](instances)
+
+        # print('pred_masks', pred_masks.size())
+        # test_seg_masks = pred_masks[0, :, :, 0] > 0.5 # cfg.mask_thr
+        # test_masks = test_seg_masks.detach().cpu().numpy()[0] * 255
+        # print(test_masks.shape)
+        # # test_masks = test_masks.transpose(1, 2, 0)
+        # import cv2
+        # cv2.imwrite('solo-test-forward.jpg', test_masks)
 
         for i, cate_layer in enumerate(self.category_layers):
             if i == self.cate_down_pos:
                 seg_num_grid = self.grids[idx]
-                categories = F.interpolate(categories, size=seg_num_grid, mode='bilinear', align_corners=False)
+                categories = F.interpolate(categories, size=seg_num_grid, mode='bilinear')#, align_corners=False)
             categories = cate_layer(categories)
 
         pred_labels = self.pred_category_layer(categories)
+        if self.training:
+            return pred_masks, pred_labels
+        else:
+            pred_masks = F.interpolate(pred_masks.sigmoid(), size=upsampled_size, mode='bilinear')
+            # print(pred_masks.size())
+            pred_labels = points_nms(pred_labels.sigmoid(), kernel=2).permute(0, 2, 3, 1)
 
         return pred_masks, pred_labels
+
+
+def points_nms(heat, kernel=2):
+    # kernel must be 2
+    hmax = nn.functional.max_pool2d(
+        heat, (kernel, kernel), stride=1, padding=1)
+    keep = (hmax[:, :, :-1, :-1] == heat).float()
+    return heat * keep
 
 
 class Solov1Pretrained(Model):
@@ -254,7 +296,6 @@ class Solov1Model(Solov1Pretrained):
         # self.config.size = (inputs.size(2), inputs.size(3))
 
         outputs = self.backbone(inputs)
-        print(len(outputs))
         # outputs = [outputs[i] for i in self.config.selected_layers]
         outputs = self.neck(outputs)
 
@@ -287,6 +328,7 @@ class Solov1Model(Solov1Pretrained):
             state_dict = torch.load(path)
 
         numbering = {str(k): str(v) for k, v in enumerate([3, 2, 1, 0])}
+        # numbering2 = {str(k): str(v) for k, v in enumerate([4, 3, 2, 1, 0])}
         for key in list(state_dict.keys()):
             p = key.split('.')
             if p[0] == 'backbone':
@@ -323,6 +365,9 @@ class Solov1Model(Solov1Pretrained):
                 elif p[1] == 'cate_convs':
                     new_key = f'head.category_layers.{p[2]}.{p[3]}.{p[4]}'
                     state_dict[new_key] = state_dict.pop(key)
+                # elif p[1] == 'solo_ins_list':
+                #     new_key = f'head.pred_instance_layers.{numbering2.get(p[2])}.{p[3]}'
+                #     state_dict[new_key] = state_dict.pop(key)
                 elif p[1] == 'solo_ins_list':
                     new_key = f'head.pred_instance_layers.{p[2]}.{p[3]}'
                     state_dict[new_key] = state_dict.pop(key)

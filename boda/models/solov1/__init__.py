@@ -1,6 +1,6 @@
 from .configuration_solov1 import Solov1Config
 from .architecture_solov1 import Solov1PredictNeck, Solov1PredictHead, Solov1Model
-from .architecture_decoupled_solov1 import DecoupledSolov1Model
+# from .architecture_decoupled_solov1 import DecoupledSolov1Model
 from .loss_solov1 import Solov1Loss
 
 

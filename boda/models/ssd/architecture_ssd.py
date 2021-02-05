@@ -1,7 +1,7 @@
 import os
 import math
 import functools
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from typing import List, Dict, Union
 import torch
 from torch import nn, Tensor
@@ -20,6 +20,8 @@ class L2Norm(nn.Module):
         in_channels (:obj:`int`):
         gamma ():
         eps ():
+
+    Adpated from:
     """
     def __init__(
         self,
@@ -65,7 +67,7 @@ class SsdPredictNeck(Neck):
 
         self.norm = L2Norm(512, 10)
         self.selected_layers = config.selected_layers
-        self.layers = nn.ModuleList()  # TODO: layers or extra_layers?
+        self.layers = nn.ModuleList()
         self._in_channels = in_channels
 
         # TODO: rename variable
@@ -73,31 +75,37 @@ class SsdPredictNeck(Neck):
             self._make_layer(layer)
 
     def _make_layer(self, config, **kwargs):
-        _layers = []
+        # _layers = []
+        _layers = OrderedDict()
+        i = 0
         for v in config:
             kwargs = None
             if isinstance(v, tuple):
                 kwargs = v[1]
                 v = v[0]
-                print(v, kwargs)
+
             if v == 'M':
-                _layers.append(nn.MaxPool2d(**kwargs))
+                # _layers.append(nn.MaxPool2d(**kwargs))
+                _layers.update({
+                    f'maxpool{i}': nn.MaxPool2d(**kwargs)
+                })
             else:
                 if kwargs is None:
                     kwargs = {'kernel_size': 1}
 
-                _layers += [
-                    nn.Conv2d(
-                        in_channels=self._in_channels, 
+                _layers.update({
+                    (f'{i}', nn.Conv2d(
+                        in_channels=self._in_channels,
                         out_channels=v,
-                        **kwargs),
-                    nn.ReLU()]
+                        **kwargs)),
+                    (f'relu{i}', nn.ReLU())
+                })
 
                 self._in_channels = v
-            print(_layers)
+            i += 1
 
         self.channels.append(self._in_channels)
-        self.layers.append(nn.Sequential(*_layers))
+        self.layers.append(nn.Sequential(_layers))
 
     def forward(self, inputs: List[Tensor]):
         outputs = []
@@ -107,9 +115,6 @@ class SsdPredictNeck(Neck):
         for layer in self.layers:
             output = layer(output)
             outputs.append(output)
-
-        for out in outputs:
-            print(out.size())
 
         self.config.grid_sizes = [e.size(-1) for e in outputs]
 
@@ -181,6 +186,31 @@ class PriorBox:
         return size, prior_boxes
 
 
+class BoxBranch(nn.Conv2d):
+    def __init__(self, in_channels, out_channels):
+        super().__init__(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=3,
+            padding=1
+        )
+
+
+class ScoreBranch(nn.Conv2d):
+    def __init__(self, in_channels, out_channels):
+        super().__init__(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=3,
+            padding=1
+        )
+
+
+class SsdPredictHeads(nn.ModuleList):
+    def __init__(modules):
+        super().__init__(modules)
+
+
 class SsdPredictHead(nn.Module):
     def __init__(
         self,
@@ -200,36 +230,38 @@ class SsdPredictHead(nn.Module):
         self.prior_box = PriorBox(
             config, aspect_ratios, step, min_sizes, max_sizes)
 
-        self.bbox_layers = self._make_layer(in_channels, 4)
-        self.conf_layers = self._make_layer(in_channels, self.num_classes)
+        # self.box_layer = nn.Conv2d(
+        #     in_channels=in_channels,
+        #     out_channels=self.boxes * 4,
+        #     kernel_size=3,
+        #     padding=1)
 
-    def _make_layer(self, in_channels, out_channels):
-        _layer = [
-            nn.Conv2d(
-                in_channels=in_channels,
-                out_channels=self.boxes * out_channels, 
-                kernel_size=3,
-                padding=1)]
-
-        return nn.Sequential(*_layer)
+        # self.score_layer = nn.Conv2d(
+        #     in_channels=in_channels,
+        #     out_channels=self.boxes * self.num_classes,
+        #     kernel_size=3,
+        #     padding=1
+        # )
+        self.box_layer = BoxBranch(in_channels, self.boxes*4)
+        self.score_layer = ScoreBranch(in_channels, self.boxes*self.num_classes)
 
     def forward(self, inputs):
         h, w = inputs.size(2), inputs.size(3)
-        boxes = self.bbox_layers(inputs)
-        scores = self.conf_layers(inputs)
+        boxes = self.box_layer(inputs)
+        scores = self.score_layer(inputs)
 
-        _, priors = self.prior_box.generate(h, w)
+        _, prior_boxes = self.prior_box.generate(h, w)
 
         boxes = boxes.view(boxes.size(0), -1, 4)
         scores = scores.view(scores.size(0), -1, self.num_classes)
 
-        preds = {
+        return_dict = {
             'boxes': boxes,
             'scores': scores,
-            'priors': priors
+            'prior_boxes': prior_boxes
         }
 
-        return preds
+        return return_dict
 
 
 class SsdPretrained(Model):
@@ -256,8 +288,9 @@ class SsdModel(SsdPretrained):
     """
     structures = {
         'ssd300': [
-            [('M', {'kernel_size': 3, 'stride': 1, 'padding': 1}), (1024, {'kernel_size': 3, 'padding': 6, 'dilation': 6}), (1024, {'kernel_size': 1})],
-            # [(1024, {'kernel_size': 1})],
+            [('M', {'kernel_size': 3, 'stride': 1, 'padding': 1}),
+             (1024, {'kernel_size': 3, 'padding': 6, 'dilation': 6}),
+             (1024, {'kernel_size': 1})],
             [(256, {'kernel_size': 1}), (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
             [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
             [(128, {'kernel_size': 1}), (256, {'kernel_size': 3})],
@@ -283,7 +316,7 @@ class SsdModel(SsdPretrained):
         self.backbone = vgg16()
         self.neck = SsdPredictNeck(config, self.backbone.channels[-1], self.structures['ssd300'])
 
-        self.heads = nn.ModuleList()
+        self.heads = SsdPredictHeads()
         for i, in_channels in enumerate(self.neck.channels):
             head = SsdPredictHead(
                 config,
@@ -295,8 +328,40 @@ class SsdModel(SsdPretrained):
         outputs = self.neck(outputs)
 
         preds = defaultdict(list)
-        for i, layer in enumerate(self.head_layers):
+        for i, layer in enumerate(self.heads):
             output = layer(outputs[i])
 
             for k, v in output.items():
                 preds[k].append(v)
+        
+        if self.training:
+            return preds
+        else:
+            preds['scores'] = F.softmax(preds['scores'], dim=-1)
+
+
+
+    def load_weights(self, path):
+        state_dict = torch.load(path)
+        for key in list(state_dict.keys()):
+            p = key.split('.')
+            if p[0] == 'vgg':
+                new_key = f'backbone.conv.{p[2]}'
+                state_dict[new_key] = state_dict.pop(key)
+            elif key.startswith('vgg.3'):
+                new_key = f'neck'
+                state_dict[new_key] = state_dict.pop(key)
+            elif p[0] == 'extras':
+                new_key = f'neck'
+                state_dict[new_key] = state_dict.pop(key)
+            elif p[0] == 'L2Norm':
+                new_key = f'norm'
+                state_dict[new_key] = state_dict.pop(key)
+            elif p[0] == 'loc':
+                new_key = f'heads.box_layers'
+                state_dict[new_key]
+            elif p[0] == 'conf':
+                new_key = f'heads.score_layers'
+                state_dict[new_key]
+
+        self.load_state_dict(state_dict)

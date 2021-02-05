@@ -244,7 +244,7 @@ def resnet50(pretrained: bool = False):
 
 def resnet101(pretrained: bool = False):
     backbone = ResNet([3, 4, 23, 3])
-    backbone.from_pretrained('cache/resnet101_reducedfc.pth')
+    backbone.from_pretrained('cache/backbones/resnet101_reducedfc.pth')
     # Add downsampling layers until we reach the number we need
     # selected_layers = [1, 2, 3]
     # # num_layers = max(cfg.selected_layers) + 1
