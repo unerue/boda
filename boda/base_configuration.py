@@ -55,7 +55,7 @@ def reporthook(count, block_size, total_size):
     # speed = int(progress_size / (1024 * duration))
     percent = int(count * block_size * 100 / total_size)
     # min(int(count*blockSize*100/totalSize),100)
-    sys.stdout.write(f"\rDownload pretrained model: {percent}% {progress_size / (1024*1204):.1f} MB")
+    sys.stdout.write(f'\rDownload file: {percent:>3}% {progress_size / (1024*1204):>4.1f} MB')
 
     # sys.stdout.write("\rDownload pretrained model: %d%%, %d MB, %d KB/s, %d seconds passed" %
     #                 (percent, progress_size / (1024 * 1024), speed, duration))
@@ -149,25 +149,50 @@ class BaseConfig:
 
     @classmethod
     def _get_config_dict(cls, name_or_path, **kwargs):
-        config_dir = os.path.join(cls.cache_dir, cls.model_name)
-        if not os.path.isfile(os.path.join(config_dir, f'{name_or_path}.pth')):
-            from urllib import request
-            from .models.yolact.configuration_yolact import yolact_pretrained_models
-
-            dd = urlparse(yolact_pretrained_models[name_or_path])
-            request.urlretrieve(
-                yolact_pretrained_models[name_or_path].replace('json', 'pth'),
-                'cache/yolact/yolact-base.pth', reporthook)
-
-        if os.path.isdir(config_dir):
-            config_file = os.path.join(config_dir, f'{name_or_path}.json')
-            if os.path.isfile(config_file):
-                return cls._dict_from_json_file(config_file)
-            else:
-                config_file = urlparse()
+        if os.path.isdir(name_or_path):
+            # TODO: Thinking idea!!
+            config_file = os.path.join(name_or_path, 'config.json')
+        elif os.path.isfile(name_or_path):
+            config_file = name_or_path
         else:
-            os.mkdir(config_dir)
-            return
+            url = 'https://unerue.synology.me/boda/models/'
+            config_dir = os.path.join(cls.cache_dir, cls.model_name)
+            config_file = os.path.join(config_dir, f'{name_or_path}.json')
+            if not os.path.isfile(config_file):
+                from urllib import request
+
+                if not os.path.isdir(config_dir):
+                    os.mkdir(config_dir)
+
+                for extension in ['json', 'pth']:
+                    file_name = f'{config_file}'.replace('json', extension)
+                    # print(f'Downloading {name_or_path}.{extension}...', end=' ')
+                    request.urlretrieve(
+                        f'{url}{cls.model_name}/{name_or_path}.{extension}',
+                        file_name, reporthook
+                    )
+                    print()
+
+        return cls._dict_from_json_file(config_file)
+
+        # if not os.path.isfile(os.path.join(config_dir, f'{name_or_path}.pth')):
+        #     from urllib import request
+        #     from .models.yolact.configuration_yolact import yolact_pretrained_models
+
+        #     dd = urlparse(yolact_pretrained_models[name_or_path])
+        #     request.urlretrieve(
+        #         yolact_pretrained_models[name_or_path].replace('json', 'pth'),
+        #         'cache/yolact/yolact-base.pth', reporthook)
+
+        # if os.path.isdir(config_dir):
+        #     config_file = os.path.join(config_dir, f'{name_or_path}.json')
+        #     if os.path.isfile(config_file):
+        #         return cls._dict_from_json_file(config_file)
+        #     else:
+        #         config_file = urlparse()
+        # else:
+        #     os.mkdir(config_dir)
+        #     return
 
         # config_dict = cls._dict_from_json_file(config_file)
 

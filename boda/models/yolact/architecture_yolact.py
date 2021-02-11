@@ -323,9 +323,13 @@ class YolactPretrained(Model):
     @classmethod
     def from_pretrained(cls, name_or_path: Union[str, os.PathLike]):
         config = cls.config_class.from_pretrained(name_or_path)
+
         model = YolactModel(config)
-        path = f'{cls.config_class.cache_dir}/{cls.base_model_prefix}/{name_or_path}.pth'
-        model.load_weights(path)
+
+        pretrained_file = super().get_pretrained_from_file(
+            name_or_path, cache_dir=cls.config_class.cache_dir)
+        model.load_weights(pretrained_file)
+
         return model
 
 

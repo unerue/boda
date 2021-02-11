@@ -180,6 +180,7 @@ class PriorBox:
                 prior_boxes += [cx, cy, s_k/math.sqrt(ratio), s_k*math.sqrt(ratio)]
         # back to torch land
         prior_boxes = torch.tensor(prior_boxes).view(-1, 4)
+        prior_boxes.require_grad = False
         if self.clip:
             prior_boxes.clamp_(max=1, min=0)
 
@@ -234,7 +235,8 @@ class SsdPredictHead(nn.Module):
         #     in_channels=in_channels,
         #     out_channels=self.boxes * 4,
         #     kernel_size=3,
-        #     padding=1)
+        #     padding=1
+        # )
 
         # self.score_layer = nn.Conv2d(
         #     in_channels=in_channels,
@@ -324,6 +326,7 @@ class SsdModel(SsdPretrained):
             self.heads.append(head)
 
     def forward(self, inputs):
+        inputs = self.check_inputs(inputs)
         outputs = self.backbone(inputs)
         outputs = self.neck(outputs)
 
@@ -333,35 +336,51 @@ class SsdModel(SsdPretrained):
 
             for k, v in output.items():
                 preds[k].append(v)
-        
+
+        for k, v in preds.items():
+            preds[k] = torch.cat(v, dim=-2)
+
         if self.training:
             return preds
         else:
+            for k, v in preds.items():
+                print(k, v.size())
+
             preds['scores'] = F.softmax(preds['scores'], dim=-1)
-
-
+            return preds
 
     def load_weights(self, path):
         state_dict = torch.load(path)
+        _norm = state_dict.pop('L2Norm.weight')
+        keys = list(self.state_dict().keys())
+        keys.remove('neck.norm.weight')
+        # state_dict['norm.weight'] = state_dict
+        for key1, key2 in zip(list(state_dict.keys()), keys):
+            state_dict[key2] = state_dict.pop(key1)
+            if key1.startswith('loc.0'):
+                break
+
+        state_dict['neck.norm.weight'] = _norm
+
         for key in list(state_dict.keys()):
             p = key.split('.')
-            if p[0] == 'vgg':
-                new_key = f'backbone.conv.{p[2]}'
+            # if p[0] == 'vgg':
+            #     new_key = f'backbone.conv.{p[2]}'
+            #     state_dict[new_key] = state_dict.pop(key)
+            # elif key.startswith('vgg.3'):
+            #     new_key = f'neck'
+            #     state_dict[new_key] = state_dict.pop(key)
+            # elif p[0] == 'extras':
+            #     new_key = f'neck'
+            #     state_dict[new_key] = state_dict.pop(key)
+            # elif p[0] == 'L2Norm':
+            #     new_key = f'norm.{p[1]}'
+            #     state_dict[new_key] = state_dict.pop(key)
+            if p[0] == 'loc':
+                new_key = f'heads.{p[1]}.box_layer.{p[2]}'
                 state_dict[new_key] = state_dict.pop(key)
-            elif key.startswith('vgg.3'):
-                new_key = f'neck'
-                state_dict[new_key] = state_dict.pop(key)
-            elif p[0] == 'extras':
-                new_key = f'neck'
-                state_dict[new_key] = state_dict.pop(key)
-            elif p[0] == 'L2Norm':
-                new_key = f'norm'
-                state_dict[new_key] = state_dict.pop(key)
-            elif p[0] == 'loc':
-                new_key = f'heads.box_layers'
-                state_dict[new_key]
             elif p[0] == 'conf':
-                new_key = f'heads.score_layers'
-                state_dict[new_key]
+                new_key = f'heads.{p[1]}.score_layer.{p[2]}'
+                state_dict[new_key] = state_dict.pop(key)
 
         self.load_state_dict(state_dict)

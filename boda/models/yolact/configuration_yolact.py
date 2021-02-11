@@ -26,7 +26,7 @@ class YolactConfig(BaseConfig):
         num_grid_sizes (:obj:`int`):
         num_mask_dim (:obj:`int`):
     """
-    model_name = 'yolact-base'
+    model_name = 'yolact'
 
     def __init__(
         self,

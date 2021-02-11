@@ -1,8 +1,20 @@
 import cv2
+
 import numpy as np
 import matplotlib.pyplot as plt
+import functools
+from collections import defaultdict
 
 import torch
+from torch import nn, Tensor
+
+COLORS = (
+    (244, 67, 54), (233, 30, 99), (156, 39, 176), (103, 58, 183),
+    (63, 81, 181), (33, 150, 243), (3, 169, 244), (0, 188, 212),
+    (0, 150, 136), (76, 175, 80), (139, 195, 74), (205, 220, 57),
+    (255, 235, 59), (255, 193, 7), (255, 152, 0), (255, 87, 34),
+    (121, 85, 72), (158, 158, 158), (96, 125, 139)
+)
 
 
 def draw_masks(masks):
@@ -13,8 +25,20 @@ def draw_boxes(boxes):
     return boxes
 
 
+def color_cache(func):
+    cache = defaultdict()
+
+    @functools.wraps(func)
+    def wrapper(*args):
+        k, v = func(*args)
+        if k not in cache:
+            cache[k] = v
+        return k, cache[k]
+    return wrapper
+
+
+@color_cache
 def get_color(j, on_gpu=None):
-    global color_cache
     color_idx = (classes[j] * 5 if class_color else j * 5) % len(COLORS)
     
     if on_gpu is not None and color_idx in color_cache[on_gpu]:
@@ -28,6 +52,34 @@ def get_color(j, on_gpu=None):
             color = torch.Tensor(color).to(on_gpu).float() / 255.
             color_cache[on_gpu][color_idx] = color
         return color
+
+
+def restore_image(image: Tensor, h: int, w: int, mean: float, std, to_bgr=False):
+    """
+    Takes a transformed image tensor and returns a numpy ndarray that is untransformed.
+    Arguments w and h are the original height and width of the image.
+
+    All pre-trained models expect input images normalized in the same way,
+    i.e. mini-batches of 3-channel RGB images of shape (3 x H x W),
+    where H and W are expected to be at least 224.
+    The images have to be loaded in to a range of [0, 1] and then normalized
+    using mean = [0.485, 0.456, 0.406] and std = [0.229, 0.224, 0.225].
+    You can use the following transform to normalize.
+
+    https://pytorch.org/vision/stable/models.html
+    """
+    image = image.permute(1, 2, 0).cpu().numpy()
+    # if to_bgr:
+    #     image = image[:, :, (2, 1, 0)]  # To BRG
+
+    image = (image * np.array(std) + np.array(mean)) / 255.0
+    # if to_bgr:
+    #     image = image[:, :, (2, 1, 0)]  # To RGB
+
+    image = np.clip(image, 0, 1)
+    image = cv2.resize(image, (w, h))
+
+    return image
 
 
 class Visualizer:

@@ -115,6 +115,20 @@ class Model(nn.Module, ModelMixin):
                 module.bias.requires_grad = enable
 
     @classmethod
+    def get_pretrained_from_file(cls, name_or_path, **kwargs):
+        cache_dir = kwargs.get('cache_dir', 'cache')
+
+        if os.path.isfile(name_or_path):
+            pretrained_file = name_or_path
+        else:
+            pretrained_file = os.path.join(
+                cache_dir, cls.base_model_prefix, f'{name_or_path}.pth')
+
+        return pretrained_file
+
+
+
+    @classmethod
     @abstractmethod
     def from_pretrained(
         cls,
