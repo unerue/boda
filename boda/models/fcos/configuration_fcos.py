@@ -6,7 +6,7 @@ from ...base_configuration import BaseConfig
 class FcosConfig(BaseConfig):
     """Configuration for FCOS
 
-    Arguments:
+    Args:
         max_size ():
         padding ():
         proto_net_structure (List):

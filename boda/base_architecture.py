@@ -118,15 +118,25 @@ class Model(nn.Module, ModelMixin):
     def get_pretrained_from_file(cls, name_or_path, **kwargs):
         cache_dir = kwargs.get('cache_dir', 'cache')
 
-        if os.path.isfile(name_or_path):
-            pretrained_file = name_or_path
+        pretrained_file = os.path.join(cache_dir, cls.base_model_prefix, f'{name_or_path}.pth')
+        if os.path.isfile(pretrained_file):
+            return pretrained_file
         else:
-            pretrained_file = os.path.join(
-                cache_dir, cls.base_model_prefix, f'{name_or_path}.pth')
+            from urllib import request
+            from .file_utils import reporthook
 
-        return pretrained_file
+            url = 'https://unerue.synology.me/boda/models/'
+            
+            # print(f'Downloading {name_or_path}.{extension}...', end=' ')
+            request.urlretrieve(
+                f'{url}{cls.base_model_prefix}/{name_or_path}.pth',
+                pretrained_file, reporthook
+            )
+            print()
+            # pretrained_file = os.path.join(
+            #     cache_dir, cls.base_model_prefix, f'{name_or_path}.pth')
 
-
+            return pretrained_file
 
     @classmethod
     @abstractmethod
@@ -141,17 +151,17 @@ class Model(nn.Module, ModelMixin):
     def load_weights(self, path):
         raise NotImplementedError
 
-    @classmethod
-    def from_pretrained(
-        cls,
-        name_or_path: Union[str, os.PathLike]
-    ) -> None:
-        if os.path.isfile(name_or_path):
-            state_dict = torch.load(name_or_path)
-            return state_dict
-        else:
-            cls._url_map[name_or_path]
-            pass
+    # @classmethod
+    # def from_pretrained(
+    #     cls,
+    #     name_or_path: Union[str, os.PathLike]
+    # ) -> None:
+    #     if os.path.isfile(name_or_path):
+    #         state_dict = torch.load(name_or_path)
+    #         return state_dict
+    #     else:
+    #         cls._url_map[name_or_path]
+    #         pass
 
     # def _check_pretrained_model_is_valid(self, model_name_or_path):
     #     # if model_name_or_path not in
@@ -252,7 +262,7 @@ class LossFunction(nn.Module):
         for target in targets:
             pass
 
-
+#  "backbone.layers.2.6.conv1.0.weight", "backbone.layers.2.6.bn1.weight",
 # class Register(ABCMeta):
 #     registry = {}
 #     def __new__(cls):

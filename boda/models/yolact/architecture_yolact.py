@@ -135,6 +135,7 @@ class ProtoNet(nn.Sequential):
             nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1),
             nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1),
             nn.Upsample(scale_factor=scale_factor, mode=mode, align_corners=False),
+            nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1),
             nn.Conv2d(in_channels, out_channels, kernel_size=1)
         )
 
@@ -323,7 +324,6 @@ class YolactPretrained(Model):
     @classmethod
     def from_pretrained(cls, name_or_path: Union[str, os.PathLike]):
         config = cls.config_class.from_pretrained(name_or_path)
-
         model = YolactModel(config)
 
         pretrained_file = super().get_pretrained_from_file(
@@ -514,16 +514,16 @@ class YolactModel(YolactPretrained):
 
             elif p[0] == 'prediction_layers':
                 if p[2] == 'upfeature':
-                    new_key = f'head_layers.0.upsample_layers.0.{p[4]}'
+                    new_key = f'heads.0.upsample_layers.0.{p[4]}'
                     state_dict[new_key] = state_dict.pop(key)
                 elif p[2] == 'bbox_layer':
-                    new_key = f'head_layers.0.box_layers.0.{p[3]}'
+                    new_key = f'heads.0.box_layers.0.{p[3]}'
                     state_dict[new_key] = state_dict.pop(key)
                 elif p[2] == 'mask_layer':
-                    new_key = f'head_layers.0.mask_layers.0.{p[3]}'
+                    new_key = f'heads.0.mask_layers.0.{p[3]}'
                     state_dict[new_key] = state_dict.pop(key)
                 elif p[2] == 'conf_layer':
-                    new_key = f'head_layers.0.score_layers.0.{p[3]}'
+                    new_key = f'heads.0.score_layers.0.{p[3]}'
                     state_dict[new_key] = state_dict.pop(key)
 
             elif p[0] == 'proto_net':

@@ -41,8 +41,10 @@ print(losses)
 |Model|State|Training|Inference|Original|Ours|
 |:----|:---:|:------:|:-------:|-------:|---:|
 |[SSD](boda/models/ssd/)|🙂|❌|✔️|||
+|Faster R-CNN|🙂|❌|✔️|||
 |FCIS|😡|❌|❌|||
 |Mask R-CNN|😡|❌|❌|||
+|Keypoint R-CNN|🙂|❌|✔️|||
 |[FCOS](boda/models/fcos/)|🙂|❌|✔️|||
 |PolarMask|😡|❌|❌|||
 |YOLOv4|😡|❌|❌|||

@@ -7,59 +7,7 @@ from urllib.parse import urlparse
 from urllib.request import urlretrieve
 from typing import Tuple, List, Dict, Any, Union
 
-
-class DataEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, list):
-            return json.JSONEncoder().encode(obj)
-
-        return json.JSONEncoder.default(self, obj)
-
-
-def progressbar(cur, total=100):
-    percent = '{:.2%}'.format(cur / total)
-    sys.stdout.write('\r')
-    # sys.stdout.write("[%-50s] %s" % ('=' * int(math.floor(cur * 50 / total)),percent))
-    sys.stdout.write("[%-100s] %s" % ('=' * int(cur), percent))
-    sys.stdout.flush()
-
-
-def schedule(blocknum, blocksize, totalsize):
-    """
-    blocknum: currently downloaded block
-         blocksize: block size for each transfer
-         totalsize: total size of web page files
-    """
-    if totalsize == 0:
-        percent = 0
-    else:
-        percent = blocknum * blocksize / totalsize
-    if percent > 1.0:
-        percent = 1.0
-
-    percent = percent * 100
-    print("download : %.2f%%" % (percent))
-    progressbar(percent)
-
-
-def reporthook(count, block_size, total_size):
-    """
-    https://blog.shichao.io/2012/10/04/progress_speed_indicator_for_urlretrieve_in_python.html
-    """
-    # global start_time
-    # if count == 0:
-    #     start_time = time.time()
-    #     return
-    # duration = time.time() - start_time
-    progress_size = int(count * block_size)
-    # speed = int(progress_size / (1024 * duration))
-    percent = int(count * block_size * 100 / total_size)
-    # min(int(count*blockSize*100/totalSize),100)
-    sys.stdout.write(f'\rDownload file: {percent:>3}% {progress_size / (1024*1204):>4.1f} MB')
-
-    # sys.stdout.write("\rDownload pretrained model: %d%%, %d MB, %d KB/s, %d seconds passed" %
-    #                 (percent, progress_size / (1024 * 1024), speed, duration))
-    sys.stdout.flush()
+from .file_utils import DataEncoder
 
 
 class BaseConfig:
@@ -160,18 +108,18 @@ class BaseConfig:
             config_file = os.path.join(config_dir, f'{name_or_path}.json')
             if not os.path.isfile(config_file):
                 from urllib import request
+                from .file_utils import reporthook
 
                 if not os.path.isdir(config_dir):
                     os.mkdir(config_dir)
 
-                for extension in ['json', 'pth']:
-                    file_name = f'{config_file}'.replace('json', extension)
-                    # print(f'Downloading {name_or_path}.{extension}...', end=' ')
-                    request.urlretrieve(
-                        f'{url}{cls.model_name}/{name_or_path}.{extension}',
-                        file_name, reporthook
-                    )
-                    print()
+                # file_name = f'{config_file}.json'
+                # print(f'Downloading {name_or_path}.{extension}...', end=' ')
+                request.urlretrieve(
+                    f'{url}{cls.model_name}/{name_or_path}.json',
+                    config_file, reporthook
+                )
+                print()
 
         return cls._dict_from_json_file(config_file)
 
