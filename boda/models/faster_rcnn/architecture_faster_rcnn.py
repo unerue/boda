@@ -1,5 +1,5 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserve
-from typing import Union
+from typing import Union, Sequence
 from collections import OrderedDict
 
 import torch
@@ -10,42 +10,53 @@ from ...base_architecture import Neck, Head, Model
 from .configuration_faster_rcnn import FasterRcnnConfig
 from .anchor_generator import AnchorGenerator
 from .rpn import RPNHead, RegionProposalNetwork
+from .roi_heads import RoiHeads
+from ..neck_fpn import FeaturePyramidNetwork
 
 
-class FasterRcnnNeck(Neck):
-    def __init__(self):
-        ...
+class FasterRcnnNeck(FeaturePyramidNetwork):
+    def __init__(
+        self,
+        config,
+        channels: Sequence[int],
+        selected_layers: Sequence[int] = [1, 2, 3],
+        fpn_channels: int = 256,
+        extra_layers: bool = True,
+        num_extra_fpn_layers: int = 2,
+    ) -> None:
+        super().__init__(
+            config,
+            channels,
+            selected_layers,
+            fpn_channels,
+            extra_layers,
+            num_extra_fpn_layers
+        )
 
 
-class FasterRcnnHead(Head):
-    def __init__(self):
-        ...
-
-
-class FasterRCNNHeads(nn.Sequential):
-    def __init__(self, in_channels, layers, dilation):
+class FasterRcnnLinearHead(nn.Sequential):
+    def __init__(self, in_channels, representation_size):
         """
         Args:
             in_channels (int): number of input channels
             layers (list): feature dimensions of each FCN layer
             dilation (int): dilation rate of kernel
         """
-        d = OrderedDict()
-        next_feature = in_channels
-        for i, layer_features in enumerate(layers, 1):
-            d[f'mask{i}'] = nn.Conv2d(
-                next_feature, layer_features, kernel_size=3,
-                stride=1, padding=dilation, dilation=dilation)
-            d[f'relu{i}'] = nn.ReLU()
-            next_feature = layer_features
+        super().__init__()
+        self.layers = nn.Sequential(
+            nn.Flatten(start_dim=1),
+            nn.Linear(in_channels, representation_size),
+            nn.ReLU(),
+            nn.Linear(representation_size, representation_size),
+            nn.ReLU()
+        )
 
-        super().__init__(d)
-        for name, param in self.named_parameters():
-            if 'weight' in name:
-                nn.init.kaiming_normal_(param, mode="fan_out", nonlinearity="relu")
+    def forward(self, inputs):
+        outputs = self.layers(inputs)
+        return outputs
 
 
-class FasterRcnnPredictor(nn.Sequential):
+class FastRcnnPredictHead(nn.Sequential):
     """
     Standard classification + bounding box regression layers
     for Fast R-CNN.
@@ -56,15 +67,16 @@ class FasterRcnnPredictor(nn.Sequential):
 
     def __init__(self, in_channels, num_classes):
         super().__init__()
-        self.cls_score = nn.Linear(in_channels, num_classes)
-        self.bbox_pred = nn.Linear(in_channels, num_classes * 4)
+        self.box_layer = nn.Linear(in_channels, num_classes * 4)
+        self.score_layer = nn.Linear(in_channels, num_classes)
 
     def forward(self, x):
         if x.dim() == 4:
             assert list(x.shape[2:]) == [1, 1]
+
         x = x.flatten(start_dim=1)
-        scores = self.cls_score(x)
-        bbox_deltas = self.bbox_pred(x)
+        bbox_deltas = self.box_layer(x)
+        scores = self.score_layer(x)
 
         return scores, bbox_deltas
 
@@ -160,23 +172,25 @@ class FasterRcnnModel(FasterRcnnPretrained):
         box_roi_pool = MultiScaleRoIAlign(
                 featmap_names=['0', '1', '2', '3'],
                 output_size=7,
-                sampling_ratio=2)
+                sampling_ratio=2
+        )
 
         resolution = box_roi_pool.output_size[0]
         representation_size = 1024
 
-        self.box_head = TwoMLPHead(
+        out_channels = backbone.channels[-1]
+        self.box_head = FasterRcnnLinearHead(
             out_channels * resolution ** 2,
             representation_size
         )
 
         representation_size = 1024
-        box_predictor = FastRCNNPredictor(
+        box_predictor = FastRcnnPredictHead(
             representation_size,
             self.num_classes
         )
 
-        self.roi_heads = RoIHeads(
+        self.roi_heads = RoiHeads(
             box_roi_pool,
             box_head,
             box_predictor,
@@ -190,7 +204,14 @@ class FasterRcnnModel(FasterRcnnPretrained):
             box_detections_per_img
         )
 
-    def forward(self, inputs):
+    def forward(self, inputs, sizes):
+        """
+        Args:
+            inputs:
+                List[Tensor]
+            sizes:
+
+        """
         inputs = self.check_inputs(inputs)
 
         outputs = self.backbone(inputs)
@@ -205,9 +226,7 @@ class FasterRcnnModel(FasterRcnnPretrained):
             pass
         else:
             proposals = self.rpn(inputs, outputs)
-            detections = self.roi_heads(outputs, proposals, inputs.size)
-
-        detections, detector_losses = self.roi_heads(features, proposals, images.image_sizes)
+            detections = self.roi_heads(outputs, proposals, sizes)
 
         # detections = self.transform.postprocess(detections, images.image_sizes, original_image_sizes)
 
