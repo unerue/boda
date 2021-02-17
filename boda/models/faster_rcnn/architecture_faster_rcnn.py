@@ -1,6 +1,6 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserve
-from typing import Union, Sequence
 from collections import OrderedDict
+from typing import List, Union, Sequence
 
 import torch
 from torch import nn, Tensor
@@ -34,7 +34,7 @@ class FasterRcnnNeck(FeaturePyramidNetwork):
         )
 
 
-class FasterRcnnLinearHead(nn.Sequential):
+class LinearHead(nn.Sequential):
     def __init__(self, in_channels, representation_size):
         """
         Args:
@@ -204,17 +204,16 @@ class FasterRcnnModel(FasterRcnnPretrained):
             box_detections_per_img
         )
 
-    def forward(self, inputs, sizes):
+    def forward(self, images: List[Tensor]):
         """
         Args:
-            inputs:
-                List[Tensor]
-            sizes:
-
+            inputs (List[Tensor])
+            sizes (List[int, int])
         """
-        inputs = self.check_inputs(inputs)
+        images = self.check_inputs(images)
+        images = self.transform(images)
 
-        outputs = self.backbone(inputs)
+        outputs = self.backbone(images)
         outputs = {str(i): o for i, o in outputs}
 
         # if isinstance(features, torch.Tensor):
@@ -225,7 +224,7 @@ class FasterRcnnModel(FasterRcnnPretrained):
             #     self.roi_heads(features, proposals, images.image_sizes, targets)
             pass
         else:
-            proposals = self.rpn(inputs, outputs)
+            proposals = self.rpn(images, outputs)
             detections = self.roi_heads(outputs, proposals, sizes)
 
         # detections = self.transform.postprocess(detections, images.image_sizes, original_image_sizes)

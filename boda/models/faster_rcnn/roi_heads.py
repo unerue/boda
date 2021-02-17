@@ -253,7 +253,6 @@ class RoiHeads(nn.Module):
         features: Dict[str, Tensor],
         proposals: List[Tensor],
         image_shapes: List[Tuple[int, int]],
-        targets: Optional[List[Dict[str, Tensor]]] = None
     ):
         # type: (...) -> Tuple[List[Dict[str, Tensor]], Dict[str, Tensor]]
         """
@@ -263,13 +262,6 @@ class RoiHeads(nn.Module):
             image_shapes (List[Tuple[H, W]])
             targets (List[Dict])
         """
-        if targets is not None:
-            for t in targets:
-                # TODO: https://github.com/pytorch/pytorch/issues/26731
-                floating_point_types = (torch.float, torch.double, torch.half)
-                assert t["boxes"].dtype in floating_point_types, 'target boxes must of float type'
-                assert t["labels"].dtype == torch.int64, 'target labels must of int64 type'
-
         labels = None
         regression_targets = None
         matched_idxs = None
