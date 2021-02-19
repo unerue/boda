@@ -95,6 +95,7 @@ class BasicBlock(nn.Module):
 
 class Bottleneck(nn.Module):
     expansion = 4
+
     def __init__(
         self,
         in_planes: int,

@@ -58,5 +58,5 @@ class FasterRcnnConfig(BaseConfig):
         self.box_positive_fraction = 0.25,
         self.bbox_reg_weights = None,
 
-        self.aspect_ratios = ((0.5, 1.0, 2.0),) * len(anchor_sizes)
-        self.anchors = ((32,), (64,), (128,), (256,), (512,))
+        self.aspect_ratios = (0.5, 1.0, 2.0)
+        self.anchors = (32, 64, 128, 256, 512)

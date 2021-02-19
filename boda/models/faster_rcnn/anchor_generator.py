@@ -7,7 +7,7 @@ from torch import nn, Tensor
 from ._utils import ImageList
 
 
-class AnchorGenerator(nn.Module):
+class AnchorGenerator:
     """
     Module that generates anchors for a set of feature maps and
     image sizes. The module support computing anchors at multiple sizes and aspect ratios
@@ -151,10 +151,13 @@ class AnchorGenerator(nn.Module):
         self._cache[key] = anchors
         return anchors
 
-    def forward(self, image_list: ImageList, feature_maps: List[Tensor]) -> List[Tensor]:
+    def __call__(self, image_list: ImageList, sizes, feature_maps: List[Tensor]) -> List[Tensor]:
+        print(feature_maps)
         grid_sizes = list([feature_map.shape[-2:] for feature_map in feature_maps])
         # TODO: delete image_list
-        image_size = image_list.tensors.shape[-2:]
+        image_size = image_list.shape[-2:]
+        # print(sizes)
+        # image_size = sizes
         dtype, device = feature_maps[0].dtype, feature_maps[0].device
 
         strides = [[
@@ -166,7 +169,8 @@ class AnchorGenerator(nn.Module):
         anchors_over_all_feature_maps = self.cached_grid_anchors(grid_sizes, strides)
         anchors: List[List[torch.Tensor]] = []
         # TODO: delete image_list
-        for i in range(len(image_list.image_sizes)):
+        # for i in range(len(image_list.image_sizes)):
+        for i in range(len(sizes)):
             anchors_in_image = \
                 [anchors_per_feature_map for anchors_per_feature_map in anchors_over_all_feature_maps]
             anchors.append(anchors_in_image)

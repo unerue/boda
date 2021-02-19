@@ -126,7 +126,7 @@ class Model(nn.Module, ModelMixin):
             from .file_utils import reporthook
 
             url = 'https://unerue.synology.me/boda/models/'
-            
+
             # print(f'Downloading {name_or_path}.{extension}...', end=' ')
             request.urlretrieve(
                 f'{url}{cls.base_model_prefix}/{name_or_path}.pth',
@@ -170,7 +170,6 @@ class Model(nn.Module, ModelMixin):
     # @classmethod
     # def get_config_dict(cls, model_name_or_path, **kwargs):
     #     raise NotImplementedError
-
     @classmethod
     def check_inputs(cls, inputs):
         """

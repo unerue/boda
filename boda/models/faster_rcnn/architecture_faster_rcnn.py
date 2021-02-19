@@ -1,4 +1,6 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserve
+import os
+import sys
 from collections import OrderedDict
 from typing import List, Union, Sequence
 
@@ -9,9 +11,11 @@ from torchvision.ops import MultiScaleRoIAlign
 from ...base_architecture import Neck, Head, Model
 from .configuration_faster_rcnn import FasterRcnnConfig
 from .anchor_generator import AnchorGenerator
-from .rpn import RPNHead, RegionProposalNetwork
+from .rpn import RpnHead, RegionProposalNetwork
 from .roi_heads import RoiHeads
 from ..neck_fpn import FeaturePyramidNetwork
+from ..backbone_resnet import resnet50
+from ._transform import RcnnTransform
 
 
 class FasterRcnnNeck(FeaturePyramidNetwork):
@@ -101,9 +105,9 @@ class FasterRcnnModel(FasterRcnnPretrained):
     def __init__(
         self,
         config,
-        backbone,
-        neck,
-        head,
+        # backbone,
+        # neck,
+        # head,
         min_size=800,
         max_size=1333,
         rpn_anchor_generator=None,
@@ -133,20 +137,27 @@ class FasterRcnnModel(FasterRcnnPretrained):
         anchor_sizes=(32, 64, 128, 256, 512),
         aspect_ratios=(0.5, 1.0, 2.0)
     ) -> None:
-        num_classes = 91
-        self.backbone = backbone
-        self.neck = neck
+        super().__init__(config)
+        self.num_classes = 91
+
+        self.transform = RcnnTransform(800, 1333, None, None)
+
+        self.backbone = resnet50()
+        self.neck = FasterRcnnNeck(config, self.backbone.channels)
 
         # anchor_sizes = ((32,), (64,), (128,), (256,), (512,))
         anchor_sizes = [[anchor] for anchor in anchor_sizes]
+        print(anchor_sizes)
         # aspect_ratios = ((0.5, 1.0, 2.0),) * len(anchor_sizes)
         aspect_ratios = [aspect_ratios] * len(anchor_sizes)
+        print(aspect_ratios)
         rpn_anchor_generator = AnchorGenerator(
             anchor_sizes, aspect_ratios
         )
 
-        rpn_head = RPNHead(
-                backbone.channels, rpn_anchor_generator.num_anchors_per_location()[0]
+        out_channels = self.neck.channels[-1]
+        rpn_head = RpnHead(
+                out_channels, rpn_anchor_generator.num_anchors_per_location()[0]
         )
 
         rpn_pre_nms_top_n = {
@@ -178,8 +189,7 @@ class FasterRcnnModel(FasterRcnnPretrained):
         resolution = box_roi_pool.output_size[0]
         representation_size = 1024
 
-        out_channels = backbone.channels[-1]
-        self.box_head = FasterRcnnLinearHead(
+        box_head = LinearHead(
             out_channels * resolution ** 2,
             representation_size
         )
@@ -207,37 +217,21 @@ class FasterRcnnModel(FasterRcnnPretrained):
     def forward(self, images: List[Tensor]):
         """
         Args:
-            inputs (List[Tensor])
+            inputs (List[Tensor]): Original image size; do not resize image
             sizes (List[int, int])
         """
         images = self.check_inputs(images)
-        images = self.transform(images)
+        images, targets = self.transform(images)
 
-        outputs = self.backbone(images)
-        outputs = {str(i): o for i, o in outputs}
+        outputs = self.backbone(images.tensors)
+        outputs = self.neck(outputs)
+        outputs = {str(i): o for i, o in enumerate(outputs)}
 
-        # if isinstance(features, torch.Tensor):
-        #     features = OrderedDict([('0', features)])
         if self.training:
-            # proposals, proposal_losses = self.rpn(images, features, targets)
-            # detections, detector_losses = \
-            #     self.roi_heads(features, proposals, images.image_sizes, targets)
-            pass
+            raise NotImplementedError
         else:
-            proposals = self.rpn(images, outputs)
-            detections = self.roi_heads(outputs, proposals, sizes)
+            proposals = self.rpn(images.tensors, images.image_sizes, outputs)
+            detections = self.roi_heads(outputs, proposals, images.image_sizes)
+            detections = self.transform.postprocess(detections, images.image_sizes, original_image_sizes)
 
-        # detections = self.transform.postprocess(detections, images.image_sizes, original_image_sizes)
-
-        # losses = {}
-        # losses.update(detector_losses)
-        # losses.update(proposal_losses)
-
-        # if torch.jit.is_scripting():
-        #     if not self._has_warned:
-        #         warnings.warn("RCNN always returns a (Losses, Detections) tuple in scripting")
-        #         self._has_warned = True
-        #     return losses, detections
-        # else:
-        #     return self.eager_outputs(losses, detections)
-        return outputs
+            return detections

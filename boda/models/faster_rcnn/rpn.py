@@ -3,7 +3,7 @@ import torch
 from torch.nn import functional as F
 from torch import nn, Tensor
 
-from torchvision.ops import boxes as box_ops
+from torchvision.ops.boxes import batched_nms, box_iou, clip_boxes_to_image, remove_small_boxes
 
 from typing import List, Optional, Dict, Tuple
 
@@ -19,14 +19,18 @@ class RpnHead(nn.Module):
         num_anchors (int): number of anchors to be predicted
     """
 
-    def __init__(self, in_channels, num_anchors):
+    def __init__(self, in_channels: int, num_anchors: int):
         super().__init__()
         self.conv = nn.Conv2d(
             in_channels, in_channels, kernel_size=3, stride=1, padding=1
         )
-        self.cls_logits = nn.Conv2d(in_channels, num_anchors, kernel_size=1, stride=1)
-        self.bbox_pred = nn.Conv2d(
+
+        self.box_layer = nn.Conv2d(
             in_channels, num_anchors * 4, kernel_size=1, stride=1
+        )
+
+        self.score_layer = nn.Conv2d(
+            in_channels, num_anchors, kernel_size=1, stride=1
         )
 
         for layer in self.children():
@@ -34,14 +38,15 @@ class RpnHead(nn.Module):
             torch.nn.init.constant_(layer.bias, 0)
 
     def forward(self, x: List[Tensor]) -> Tuple[List[Tensor], List[Tensor]]:
-        logits = []
-        bbox_reg = []
+        boxes = []
+        scores = []
         for feature in x:
+            print(feature.size())
             t = F.relu(self.conv(feature))
-            logits.append(self.cls_logits(t))
-            bbox_reg.append(self.bbox_pred(t))
+            boxes.append(self.box_layer(t))
+            scores.append(self.score_layer(t))
 
-        return logits, bbox_reg
+        return scores, boxes
 
 
 def permute_and_flatten(layer, N, A, C, H, W):
@@ -111,14 +116,6 @@ class RegionProposalNetwork(nn.Module):
             on training or evaluation
         nms_thresh (float): NMS threshold used for postprocessing the RPN proposals
     """
-    __annotations__ = {
-        'box_coder': BoxCoder,
-        'proposal_matcher': Matcher,
-        'fg_bg_sampler': BalancedPositiveNegativeSampler,
-        'pre_nms_top_n': Dict[str, int],
-        'post_nms_top_n': Dict[str, int],
-    }
-
     def __init__(
         self,
         anchor_generator,
@@ -143,7 +140,7 @@ class RegionProposalNetwork(nn.Module):
         self.box_coder = BoxCoder(weights=(1.0, 1.0, 1.0, 1.0))
 
         # used during training
-        self.box_similarity = box_ops.box_iou
+        self.box_similarity = box_iou
 
         self.proposal_matcher = Matcher(
             fg_iou_thresh,
@@ -204,11 +201,11 @@ class RegionProposalNetwork(nn.Module):
         objectness = objectness.reshape(num_images, -1)
 
         levels = [
-            torch.full((n,), idx, dtype=torch.int64, device=device)
-            for idx, n in enumerate(num_anchors_per_level)
+            torch.full((n,), i, dtype=torch.int64, device=device)
+            for i, n in enumerate(num_anchors_per_level)
         ]
 
-        levels = torch.cat(levels, 0)
+        levels = torch.cat(levels, dim=0)
         levels = levels.reshape(1, -1).expand_as(objectness)
 
         # select top_n boxes independently per level before applying nms
@@ -226,10 +223,10 @@ class RegionProposalNetwork(nn.Module):
         final_boxes = []
         final_scores = []
         for boxes, scores, lvl, img_shape in zip(proposals, objectness_prob, levels, image_shapes):
-            boxes = box_ops.clip_boxes_to_image(boxes, img_shape)
+            boxes = clip_boxes_to_image(boxes, img_shape)
 
             # remove small boxes
-            keep = box_ops.remove_small_boxes(boxes, self.min_size)
+            keep = remove_small_boxes(boxes, self.min_size)
             boxes, scores, lvl = boxes[keep], scores[keep], lvl[keep]
 
             # remove low scoring boxes
@@ -238,7 +235,7 @@ class RegionProposalNetwork(nn.Module):
             boxes, scores, lvl = boxes[keep], scores[keep], lvl[keep]
 
             # non-maximum suppression, independently done per level
-            keep = box_ops.batched_nms(boxes, scores, lvl, self.nms_thresh)
+            keep = batched_nms(boxes, scores, lvl, self.nms_thresh)
 
             # keep only topk scoring predictions
             keep = keep[:self.post_nms_top_n()]
@@ -246,12 +243,14 @@ class RegionProposalNetwork(nn.Module):
 
             final_boxes.append(boxes)
             final_scores.append(scores)
+
         return final_boxes, final_scores
 
     def forward(
         self,
-        images,       # type: ImageList
-        features,     # type: Dict[str, Tensor]
+        images: ImageList,
+        sizes,
+        features: Dict[str, Tensor],
         targets: Optional[List[Dict[str, Tensor]]] = None
     ) -> Tuple[List[Tensor], Dict[str, Tensor]]:
         """
@@ -271,8 +270,9 @@ class RegionProposalNetwork(nn.Module):
         """
         # RPN uses all feature maps that are available
         features = list(features.values())
+
         objectness, pred_bbox_deltas = self.head(features)
-        anchors = self.anchor_generator(images, features)
+        anchors = self.anchor_generator(images, sizes, features)
 
         num_images = len(anchors)
         num_anchors_per_level_shape_tensors = [o[0].shape for o in objectness]
@@ -284,6 +284,9 @@ class RegionProposalNetwork(nn.Module):
         # the proposals
         proposals = self.box_coder.decode(pred_bbox_deltas.detach(), anchors)
         proposals = proposals.view(num_images, -1, 4)
-        boxes, scores = self.filter_proposals(proposals, objectness, images.image_sizes, num_anchors_per_level)
-
+        # boxes, scores = self.filter_proposals(proposals, objectness, images.image_sizes, num_anchors_per_level)
+        boxes, scores = self.filter_proposals(proposals, objectness, sizes, num_anchors_per_level)
+        print('#'*100)
+        print(boxes[0].size(), len(boxes))
+        print(torch.stack(boxes).size())
         return boxes

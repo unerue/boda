@@ -7,8 +7,9 @@ from torch import nn, Tensor
 
 from torchvision.ops import boxes as box_ops
 from torchvision.ops import roi_align
+from torchvision.ops.boxes import box_iou, clip_boxes_to_image, remove_small_boxes, batched_nms
 
-from . import _utils as det_utils
+from ._utils import BoxCoder, Matcher, BalancedPositiveNegativeSampler
 
 from typing import Optional, List, Dict, Tuple
 
@@ -33,8 +34,6 @@ def project_masks_on_boxes(gt_masks, boxes, matched_idxs, M):
 # temporarily for paste_mask_in_image
 def expand_boxes(boxes, scale):
     # type: (Tensor, float) -> Tensor
-    if torchvision._is_tracing():
-        return _onnx_expand_boxes(boxes, scale)
     w_half = (boxes[:, 2] - boxes[:, 0]) * .5
     h_half = (boxes[:, 3] - boxes[:, 1]) * .5
     x_c = (boxes[:, 2] + boxes[:, 0]) * .5
@@ -113,20 +112,14 @@ def paste_masks_in_image(masks, boxes, img_shape, padding=1):
 
 
 class RoiHeads(nn.Module):
-    __annotations__ = {
-        'box_coder': det_utils.BoxCoder,
-        'proposal_matcher': det_utils.Matcher,
-        'fg_bg_sampler': det_utils.BalancedPositiveNegativeSampler,
-    }
-
     def __init__(
         self,
-        box_roi_pool,
-        box_head,
-        box_predictor,
+        box_roi_pool: nn.Module,
+        box_head: nn.Module,
+        box_predictor: nn.Module,
         # Faster R-CNN training
-        fg_iou_thresh, 
-        bg_iou_thresh,
+        fg_iou_thresh: float, 
+        bg_iou_thresh: float,
         batch_size_per_image,
         positive_fraction,
         bbox_reg_weights,
@@ -135,27 +128,28 @@ class RoiHeads(nn.Module):
         nms_thresh,
         detections_per_img,
         # Mask
-        mask_roi_pool=None,
-        mask_head=None,
-        mask_predictor=None,
+        mask_roi_pool: Optional[nn.Module] = None,
+        mask_head: Optional[nn.Module] = None,
+        mask_predictor: Optional[nn.Module] = None,
     ) -> None:
         super().__init__()
 
-        self.box_similarity = box_ops.box_iou
+        self.box_similarity = box_iou
         # assign ground-truth boxes for each proposal
-        self.proposal_matcher = det_utils.Matcher(
+        self.proposal_matcher = Matcher(
             fg_iou_thresh,
             bg_iou_thresh,
-            allow_low_quality_matches=False)
+            allow_low_quality_matches=False
+        )
 
-        self.fg_bg_sampler = det_utils.BalancedPositiveNegativeSampler(
+        self.fg_bg_sampler = BalancedPositiveNegativeSampler(
             batch_size_per_image,
             positive_fraction)
 
         if bbox_reg_weights is None:
             bbox_reg_weights = (10., 10., 5., 5.)
 
-        self.box_coder = det_utils.BoxCoder(bbox_reg_weights)
+        self.box_coder = BoxCoder(bbox_reg_weights)
 
         self.box_roi_pool = box_roi_pool
         self.box_head = box_head
@@ -178,7 +172,7 @@ class RoiHeads(nn.Module):
             return False
         return True
 
-    def subsample(self, labels):
+    def subsample(self, labels: List[Tensor]) -> List[Tensor]:
         # type: (List[Tensor]) -> List[Tensor]
         sampled_pos_inds, sampled_neg_inds = self.fg_bg_sampler(labels)
         sampled_inds = []
@@ -212,7 +206,7 @@ class RoiHeads(nn.Module):
         all_scores = []
         all_labels = []
         for boxes, scores, image_shape in zip(pred_boxes_list, pred_scores_list, image_shapes):
-            boxes = box_ops.clip_boxes_to_image(boxes, image_shape)
+            boxes = clip_boxes_to_image(boxes, image_shape)
 
             # create labels for each prediction
             labels = torch.arange(num_classes, device=device)
@@ -233,11 +227,11 @@ class RoiHeads(nn.Module):
             boxes, scores, labels = boxes[inds], scores[inds], labels[inds]
 
             # remove empty boxes
-            keep = box_ops.remove_small_boxes(boxes, min_size=1e-2)
+            keep = remove_small_boxes(boxes, min_size=1e-2)
             boxes, scores, labels = boxes[keep], scores[keep], labels[keep]
 
             # non-maximum suppression, independently done per class
-            keep = box_ops.batched_nms(boxes, scores, labels, self.nms_thresh)
+            keep = batched_nms(boxes, scores, labels, self.nms_thresh)
             # keep only topk scoring predictions
             keep = keep[:self.detections_per_img]
             boxes, scores, labels = boxes[keep], scores[keep], labels[keep]
@@ -253,8 +247,7 @@ class RoiHeads(nn.Module):
         features: Dict[str, Tensor],
         proposals: List[Tensor],
         image_shapes: List[Tuple[int, int]],
-    ):
-        # type: (...) -> Tuple[List[Dict[str, Tensor]], Dict[str, Tensor]]
+    ) -> Tuple[List[Dict[str, Tensor]], Dict[str, Tensor]]:
         """
         Args:
             features (List[Tensor])
@@ -265,8 +258,9 @@ class RoiHeads(nn.Module):
         labels = None
         regression_targets = None
         matched_idxs = None
-
+        print('='*100)
         box_features = self.box_roi_pool(features, proposals, image_shapes)
+        print('#'*100, box_features.size())
         box_features = self.box_head(box_features)
         class_logits, box_regression = self.box_predictor(box_features)
 
@@ -274,15 +268,14 @@ class RoiHeads(nn.Module):
 
         boxes, scores, labels = \
             self.postprocess_detections(class_logits, box_regression, proposals, image_shapes)
+
         num_images = len(boxes)
         for i in range(num_images):
-            result.append(
-                {
-                    "boxes": boxes[i],
-                    "labels": labels[i],
-                    "scores": scores[i],
-                }
-            )
+            result.append({
+                'boxes': boxes[i],
+                'labels': labels[i],
+                'scores': scores[i],
+            })
 
         if self.has_mask():
             mask_proposals = [p["boxes"] for p in result]
@@ -293,7 +286,7 @@ class RoiHeads(nn.Module):
                 mask_features = self.mask_head(mask_features)
                 mask_logits = self.mask_predictor(mask_features)
             else:
-                raise Exception("Expected mask_roi_pool to be not None")
+                raise Exception('Expected mask_roi_pool to be not None')
 
             if self.training:
                 # assert targets is not None

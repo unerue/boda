@@ -144,7 +144,7 @@ def encode_boxes(reference_boxes: Tensor, proposals: Tensor, weights: Tensor) ->
     return targets
 
 
-class BoxCoder(object):
+class BoxCoder:
     """
     This class encodes and decodes a set of bounding boxes into
     the representation used for training the regressors.
@@ -246,7 +246,7 @@ class BoxCoder(object):
         return pred_boxes
 
 
-class Matcher(object):
+class Matcher:
     """
     This class assigns to each predicted "element" (e.g., a box) a ground-truth
     element. Each predicted element will have exactly zero or one matches; each
@@ -267,8 +267,12 @@ class Matcher(object):
         'BETWEEN_THRESHOLDS': int,
     }
 
-    def __init__(self, high_threshold, low_threshold, allow_low_quality_matches=False):
-        # type: (float, float, bool) -> None
+    def __init__(
+        self,
+        high_threshold: float,
+        low_threshold: float,
+        allow_low_quality_matches: bool = False
+    ) -> None:
         """
         Args:
             high_threshold (float): quality values greater than or equal to
@@ -289,7 +293,7 @@ class Matcher(object):
         self.low_threshold = low_threshold
         self.allow_low_quality_matches = allow_low_quality_matches
 
-    def __call__(self, match_quality_matrix):
+    def __call__(self, match_quality_matrix: Tensor) -> Tensor:
         """
         Args:
             match_quality_matrix (Tensor[float]): an MxN tensor, containing the
@@ -362,19 +366,6 @@ class Matcher(object):
 
         pred_inds_to_update = gt_pred_pairs_of_highest_quality[1]
         matches[pred_inds_to_update] = all_matches[pred_inds_to_update]
-
-
-def smooth_l1_loss(input, target, beta: float = 1. / 9, size_average: bool = True):
-    """
-    very similar to the smooth_l1_loss from pytorch, but with
-    the extra beta parameter
-    """
-    n = torch.abs(input - target)
-    cond = n < beta
-    loss = torch.where(cond, 0.5 * n ** 2 / beta, n - 0.5 * beta)
-    if size_average:
-        return loss.mean()
-    return loss.sum()
 
 
 def overwrite_eps(model, eps):
