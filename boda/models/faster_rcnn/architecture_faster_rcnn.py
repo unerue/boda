@@ -98,7 +98,7 @@ class FasterRcnnPretrained(Model):
 
 
 class FasterRcnnModel(FasterRcnnPretrained):
-    """Mask R-CNN
+    """Faster R-CNN
     """
     model_name = 'faster_rcnn'
 
@@ -141,16 +141,12 @@ class FasterRcnnModel(FasterRcnnPretrained):
         self.num_classes = 91
 
         self.transform = RcnnTransform(800, 1333, None, None)
-
         self.backbone = resnet50()
         self.neck = FasterRcnnNeck(config, self.backbone.channels)
 
-        # anchor_sizes = ((32,), (64,), (128,), (256,), (512,))
         anchor_sizes = [[anchor] for anchor in anchor_sizes]
-        print(anchor_sizes)
-        # aspect_ratios = ((0.5, 1.0, 2.0),) * len(anchor_sizes)
         aspect_ratios = [aspect_ratios] * len(anchor_sizes)
-        print(aspect_ratios)
+
         rpn_anchor_generator = AnchorGenerator(
             anchor_sizes, aspect_ratios
         )
@@ -221,17 +217,21 @@ class FasterRcnnModel(FasterRcnnPretrained):
             sizes (List[int, int])
         """
         images = self.check_inputs(images)
-        images, targets = self.transform(images)
+        # images, targets = self.transform(images)
+        images, image_sizes, targets = self.transform(images)
 
-        outputs = self.backbone(images.tensors)
+        # outputs = self.backbone(images.tensors)
+        outputs = self.backbone(images)
         outputs = self.neck(outputs)
         outputs = {str(i): o for i, o in enumerate(outputs)}
 
         if self.training:
             raise NotImplementedError
         else:
-            proposals = self.rpn(images.tensors, images.image_sizes, outputs)
-            detections = self.roi_heads(outputs, proposals, images.image_sizes)
-            detections = self.transform.postprocess(detections, images.image_sizes, original_image_sizes)
+            # proposals = self.rpn(images.tensors, images.image_sizes, outputs)
+            # detections = self.roi_heads(outputs, proposals, images.image_sizes)
+            proposals = self.rpn(images, image_sizes, outputs)
+            detections = self.roi_heads(outputs, proposals, image_sizes)
+            # detections = self.transform.postprocess(detections, images.image_sizes, original_image_sizes)
 
             return detections

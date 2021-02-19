@@ -18,6 +18,9 @@ def _resize_image_and_masks(
     self_max_size: float,
     target: Optional[Dict[str, Tensor]]
 ) -> Tuple[Tensor, Optional[Dict[str, Tensor]]]:
+    """
+    Args:
+    """
     im_shape = torch.tensor(image.shape[-2:])
     min_size = float(torch.min(im_shape))
     max_size = float(torch.max(im_shape))
@@ -49,6 +52,9 @@ def _resize_image_and_masks(
 
 
 def resize_keypoints(keypoints: Tensor, original_size: List[int], new_size: List[int]) -> Tensor:
+    """
+    Args
+    """
     ratios = [
         torch.tensor(s, dtype=torch.float32, device=keypoints.device) /
         torch.tensor(s_orig, dtype=torch.float32, device=keypoints.device)
@@ -68,6 +74,10 @@ def resize_keypoints(keypoints: Tensor, original_size: List[int], new_size: List
 
 
 def resize_boxes(boxes: Tensor, original_size: List[int], new_size: List[int]) -> Tensor:
+    """
+    Args:
+
+    """
     ratios = [
         torch.tensor(s, dtype=torch.float32, device=boxes.device) /
         torch.tensor(s_orig, dtype=torch.float32, device=boxes.device)
@@ -96,7 +106,18 @@ class RcnnTransform:
 
     It returns a ImageList for the inputs, and a List[Dict[Tensor]] for the targets
     """
-    def __init__(self, min_size: int, max_size: int, image_mean: List[float], image_std: List[float]):
+    def __init__(
+        self,
+        min_size: int,
+        max_size: int,
+        image_mean: List[float],
+        image_std: List[float]
+    ) -> None:
+        """
+        Args:
+            min_size ():
+            max_size ():
+        """
         # super().__init__()
         if not isinstance(min_size, (list, tuple)):
             min_size = (min_size,)
@@ -112,6 +133,11 @@ class RcnnTransform:
         targets: Optional[List[Dict[str, Tensor]]] = None,
         training: bool = False
     ) -> Tuple[ImageList, Optional[List[Dict[str, Tensor]]]]:
+        """
+        Args:
+            images ()
+            targets ()
+        """
         self.training = training
         if targets is not None:
             targets_copy: List[Dict[str, Tensor]] = []
@@ -146,11 +172,13 @@ class RcnnTransform:
             assert len(image_size) == 2
             image_sizes_list.append((image_size[0], image_size[1]))
 
-        image_list = ImageList(images, image_sizes_list)
+        # image_list = ImageList(images, image_sizes_list)
 
-        return image_list, targets
+        # return image_list, targets
+        return images, image_sizes_list, targets
 
     def normalize(self, image):
+        """TODO: Will be remove"""
         if not image.is_floating_point():
             raise TypeError(
                 f'Expected input images to be of floating type (in range [0, 1]), '
@@ -172,6 +200,9 @@ class RcnnTransform:
         return k[index]
 
     def resize(self, image: Tensor, target: Optional[Dict[str, Tensor]]) -> Tuple[Tensor, Optional[Dict[str, Tensor]]]:
+        """
+        Args:
+        """
         h, w = image.shape[-2:]
         if self.training:
             size = float(self.torch_choice(self.min_size))
@@ -196,6 +227,9 @@ class RcnnTransform:
         return image, target
 
     def max_by_axis(self, the_list: List[List[int]]) -> List[int]:
+        """
+        Args
+        """
         maxes = the_list[0]
         for sublist in the_list[1:]:
             for index, item in enumerate(sublist):
@@ -204,6 +238,9 @@ class RcnnTransform:
         return maxes
 
     def batch_images(self, images: List[Tensor], size_divisible: int = 32):
+        """
+        Args:
+        """
         max_size = self.max_by_axis([list(img.shape) for img in images])
         stride = float(size_divisible)
         max_size = list(max_size)
@@ -222,7 +259,13 @@ class RcnnTransform:
         result: List[Dict[str, Tensor]],
         image_shapes: List[Tuple[int, int]],
         original_image_sizes: List[Tuple[int, int]]
-    )-> List[Dict[str, Tensor]]:
+    ) -> List[Dict[str, Tensor]]:
+        """
+        Args:
+            inputs 
+            image_sizes
+            original_image_sizes
+        """
         if self.training:
             return result
 

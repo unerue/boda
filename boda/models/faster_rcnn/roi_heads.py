@@ -1,39 +1,49 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserve
-import torch
-import torchvision
+from typing import Optional, List, Dict, Tuple
 
+import torch
 import torch.nn.functional as F
 from torch import nn, Tensor
 
-from torchvision.ops import boxes as box_ops
 from torchvision.ops import roi_align
 from torchvision.ops.boxes import box_iou, clip_boxes_to_image, remove_small_boxes, batched_nms
 
 from ._utils import BoxCoder, Matcher, BalancedPositiveNegativeSampler
 
-from typing import Optional, List, Dict, Tuple
 
-
-def project_masks_on_boxes(gt_masks, boxes, matched_idxs, M):
-    # type: (Tensor, Tensor, Tensor, int) -> Tensor
+def project_masks_on_boxes(
+    true_masks: Tensor,
+    boxes: Tensor,
+    matched_indexes: Tensor,
+    M: int
+) -> Tensor:
     """
     Given segmentation masks and the bounding boxes corresponding
     to the location of the masks in the image, this function
     crops and resizes the masks in the position defined by the
     boxes. This prepares the masks for them to be fed to the
     loss computation as the targets.
+    Args:
+        true_masks
+        boxes
+        matched_indexes
+        M?: output size
     """
-    matched_idxs = matched_idxs.to(boxes)
-    rois = torch.cat([matched_idxs[:, None], boxes], dim=1)
-    gt_masks = gt_masks[:, None].to(rois)
-    return roi_align(gt_masks, rois, (M, M), 1.)[:, 0]
+    matched_indexes = matched_indexes.to(boxes)
+    rois = torch.cat([matched_indexes[:, None], boxes], dim=1)
+    true_masks = true_masks[:, None].to(rois)
+    return roi_align(true_masks, rois, (M, M), 1.)[:, 0]
 
 
 # the next two functions should be merged inside Masker
 # but are kept here for the moment while we need them
 # temporarily for paste_mask_in_image
-def expand_boxes(boxes, scale):
-    # type: (Tensor, float) -> Tensor
+def expand_boxes(boxes: Tensor, scale: float) -> Tensor:
+    """
+    Args:
+        boxes
+        scale
+    """
     w_half = (boxes[:, 2] - boxes[:, 0]) * .5
     h_half = (boxes[:, 3] - boxes[:, 1]) * .5
     x_c = (boxes[:, 2] + boxes[:, 0]) * .5
@@ -47,17 +57,24 @@ def expand_boxes(boxes, scale):
     boxes_exp[:, 2] = x_c + w_half
     boxes_exp[:, 1] = y_c - h_half
     boxes_exp[:, 3] = y_c + h_half
+
     return boxes_exp
 
 
 # @torch.jit.unused
-def expand_masks_tracing_scale(M, padding):
-    # type: (int, int) -> float
+def expand_masks_tracing_scale(M: int, padding: int) -> float:
+    """
+    Args:
+    """
     return torch.tensor(M + 2 * padding).to(torch.float32) / torch.tensor(M).to(torch.float32)
 
 
-def expand_masks(mask, padding):
-    # type: (Tensor, int) -> Tuple[Tensor, float]
+def expand_masks(mask: Tensor, padding: int) -> Tuple[Tensor, float]:
+    """
+    Args:
+        mask
+        padding
+    """
     M = mask.shape[-1]
     if torch._C._get_tracing_state():  # could not import is_tracing(), not sure why
         scale = expand_masks_tracing_scale(M, padding)
@@ -67,8 +84,10 @@ def expand_masks(mask, padding):
     return padded_mask, scale
 
 
-def paste_mask_in_image(mask, box, im_h, im_w):
-    # type: (Tensor, Tensor, int, int) -> Tensor
+def paste_mask_in_image(mask: Tensor, box: Tensor, im_h: int, im_w: int) -> Tensor:
+    """
+    Args:
+    """
     TO_REMOVE = 1
     w = int(box[2] - box[0] + TO_REMOVE)
     h = int(box[3] - box[1] + TO_REMOVE)
@@ -95,6 +114,7 @@ def paste_mask_in_image(mask, box, im_h, im_w):
 
 
 def paste_masks_in_image(masks, boxes, img_shape, padding=1):
+    """"""
     # type: (Tensor, Tensor, Tuple[int, int], int) -> Tensor
     masks, scale = expand_masks(masks, padding=padding)
     boxes = expand_boxes(boxes, scale).to(dtype=torch.int64)
@@ -118,7 +138,7 @@ class RoiHeads(nn.Module):
         box_head: nn.Module,
         box_predictor: nn.Module,
         # Faster R-CNN training
-        fg_iou_thresh: float, 
+        fg_iou_thresh: float,
         bg_iou_thresh: float,
         batch_size_per_image,
         positive_fraction,
@@ -132,8 +152,25 @@ class RoiHeads(nn.Module):
         mask_head: Optional[nn.Module] = None,
         mask_predictor: Optional[nn.Module] = None,
     ) -> None:
-        super().__init__()
+        """
+        Args:
+            box_roi_pool
+            box_head
+            box_predictor
+            fg_iou_threshold
+            bg_iou_threshold
+            batch_size_per_image
+            positive_fraction
+            box_weights
+            score_threshold
+            nms_threshold
+            detects_per_image
 
+            mask_roi_pool
+            mask_head
+            mask_predictor
+        """
+        super().__init__()
         self.box_similarity = box_iou
         # assign ground-truth boxes for each proposal
         self.proposal_matcher = Matcher(

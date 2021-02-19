@@ -29,6 +29,9 @@ test_fcos.py
 test_backbone.py
 test_centermask.py
 eval_yolact.py
+test_faster_rcnn.py
+test_mask_rcnn.py
+test_keypoint_rcnn.py
 
 logo.pptx
 *.pth

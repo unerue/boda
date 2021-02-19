@@ -14,11 +14,11 @@ from ._utils import ImageList, BoxCoder, Matcher, BalancedPositiveNegativeSample
 class RpnHead(nn.Module):
     """
     Adds a simple RPN Head with classification and regression heads
+
     Args:
         in_channels (int): number of channels of the input feature
         num_anchors (int): number of anchors to be predicted
     """
-
     def __init__(self, in_channels: int, num_anchors: int):
         super().__init__()
         self.conv = nn.Conv2d(
@@ -38,6 +38,10 @@ class RpnHead(nn.Module):
             torch.nn.init.constant_(layer.bias, 0)
 
     def forward(self, x: List[Tensor]) -> Tuple[List[Tensor], List[Tensor]]:
+        """
+        Args:
+        Returns:
+        """
         boxes = []
         scores = []
         for feature in x:
@@ -49,7 +53,10 @@ class RpnHead(nn.Module):
         return scores, boxes
 
 
-def permute_and_flatten(layer, N, A, C, H, W):
+def permute_and_flatten(layer: Tensor, N: int, A: int, C: int, H: int, W: int) -> Tensor:
+    """
+    Args:
+    """
     # type: (Tensor, int, int, int, int, int) -> Tensor
     layer = layer.view(N, -1, C, H, W)
     layer = layer.permute(0, 3, 4, 1, 2)
@@ -58,6 +65,9 @@ def permute_and_flatten(layer, N, A, C, H, W):
 
 
 def concat_box_prediction_layers(box_cls, box_regression):
+    """
+    Args:
+    """
     # type: (List[Tensor], List[Tensor]) -> Tuple[Tensor, Tensor]
     box_cls_flattened = []
     box_regression_flattened = []
@@ -175,6 +185,10 @@ class RegionProposalNetwork(nn.Module):
         objectness: Tensor,
         num_anchors_per_level: List[int]
     ) -> Tensor:
+        """
+        Args:
+        Returns:
+        """
         r = []
         offset = 0
         for ob in objectness.split(num_anchors_per_level, 1):
@@ -194,6 +208,10 @@ class RegionProposalNetwork(nn.Module):
         image_shapes: List[Tuple[int, int]],
         num_anchors_per_level: List[int]
     ) -> Tuple[List[Tensor], List[Tensor]]:
+        """
+        Args:
+        Returns:
+        """
         num_images = proposals.shape[0]
         device = proposals.device
         # do not backprop throught objectness
@@ -286,7 +304,5 @@ class RegionProposalNetwork(nn.Module):
         proposals = proposals.view(num_images, -1, 4)
         # boxes, scores = self.filter_proposals(proposals, objectness, images.image_sizes, num_anchors_per_level)
         boxes, scores = self.filter_proposals(proposals, objectness, sizes, num_anchors_per_level)
-        print('#'*100)
-        print(boxes[0].size(), len(boxes))
-        print(torch.stack(boxes).size())
+
         return boxes

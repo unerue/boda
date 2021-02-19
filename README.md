@@ -53,3 +53,31 @@ print(losses)
 |SOLOv2|🙂|❌|✔️|||
 |[CenterMask]()|😡|❌|❌|||
 |YOLACT EDGE|😡|❌|❌|||
+||
+
+## Pretrained Model Configurations
+
+|Model|Config name|Status|Original|Ours|
+|:----|:----|:------:|-------:|---:|
+|[SSD](boda/models/ssd/)|`ssd-base`|🙂|||
+|                       |`ssd-512`|😡|||
+|[Faster R-CNN]()|`faster-rcnn-base`|🙂|||
+|                |`faster-rcnn-r101`|😡|||
+|[FCIS]()|`fcis-base`|😡|||
+|Mask R-CNN|`mask-rcnn-base`|😡|||
+|          |`mask-rcnn-r50`|😡|||
+|Keypoint R-CNN|`keypoint-rcnn-base`|🙂|||
+|              |`keypoint-rcnn-mobile`|😡|||
+|[FCOS](boda/models/fcos/)|`fcos-base`|🙂|||
+|PolarMask|`polarmask-base`|😡|||
+|YOLOv4|`yolov4-base`|😡|||
+|[YOLACT](boda/models/yolact/)|`yolact-base`|😆|||
+|                             |`yolact-r101`|😡|||
+|                             |`yolact-r101-300`|😡|||
+|                             |`yolact-r101-700`|😡|||
+|[SOLOv1](boda/models/solov1/)|`solov1-base`|🙂|||
+|                             |`solov1-r101`|😡|||
+|SOLOv2|`solov2-base`|😡||||
+|[CenterMask]()|`centermask-base`|😡|||
+|YOLACT EDGE|`yolact-edge-base`|😡|||
+||

@@ -3,15 +3,15 @@ from typing import Union, Any, Sequence, List
 from ...base_configuration import BaseConfig
 
 
-class FasterRcnnConfig(BaseConfig):
-    """Configuration for Faster R-CNN
+class MaskRcnnConfig(BaseConfig):
+    """Configuration for Mask R-CNN
 
     Args:
         max_size ():
         padding ():
         proto_net_structure (List):
     """
-    config_name = 'fcos'
+    config_name = 'mask_rcnn'
 
     def __init__(
         self,
@@ -81,5 +81,3 @@ class FasterRcnnConfig(BaseConfig):
         self.box_batch_size_per_image = box_batch_size_per_image
         self.box_positive_fraction = box_positive_fraction
         self.bbox_reg_weights = bbox_reg_weights
-
-        
