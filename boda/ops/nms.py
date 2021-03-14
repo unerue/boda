@@ -1,3 +1,12 @@
+import torch
+import torchvision
+
+
+
+from torch.ops.torchvision import nms
+
+
+
 def nms_cpu(boxes, confs, nms_thresh=0.5, min_mode=False):
     # print(boxes.shape)
     x1 = boxes[:, 0]

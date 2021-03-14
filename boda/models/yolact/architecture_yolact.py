@@ -430,10 +430,13 @@ class YolactModel(YolactPretrained):
                 if module.bias is not None:
                     module.bias.data.zero_()
 
-    def forward(self, inputs: List[Tensor]) -> Dict[str, List[Tensor]]:
+    def forward(self, inputs: List[Tensor], targets: Dict[str, Tensor] = None) -> Dict[str, List[Tensor]]:
         """
+        Do not transform resized image, expected original image
+
         Args:
             inputs (:obj:`List[FloatTensor[B, C, H, W]]`):
+            targets (:obj:):
 
         `check_inputs` returns :obj:`FloatTensor[B, C, H, W]`.
         `backbone` returns :obj:`List[FloatTensor[B, C, H, W]`.
@@ -446,8 +449,11 @@ class YolactModel(YolactPretrained):
                 `priors` (:obj:`FloatTensor[N, 4]`):
                 `prototype_masks` (:obj:`FloatTensor[B, H, W, P]`):
                 `semantic_masks` (:obj:`FloatTensor[B, C, H, W]`):
+                `size` (:obj:Tuple[int, int]):
         """
         inputs = self.check_inputs(inputs)
+        # TODO: create resize modules for keep aspect ratio or min_size, h, w?
+        inputs = F.interpolate(inputs, size=(self.config.max_size, self.config.max_size), mode='bilinear')
         self.config.device = inputs.device
 
         self.config.size = (inputs.size(2), inputs.size(3))
@@ -480,6 +486,7 @@ class YolactModel(YolactPretrained):
             return return_dict
         else:
             return_dict['scores'] = F.softmax(return_dict['scores'], dim=-1)
+            # TODO: ah si ba!! What should I do?!
             from .inference_yolact import YolactInference
             return_dict = YolactInference(81)(return_dict)
             return return_dict

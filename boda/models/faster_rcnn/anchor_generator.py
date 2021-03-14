@@ -60,6 +60,14 @@ class AnchorGenerator:
         dtype: torch.dtype = torch.float32,
         device: torch.device = torch.device('cpu')
     ) -> Tensor:
+        """
+        Args:
+            scales ()
+            aspect_ratios ():
+            dtype ():
+            device ():
+        Returns:
+        """
         scales = torch.as_tensor(scales, dtype=dtype, device=device)
         aspect_ratios = torch.as_tensor(aspect_ratios, dtype=dtype, device=device)
         h_ratios = torch.sqrt(aspect_ratios)
@@ -73,6 +81,7 @@ class AnchorGenerator:
         return base_anchors.round()
 
     def set_cell_anchors(self, dtype: torch.dtype, device: torch.device):
+        """"""
         if self.cell_anchors is not None:
             cell_anchors = self.cell_anchors
             assert cell_anchors is not None
@@ -93,6 +102,7 @@ class AnchorGenerator:
         self.cell_anchors = cell_anchors
 
     def num_anchors_per_location(self):
+        """"""
         return [len(s) * len(a) for s, a in zip(self.sizes, self.aspect_ratios)]
 
     # For every combination of (a, (g, s), i) in (self.cell_anchors, zip(grid_sizes, strides), 0:2),
@@ -102,6 +112,10 @@ class AnchorGenerator:
         grid_sizes: List[List[int]],
         strides: List[List[Tensor]]
     ) -> List[Tensor]:
+        """
+        Args:
+        Returns:
+        """
         anchors = []
         cell_anchors = self.cell_anchors
         assert cell_anchors is not None
@@ -120,12 +134,8 @@ class AnchorGenerator:
             device = base_anchors.device
 
             # For output anchor, compute [x_center, y_center, x_center, y_center]
-            shifts_x = torch.arange(
-                0, grid_width, dtype=torch.float32, device=device
-            ) * stride_width
-            shifts_y = torch.arange(
-                0, grid_height, dtype=torch.float32, device=device
-            ) * stride_height
+            shifts_x = torch.arange(0, grid_width, dtype=torch.float32, device=device) * stride_width
+            shifts_y = torch.arange(0, grid_height, dtype=torch.float32, device=device) * stride_height
             shift_y, shift_x = torch.meshgrid(shifts_y, shifts_x)
             shift_x = shift_x.reshape(-1)
             shift_y = shift_y.reshape(-1)
@@ -144,6 +154,10 @@ class AnchorGenerator:
         grid_sizes: List[List[int]],
         strides: List[List[Tensor]]
     ) -> List[Tensor]:
+        """
+        Args:
+        Returns:
+        """
         key = str(grid_sizes) + str(strides)
         if key in self._cache:
             return self._cache[key]
@@ -152,7 +166,10 @@ class AnchorGenerator:
         return anchors
 
     def __call__(self, image_list: ImageList, sizes, feature_maps: List[Tensor]) -> List[Tensor]:
-        print(feature_maps)
+        """
+        Args:
+        Returns:
+        """
         grid_sizes = list([feature_map.shape[-2:] for feature_map in feature_maps])
         # TODO: delete image_list
         image_size = image_list.shape[-2:]

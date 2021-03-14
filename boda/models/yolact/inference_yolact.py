@@ -60,10 +60,24 @@ class YolactInference:
         boxes = decoded_boxes[keep, :]
         masks = pred_masks[batch_index, keep, :]
 
+        # print(boxes.size(), scores.size())
         if scores.size(1) == 0:
             return None
 
         boxes, masks, scores, labels = self.nms(boxes, scores, masks)
+        # print(boxes.size(), masks.size(), scores.size(), labels.size())
+
+        # import torchvision.ops as ops
+
+        # keeps = []
+        # for i in range(scores.size(0)):
+        #     # print(scores[i, :])
+        #     keep = ops.nms(boxes, scores, 0.5)
+        #     keeps.append(keep)
+        
+        # print('after_nms', keeps)
+        # keep = ops.nms(boxes, scores, 0.5)
+
 
         return_dict = {
             'boxes': boxes,

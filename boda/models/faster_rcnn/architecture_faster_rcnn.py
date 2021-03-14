@@ -69,7 +69,7 @@ class FastRcnnPredictHead(nn.Sequential):
         num_classes (int): number of output classes (including background)
     """
 
-    def __init__(self, in_channels, num_classes):
+    def __init__(self, in_channels, num_classes: int = 80):
         super().__init__()
         self.box_layer = nn.Linear(in_channels, num_classes * 4)
         self.score_layer = nn.Linear(in_channels, num_classes)
@@ -219,10 +219,12 @@ class FasterRcnnModel(FasterRcnnPretrained):
         images = self.check_inputs(images)
         # images, targets = self.transform(images)
         images, image_sizes, targets = self.transform(images)
-
+        # [(1920, 1080), ()]
         # outputs = self.backbone(images.tensors)
-        outputs = self.backbone(images)
+        outputs = self.backbone(images)  # resnet50, 101, 154, 18, 32
+        # [2, 3, 4, 5]
         outputs = self.neck(outputs)
+        # [1, 2, 3, 4, 5]
         outputs = {str(i): o for i, o in enumerate(outputs)}
 
         if self.training:
@@ -233,5 +235,4 @@ class FasterRcnnModel(FasterRcnnPretrained):
             proposals = self.rpn(images, image_sizes, outputs)
             detections = self.roi_heads(outputs, proposals, image_sizes)
             # detections = self.transform.postprocess(detections, images.image_sizes, original_image_sizes)
-
             return detections

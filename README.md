@@ -55,6 +55,16 @@ print(losses)
 |YOLACT EDGE|😡|❌|❌|||
 ||
 
+### Misc
+
+|Model|State|Training|Inference|Original|Ours|
+|:----|:---:|:------:|:-------:|-------:|---:|
+|[SSD](boda/models/ssd/)|🙂|❌|✔️|||
+|Faster R-CNN|🙂|❌|✔️|||
+|Keypoint R-CNN|🙂|❌|✔️|||
+|YOLOv4|😡|❌|❌|||
+||
+
 ## Pretrained Model Configurations
 
 |Model|Config name|Status|Original|Ours|

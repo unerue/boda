@@ -2,7 +2,7 @@ import math
 from typing import Tuple, List, Dict, Callable
 
 import cv2
-from numpy.core.fromnumeric import _resize_dispatcher
+from numpy.core.fromnumeric import _resize_dispatcher, mean
 import pycocotools
 import torch
 from torch import dtype, nn, Tensor
@@ -39,14 +39,16 @@ class Compose:
 
 
 class Normalize:
-    def __init__(self):
+    def __init__(self, mean, std):
+        self.mean = mean
+        self.std = std
         self.channel_map = {c: idx for idx, c in enumerate('BGR')}
         self.channel_permutation = [self.channel_map[c] for c in 'RGB']
 
     def __call__(self, image, targets):
         image = transforms.Normalize(
-            (103.94, 116.78, 123.68), (57.38, 57.12, 58.40))(image)
-        image = image[self.channel_permutation, :, :]
+            self.mean, self.std)(image)
+        # image = image[self.channel_permutation, :, :]
         return image, targets
 
 

@@ -45,7 +45,6 @@ class RpnHead(nn.Module):
         boxes = []
         scores = []
         for feature in x:
-            print(feature.size())
             t = F.relu(self.conv(feature))
             boxes.append(self.box_layer(t))
             scores.append(self.score_layer(t))
@@ -57,27 +56,23 @@ def permute_and_flatten(layer: Tensor, N: int, A: int, C: int, H: int, W: int) -
     """
     Args:
     """
-    # type: (Tensor, int, int, int, int, int) -> Tensor
     layer = layer.view(N, -1, C, H, W)
     layer = layer.permute(0, 3, 4, 1, 2)
     layer = layer.reshape(N, -1, C)
     return layer
 
 
-def concat_box_prediction_layers(box_cls, box_regression):
+def concat_box_prediction_layers(box_cls: List[Tensor], box_regression: List[Tensor]) -> Tuple[Tensor, Tensor]:
     """
     Args:
     """
-    # type: (List[Tensor], List[Tensor]) -> Tuple[Tensor, Tensor]
     box_cls_flattened = []
     box_regression_flattened = []
     # for each feature level, permute the outputs to make them be in the
     # same format as the labels. Note that the labels are computed for
     # all feature levels concatenated, so we keep the same representation
     # for the objectness and the box_regression
-    for box_cls_per_level, box_regression_per_level in zip(
-        box_cls, box_regression
-    ):
+    for box_cls_per_level, box_regression_per_level in zip(box_cls, box_regression):
         N, AxC, H, W = box_cls_per_level.shape
         Ax4 = box_regression_per_level.shape[1]
         A = Ax4 // 4

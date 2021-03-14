@@ -5,7 +5,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn, Tensor
 
-from torchvision.ops import roi_align
+from torchvision.ops import roi_align, MultiScaleRoIAlign
 from torchvision.ops.boxes import box_iou, clip_boxes_to_image, remove_small_boxes, batched_nms
 
 from ._utils import BoxCoder, Matcher, BalancedPositiveNegativeSampler
@@ -134,7 +134,7 @@ def paste_masks_in_image(masks, boxes, img_shape, padding=1):
 class RoiHeads(nn.Module):
     def __init__(
         self,
-        box_roi_pool: nn.Module,
+        box_roi_pool: MultiScaleRoIAlign,
         box_head: nn.Module,
         box_predictor: nn.Module,
         # Faster R-CNN training
@@ -295,9 +295,9 @@ class RoiHeads(nn.Module):
         labels = None
         regression_targets = None
         matched_idxs = None
-        print('='*100)
+        
         box_features = self.box_roi_pool(features, proposals, image_shapes)
-        print('#'*100, box_features.size())
+        
         box_features = self.box_head(box_features)
         class_logits, box_regression = self.box_predictor(box_features)
 
@@ -315,7 +315,7 @@ class RoiHeads(nn.Module):
             })
 
         if self.has_mask():
-            mask_proposals = [p["boxes"] for p in result]
+            mask_proposals = [p['boxes'] for p in result]
             pos_matched_idxs = None
 
             if self.mask_roi_pool is not None:
