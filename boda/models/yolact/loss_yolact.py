@@ -8,9 +8,9 @@ from torch import nn, Tensor
 import torch.nn.functional as F
 
 from ...base_architecture import LossFunction
-from ...utils.bbox import elemwise_box_iou, jaccard, cxcywh_to_xyxy, crop, xyxy_to_cxywh
-from ...utils.loss import log_sum_exp
-from ...utils.mask import elemwise_mask_iou
+from ...ops.box import elemwise_box_iou, jaccard, cxywh_to_xyxy, crop, xyxy_to_cxywh
+from ...ops.loss import log_sum_exp
+from ...ops.mask import elemwise_mask_iou
 
 
 class Matcher:
@@ -278,6 +278,7 @@ class YolactLoss(LossFunction):
             F.smooth_l1_loss(
                 pred_boxes,
                 matched_pred_boxes, reduction='sum') * self.box_weight
+        
         losses['M'] = self.lincomb_mask_loss(
             positive_scores,
             matched_indexes,

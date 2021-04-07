@@ -230,11 +230,12 @@ class RcnnTransform:
         """
         Args
         """
+        print(the_list)
         maxes = the_list[0]
         for sublist in the_list[1:]:
             for index, item in enumerate(sublist):
                 maxes[index] = max(maxes[index], item)
-
+        print(maxes)
         return maxes
 
     def batch_images(self, images: List[Tensor], size_divisible: int = 32):
@@ -244,13 +245,16 @@ class RcnnTransform:
         max_size = self.max_by_axis([list(img.shape) for img in images])
         stride = float(size_divisible)
         max_size = list(max_size)
+        
         max_size[1] = int(math.ceil(float(max_size[1]) / stride) * stride)
         max_size[2] = int(math.ceil(float(max_size[2]) / stride) * stride)
-
+        print(max_size)
         batch_shape = [len(images)] + max_size
+        print(batch_shape)
         batched_imgs = images[0].new_full(batch_shape, 0)
+        print(batched_imgs.size())
         for img, pad_img in zip(images, batched_imgs):
-            pad_img[: img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
+            pad_img[:img.shape[0], :img.shape[1], :img.shape[2]].copy_(img)
 
         return batched_imgs
 

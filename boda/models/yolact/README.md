@@ -67,3 +67,86 @@ Params size (MB): 191.33
 Estimated Total Size (MB): 388.20
 ==============================================================================
 ```
+
+```{python}
+class CocoDataset(Dataset):
+    def __getitem__(self, index: int) -> Tuple[Tensor, Dict]:
+        """
+        Returns:
+            image (Tensor[C, H, W]): Original size
+            targets (Dict[str, Any]): 
+        """
+        return image, {
+            'boxes': FloatTensor[N, 4]: [x1, y1, x2, y2],
+            'labels': LongTensor[N],
+            'masks': ByteTensor[N, H, W],
+            'keypoints' FloatTensor[N, K, 3]: [x, y, visibility],
+            'area': float,
+            'iscrowd': 0 or 1,
+            'width': int,  # width of an original image
+            'height': int,  # height of an original image
+        }
+```
+
+```{python}
+from boda.models import YolactConfig, YolactModel, YolactLoss
+
+config = YolactConfig(num_classes=80)
+model = YolactModel(config).to('cuda')
+criterion = YolactLoss()
+
+for epoch in range(num_epochs):
+    for images, targets in train_loader:
+        outputs = model(images)
+        losses = criterion(outputs, targets)
+        loss = sum(loss for loss in losses.values())
+```
+
+```{python}
+class YolacModel:
+    def forward(self, images):
+        if self.training:
+            # 전처리가 끝난 outputs?
+            return {
+                'boxes': FloatTensor,
+                'masks: Tensor
+                'scores': FloatTensor,
+                'prior_boxes': 'anchors' ???
+                'proposals'??
+                'proto_masks':??
+                'semantic_masks':??
+            }
+        else:
+            # 전처리가 끝난 outputs
+            return {
+                'boxes': Tensor,
+                'masks': 
+                'scores': Tensor,
+                'labels': Tensor,
+                'keypoints': Tensor,
+            }
+```
+
+
+```{python}
+outputs = model(images)
+outputs
+
+# SSD
+{'boxes', 'scores', 'prior_boxes'}
+
+# Faster R-CNN
+{'boxes', 'proposals', 'scores', 'anchors'}
+
+# Keypoint R-CNN
+{'boxes', 'proposals', 'scores', 'keypoints'}
+
+# YOLACT
+{'boxes', 'masks', 'scores', 'prior_boxes', 'proto_masks', 'semantic_masks'}
+
+# SOLO
+{'category', 'masks'}
+
+# CenterMask
+```
+

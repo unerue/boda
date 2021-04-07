@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
-from ...utils.bbox import decode, sanitize_coordinates, crop
+from ...ops.box import decode, sanitize_coordinates, crop, jaccard
 
 
 class YolactInference:
@@ -28,6 +28,7 @@ class YolactInference:
         prior_boxes = preds['prior_boxes']
 
         proto_masks = preds['proto_masks']
+        # print(proto_masks.size())
 
         batch_size = pred_boxes.size(0)
         num_prior_boxes = prior_boxes.size(0)
@@ -39,6 +40,7 @@ class YolactInference:
         for i in range(batch_size):
             decoded_boxes = decode(pred_boxes[i], prior_boxes)
             results = self.detect(i, decoded_boxes, pred_masks, pred_scores)
+            # print(results)
 
             results['proto_masks'] = proto_masks[i]
             outputs.append(results)
@@ -64,7 +66,9 @@ class YolactInference:
         if scores.size(1) == 0:
             return None
 
-        boxes, masks, scores, labels = self.nms(boxes, scores, masks)
+        # boxes, masks, scores, labels = self.fast_nms(boxes, scores, masks)
+        boxes, masks, labels, scores = self.fast_nms(boxes, masks, scores)
+
         # print(boxes.size(), masks.size(), scores.size(), labels.size())
 
         # import torchvision.ops as ops
@@ -77,8 +81,6 @@ class YolactInference:
         
         # print('after_nms', keeps)
         # keep = ops.nms(boxes, scores, 0.5)
-
-
         return_dict = {
             'boxes': boxes,
             'masks': masks,
@@ -88,69 +90,124 @@ class YolactInference:
 
         return return_dict
 
-    def nms(
+    # def nms(
+    #     self,
+    #     pred_boxes: Tensor,
+    #     pred_scores: Tensor,
+    #     pred_masks: Tensor = None,
+    #     iou_threshold: float = 0.5,
+    #     scores_threshold: float = 0.05,
+    #     max_num_detections: int = 200
+    # ) -> Tuple[Tensor]:
+    #     num_classes = pred_scores.size(0)
+
+    #     indexes = []
+    #     labels = []
+    #     scores = []
+
+    #     max_size = 550
+    #     pred_boxes = pred_boxes * max_size
+
+    #     for i in range(num_classes):
+    #         score = pred_scores[i, :]
+    #         score_mask = score > 0.05
+    #         index = torch.arange(score.size(0), device=pred_boxes.device)
+
+    #         score = score[score_mask]
+    #         index = index[score_mask]
+
+    #         if score.size(0) == 0:
+    #             continue
+
+    #         preds = torch.cat(
+    #             [pred_boxes[score_mask], score[:, None]], dim=1).detach().cpu().numpy()
+    #         keep = cnms(preds, iou_threshold)
+    #         keep = torch.Tensor(keep, device='cpu').long()
+
+    #         indexes.append(index[keep])
+    #         labels.append(keep * 0 + i)
+    #         scores.append(score[keep])
+
+    #     indexes = torch.cat(indexes, dim=0)
+    #     labels = torch.cat(labels, dim=0)
+    #     scores = torch.cat(scores, dim=0)
+
+    #     scores, sorted_index = scores.sort(0, descending=True)
+    #     sorted_index = sorted_index[:max_num_detections]
+    #     scores = scores[:max_num_detections]
+
+    #     indexes = indexes[sorted_index]
+    #     labels = labels[sorted_index]
+
+    #     pred_boxes = pred_boxes[indexes] / max_size
+    #     pred_masks = pred_masks[indexes]
+
+    #     return pred_boxes, pred_masks, scores, labels
+
+    def fast_nms(
         self,
-        pred_boxes: Tensor,
-        pred_scores: Tensor,
-        pred_masks: Tensor = None,
+        boxes,
+        masks,
+        scores,
         iou_threshold: float = 0.5,
-        scores_threshold: float = 0.05,
-        max_num_detections: int = 200
-    ) -> Tuple[Tensor]:
-        import pyximport
-        pyximport.install(setup_args={'include_dirs': np.get_include()}, reload_support=True)
+        top_k: int = 200,
+        second_threshold: bool = False
+    ) -> None:
+        scores, idx = scores.sort(1, descending=True)
 
-        from ...utils.cython_nms import nms as cnms
+        idx = idx[:, :top_k].contiguous()
+        scores = scores[:, :top_k]
 
-        num_classes = pred_scores.size(0)
+        num_classes, num_dets = idx.size()
 
-        indexes = []
-        labels = []
-        scores = []
+        boxes = boxes[idx.view(-1), :].view(num_classes, num_dets, 4)
+        masks = masks[idx.view(-1), :].view(num_classes, num_dets, -1)
 
-        max_size = 550
-        pred_boxes = pred_boxes * max_size
+        iou = jaccard(boxes, boxes) 
+        iou.triu_(diagonal=1)
+        iou_max, _ = iou.max(dim=1)
 
-        for i in range(num_classes):
-            score = pred_scores[i, :]
-            score_mask = score > 0.05
-            index = torch.arange(score.size(0), device=pred_boxes.device)
+        # Now just filter out the ones higher than the threshold
+        keep = (iou_max <= iou_threshold)
 
-            score = score[score_mask]
-            index = index[score_mask]
+        # We should also only keep detections over the confidence threshold, but at the cost of
+        # maxing out your detection count for every image, you can just not do that. Because we
+        # have such a minimal amount of computation per detection (matrix mulitplication only),
+        # this increase doesn't affect us much (+0.2 mAP for 34 -> 33 fps), so we leave it out.
+        # However, when you implement this in your method, you should do this second threshold.
+        if second_threshold:
+            keep *= (scores > 0.2)  # self.conf_thresh 0.2
 
-            if score.size(0) == 0:
-                continue
+        # Assign each kept detection to its corresponding class
+        classes = torch.arange(num_classes, device=boxes.device)[:, None].expand_as(keep)
+        classes = classes[keep]
 
-            preds = torch.cat(
-                [pred_boxes[score_mask], score[:, None]], dim=1).detach().cpu().numpy()
-            keep = cnms(preds, iou_threshold)
-            keep = torch.Tensor(keep, device='cpu').long()
+        boxes = boxes[keep]
+        masks = masks[keep]
+        scores = scores[keep]
 
-            indexes.append(index[keep])
-            labels.append(keep * 0 + i)
-            scores.append(score[keep])
+        # Only keep the top cfg.max_num_detections highest scores across all classes
+        scores, idx = scores.sort(0, descending=True)
+        idx = idx[:200]
+        scores = scores[:200]  # TODO: max_num_detection
 
-        indexes = torch.cat(indexes, dim=0)
-        labels = torch.cat(labels, dim=0)
-        scores = torch.cat(scores, dim=0)
+        classes = classes[idx]
+        boxes = boxes[idx]
+        masks = masks[idx]
 
-        scores, sorted_index = scores.sort(0, descending=True)
-        sorted_index = sorted_index[:max_num_detections]
-        scores = scores[:max_num_detections]
-
-        indexes = indexes[sorted_index]
-        labels = labels[sorted_index]
-
-        pred_boxes = pred_boxes[indexes] / max_size
-        pred_masks = pred_masks[indexes]
-
-        return pred_boxes, pred_masks, scores, labels
+        return boxes, masks, classes, scores
 
 
-def postprocess(preds):
+def postprocess(preds, size):
+    """
+    Args:
+        preds
+        size (): (w, h)
+
+    """
     # pred_boxes = preds['boxes']
-    w, h = (550, 550)
+    
+    h, w = size
     boxes = preds['boxes']
     pred_masks = preds['masks']
     pred_scores = preds['scores']
@@ -175,6 +232,7 @@ def postprocess(preds):
 
     preds['boxes'] = boxes
     preds['proto_masks'] = proto_masks
+    preds['masks'] = masks
 
     return preds
 

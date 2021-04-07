@@ -5,8 +5,8 @@ from torch import nn, Tensor
 import torch.nn.functional as F
 
 from ...base_architecture import LossFunction
-from ...utils.bbox import jaccard, cxcywh_to_xyxy
-from ...utils.loss import log_sum_exp
+from ...ops.box import jaccard, cxywh_to_xyxy
+from ...ops.loss import log_sum_exp
 
 
 class Matcher:

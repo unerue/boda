@@ -430,7 +430,7 @@ class YolactModel(YolactPretrained):
                 if module.bias is not None:
                     module.bias.data.zero_()
 
-    def forward(self, inputs: List[Tensor], targets: Dict[str, Tensor] = None) -> Dict[str, List[Tensor]]:
+    def forward(self, images: List[Tensor], targets: Dict[str, Tensor] = None) -> Dict[str, List[Tensor]]:
         """
         Do not transform resized image, expected original image
 
@@ -451,14 +451,16 @@ class YolactModel(YolactPretrained):
                 `semantic_masks` (:obj:`FloatTensor[B, C, H, W]`):
                 `size` (:obj:Tuple[int, int]):
         """
-        inputs = self.check_inputs(inputs)
+        images = self.check_inputs(images)
+
         # TODO: create resize modules for keep aspect ratio or min_size, h, w?
-        inputs = F.interpolate(inputs, size=(self.config.max_size, self.config.max_size), mode='bilinear')
-        self.config.device = inputs.device
+        images, image_sizes = self.resize_inputs(images, size=(550, 550))
+        # images = F.interpolate(images, size=(self.config.max_size, self.config.max_size), mode='bilinear')
 
-        self.config.size = (inputs.size(2), inputs.size(3))
-
-        outputs = self.backbone(inputs)
+        self.config.device = images.device
+        self.config.size = (images.size(2), images.size(3))
+    
+        outputs = self.backbone(images)
         # outputs = [outputs[i] for i in self.config.selected_layers]
         outputs = self.neck(outputs)
 
@@ -487,11 +489,46 @@ class YolactModel(YolactPretrained):
         else:
             return_dict['scores'] = F.softmax(return_dict['scores'], dim=-1)
             # TODO: ah si ba!! What should I do?!
-            from .inference_yolact import YolactInference
+            from .inference_yolact import YolactInference, postprocess
+            # print(return_dict['proto_masks'])
             return_dict = YolactInference(81)(return_dict)
-            return return_dict
+            # print(return_dict)
+            # return_dict = postprocess(return_dict, image_sizes)
+            results = []
+            for dict_, image_size in zip(return_dict, image_sizes):
+                results.append(postprocess(dict_, image_size))
+
+            for result in results:
+                scores = result['scores'].detach().cpu()
+                sorted_index = scores.argsort(0, descending=True)[:5]
+
+                boxes = result['boxes'][sorted_index]
+                labels = result['labels'][sorted_index]
+                scores = scores[sorted_index]
+                masks = result['masks'][sorted_index]
+                print(masks.size())
+
+                # num_dets_to_consider = min(5, labels.shape[0])
+                # for j in range(num_dets_to_consider):
+                #     if scores[j] < 0.0:
+                #         num_dets_to_consider = j
+                #         break
+
+                # for j in reversed(range(num_dets_to_consider)):
+                #     box = boxes[j, :]
+                #     score = scores[j]
+                #     label = labels[j]
+                #     print(box, score, label)
+
+                result['boxes'] = boxes
+                result['labels'] = labels
+                result['scores'] = scores
+                result['masks'] = masks
+
+            return results
 
     def load_weights(self, path):
+        # TODO: 다시 저장해서 다 삭제하자.
         state_dict = torch.load(path)
         for key in list(state_dict.keys()):
             p = key.split('.')

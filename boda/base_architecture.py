@@ -1,9 +1,11 @@
 import os
+import math
 import functools
 from abc import ABC, ABCMeta, abstractmethod
 from typing import Tuple, List, Dict, Union, Callable
 
 import torch
+import torch.nn.functional as F
 from torch import nn, Tensor
 
 
@@ -40,6 +42,50 @@ class ModelMixin(metaclass=ABCMeta):
     @abstractmethod
     def forward(self, inputs) -> None:
         ...
+
+    @classmethod
+    def resize_inputs(
+        cls,
+        inputs: Tensor,
+        size: Tuple[int, int],
+        mode: str = 'nearest',
+        preserve_aspect_ratio: bool = False
+    ) -> Tensor:
+        """
+        Args:
+            inputs (:obj:`Tensor`):
+            size ()
+            mode ()
+            preserve_aspect_ratio ()
+        Returns:
+            images
+            image_sizes
+        """
+        # TODO: modified size
+        image_sizes = [tensor.shape[-2:] for tensor in inputs]
+        # if preserve_aspect_ratio:
+        #     padding(inputs)
+
+        # _min_size = None
+        # _max_size = None
+
+        # size = size
+        # pad = None
+        # padding = None
+        if preserve_aspect_ratio:
+            inputs = F.interpolate(inputs, size=size, mode=mode)
+        else:
+            images = []
+            for tensor in inputs:
+                # print('??', tensor.size(), tensor.unsqueeze(0).size())
+                tensor = F.interpolate(tensor.unsqueeze(0), size=(550, 550), mode=mode)
+                # print(tensor.size(), tensor.squeeze(0).size())
+                images.append(tensor.squeeze(0))
+            # inputs = torch.cat([F.interpolate(tensor, size=size, mode=mode) for tensor in inputs])
+
+            images = torch.stack(images, dim=0)
+
+        return images, image_sizes
 
 
 class Backbone(nn.Module, ModelMixin):

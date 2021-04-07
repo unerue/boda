@@ -1,26 +1,179 @@
 import math
-from typing import Tuple, List, Dict, Callable
+from typing import Tuple, List, Dict, Callable, Optional
 
 import cv2
 from numpy.core.fromnumeric import _resize_dispatcher, mean
 import pycocotools
 import torch
+import torch.nn.functional as F
 from torch import dtype, nn, Tensor
 from torchvision import transforms
 import numpy as np
 from numpy import ndarray
 
 
-def _check_image(image: ndarray):
-    """Check Image Shape
+# def _check_image(image: ndarray):
+#     """Check Image Shape
 
-    Args:
-        image (:obj:`ndarray[C, H, W]`)
-    Return:
-        image (:obj:`ndarray[H, W, C]`)
-    """
-    if image.shape[0] == 3:
-        return image.transpose((1, 2, 0))
+#     Args:
+#         image (:obj:`ndarray[C, H, W]`)
+#     Return:
+#         image (:obj:`ndarray[H, W, C]`)
+#     """
+#     if image.shape[0] == 3:
+#         return image.transpose((1, 2, 0))
+
+
+# class ResizeTargets:
+#     def __init__(self) -> None:
+#         pass
+
+
+# class ResizeImages:
+#     def __init__(
+#         self,
+#         size: Tuple[int],
+#         min_size: int = 800,
+#         max_size: int = 1333,
+#         preserve_aspect_ratio: bool = False,
+#         mode: str = 'bilinear'
+#     ) -> None:
+#         """
+#         Args:
+#             size (:obj:Tuple[int, int]):
+#             min_size (:obj:int):
+#             max_size (:obj:int):
+#             preserve_aspect_ratio (:obj:bool):
+#             mode (:obj:str): 
+#         """
+#         self.min_size = min_size
+#         self.max_size = max_size
+#         self.size = size
+#         self.preserve_aspect_ratio = preserve_aspect_ratio
+#         self.mode = mode
+
+#     def __call__(
+#         self,
+#         images: List[Tensor],
+#         targets: List[Dict[str, ndarray]]
+#     ) -> Tuple[ndarray, Dict[str, ndarray]]:
+#         """
+#         Args:
+#             image (:obj:`ndarray[C, H, W]`)
+#             targets (:obj:`Dict[str, ndarray]`):
+#                 `masks` (:obj:`ndarray[N, H, W]`):
+#         """
+#         for i in range(len(images)):
+#             image = images[i]
+#             target = targets[i] if targets is not None else None
+#             image, target = self.resize(image, target)
+#             images[i] = image
+#             if targets is not None and target is not None:
+#                 targets[i] = target
+
+#         image_sizes = [image.shape[-2:] for image in images]
+#         images = self.padding(images)
+
+#         return image, targets
+
+#     def resize(self, image: Tensor, target: Optional[Dict[str, Tensor]]):
+#         h, w = image.shape[-2:]
+#         image, target = self._resize_image_and_masks(image, size, float(self.max_size), target)
+
+#         if target is None:
+#             return image, target
+
+        
+
+#     def _resize_image_and_masks(
+#         image: Tensor,
+#         self_min_size: float,
+#         self_max_size: float,
+#         target: Optional[Dict[str, Tensor]]
+#     ) -> Tuple[Tensor, Optional[Dict[str, Tensor]]]:
+#         """
+#         Args:
+#         """
+#         im_shape = torch.tensor(image.shape[-2:])
+#         min_size = float(torch.min(im_shape))
+#         max_size = float(torch.max(im_shape))
+#         scale_factor = self_min_size / min_size
+#         if max_size * scale_factor > self_max_size:
+#             scale_factor = self_max_size / max_size
+
+#         image = F.interpolate(
+#             image[None],
+#             scale_factor=scale_factor,
+#             mode='bilinear',
+#             recompute_scale_factor=True,
+#             align_corners=False
+#         )[0]
+
+#         if target is None:
+#             return image, target
+
+#         if 'masks' in target:
+#             mask = target['masks']
+#             mask = F.interpolate(
+#                 mask[:, None].float(),
+#                 scale_factor=scale_factor,
+#                 recompute_scale_factor=True
+#             )[:, 0].byte()
+#             target['masks'] = mask
+
+#         return image, target
+
+#     def resize_boxes(boxes: Tensor, original_size: List[int], new_size: List[int]) -> Tensor:
+#         """
+#         Args:
+
+#         """
+#         ratios = [
+#             torch.tensor(s, dtype=torch.float32, device=boxes.device) /
+#             torch.tensor(s_orig, dtype=torch.float32, device=boxes.device)
+#             for s, s_orig in zip(new_size, original_size)
+#         ]
+
+#         ratio_height, ratio_width = ratios
+#         xmin, ymin, xmax, ymax = boxes.unbind(1)
+
+#         xmin = xmin * ratio_width
+#         xmax = xmax * ratio_width
+#         ymin = ymin * ratio_height
+#         ymax = ymax * ratio_height
+
+#         return torch.stack((xmin, ymin, xmax, ymax), dim=1)
+
+#     def max_by_axis(self, tensor_shapes):
+#         """
+#         tensor_shape [[3, 1920, 1080], [3, 1270, 720]]
+#         return [3, 1920, 1080]
+#         # TODO: 이렇게 forloop써서 해야하는가????
+#         """
+#         maxes = tensor_shapes[0]
+#         for shape in tensor_shapes[1:]:
+#             for index, item in enumerate(shape):
+#                 maxes[index] = max(maxes[index], item)
+
+#         return maxes
+
+#     def padding(self, images: List[Tensor], size_divisible: int = 32):
+#         # TODO: size_divisible은 왜 써야하는가? 설정한 min, max_size가 800, 1333인데 
+#         # 1344 800으로 나가야하는 이유가 있는가?? 어차피 다시 resize밖에서 시키는데???
+#         max_size = self.max_by_axis([list(img.shape) for img in images])
+#         stride = float(size_divisible)
+#         max_size = list(max_size)
+#         max_size[1] = int(math.ceil(float(max_size[1]) / stride) * stride)
+#         max_size[2] = int(math.ceil(float(max_size[2]) / stride) * stride)
+#         print(max_size)
+
+#         batch_shape = [len(images)] + max_size
+#         batched_imgs = images[0].new_full(batch_shape, 0)
+#         # TODO: padding 좌측상단부터 말고 센터를 기준으로 
+#         for img, pad_img in zip(images, batched_imgs):
+#             pad_img[: img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
+
+#         return batched_imgs
 
 
 class Compose:
@@ -68,46 +221,6 @@ class ToTensor:
         image = torch.as_tensor(image.transpose((2, 0, 1)), dtype=torch.float32)
         for key, value in targets.items():
             targets[key] = torch.as_tensor(value)
-
-        return image, targets
-
-
-class Resize:
-    def __init__(self, size: Tuple[int], interpolation=cv2.INTER_LINEAR):
-        self.size = size
-        self.interpolation = interpolation
-
-    def _resize(self, h, w):
-        ratio = math.sqrt(w / h)
-        h = int(self.size[0] / ratio)
-        w = int(self.size[1] * ratio)
-        return h, w
-
-    def __call__(
-        self,
-        image: ndarray,
-        targets: Dict[str, ndarray]
-    ) -> Tuple[ndarray, Dict[str, ndarray]]:
-        """
-        Args:
-            image (:obj:`ndarray[C, H, W]`)
-            targets (:obj:`Dict[str, ndarray]`):
-                `masks` (:obj:`ndarray[N, H, W]`):
-        """
-        # _, h, w = image.shape
-        h, w, _ = image.shape
-        image = cv2.resize(image, dsize=self.size, interpolation=self.interpolation)
-
-        targets['boxes'][:, [0, 2]] *= self.size[0] / w
-        targets['boxes'][:, [1, 3]] *= self.size[1] / h
-
-        if 'masks' in targets.keys():
-            masks = targets['masks'].transpose((1, 2, 0))
-            masks = cv2.resize(masks, dsize=self.size, interpolation=self.interpolation)
-            if masks.ndim != 3:
-                targets['masks'] = np.expand_dims(masks, 0)
-            else:
-                targets['masks'] = masks.transpose((2, 0, 1))
 
         return image, targets
 

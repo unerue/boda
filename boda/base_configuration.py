@@ -5,7 +5,7 @@ import json
 import time
 from urllib.parse import urlparse
 from urllib.request import urlretrieve
-from typing import Tuple, List, Dict, Any, Union
+from typing import Tuple, List, Dict, Any, Union, Sequence
 
 from .file_utils import DataEncoder
 
@@ -21,11 +21,18 @@ class BaseConfig:
     cache_dir = 'cache'
 
     def __init__(self, **kwargs):
+        self.use_torchscript = kwargs.pop('use_torchscript', False)
+        # self.use_fp16 = kwargs.pop('use_fp16', False)
+
         self.num_classes = kwargs.pop('num_classes', 0)
         self.min_size = kwargs.pop('min_size', None)
         self.max_size = kwargs.pop('max_size', None)
-        if not isinstance(self.max_size, (tuple, list)):
-            self.max_size = (self.max_size, self.max_size)
+        self.preserve_aspect_ratio = kwargs.pop('preserve_aspect_ratio', False)
+        if not isinstance(self.max_size, Sequence):
+            if not self.preserve_aspect_ratio:
+                self.max_size = (self.max_size, self.max_size)
+            else:
+                self.max_size = (self.min_size, self.max_size)
 
         self.num_grids = kwargs.pop('num_grids', 0)
         self.top_k = kwargs.pop('top_k', 5)
