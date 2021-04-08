@@ -110,6 +110,7 @@ class FasterRcnnModel(FasterRcnnPretrained):
         # head,
         min_size=800,
         max_size=1333,
+        preserve_aspect_ratio=True,
         rpn_anchor_generator=None,
         rpn_head=None,
         rpn_pre_nms_top_n_train=2000,
@@ -139,6 +140,7 @@ class FasterRcnnModel(FasterRcnnPretrained):
     ) -> None:
         super().__init__(config)
         self.num_classes = 91
+        self.preserve_aspect_ratio = preserve_aspect_ratio
 
         self.transform = RcnnTransform(800, 1333, None, None)
         self.backbone = resnet50()
@@ -217,7 +219,9 @@ class FasterRcnnModel(FasterRcnnPretrained):
             sizes (List[int, int])
         """
         images = self.check_inputs(images)
-        images = self.resize_inputs(images, self.max_size)
+        images = self.resize_inputs(
+            images, self.max_size, preserve_aspect_ratio=self.preserve_aspect_ratio)
+
         # images, targets = self.transform(images)
         images, image_sizes, targets = self.transform(images)
         # [(1920, 1080), ()]

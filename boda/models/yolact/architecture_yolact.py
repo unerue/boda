@@ -454,7 +454,7 @@ class YolactModel(YolactPretrained):
         images = self.check_inputs(images)
 
         # TODO: create resize modules for keep aspect ratio or min_size, h, w?
-        images, image_sizes = self.resize_inputs(images, size=(550, 550))
+        images, image_sizes = self.resize_inputs(images, (550, 550), preserve_aspect_ratio=False)
         # images = F.interpolate(images, size=(self.config.max_size, self.config.max_size), mode='bilinear')
 
         self.config.device = images.device
