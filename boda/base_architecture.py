@@ -73,12 +73,18 @@ class ModelMixin(metaclass=ABCMeta):
         # pad = None
         # padding = None
         if preserve_aspect_ratio:
-            inputs = F.interpolate(inputs, size=size, mode=mode)
+            images = []
+            for tensor in inputs:
+                tensor = _resize_images(tensor, size[0], size[1])
+                images.append(tensor)
+
+            images = batch_images(images)
         else:
             images = []
             for tensor in inputs:
                 # print('??', tensor.size(), tensor.unsqueeze(0).size())
-                tensor = F.interpolate(tensor.unsqueeze(0), size=(550, 550), mode=mode)
+                tensor = F.interpolate(tensor.unsqueeze(0), size=size, mode=mode)
+                tensor = F.interpolate(tensor[None], size=size, mode=mode)[0]
                 # print(tensor.size(), tensor.squeeze(0).size())
                 images.append(tensor.squeeze(0))
             # inputs = torch.cat([F.interpolate(tensor, size=size, mode=mode) for tensor in inputs])
@@ -86,6 +92,50 @@ class ModelMixin(metaclass=ABCMeta):
             images = torch.stack(images, dim=0)
 
         return images, image_sizes
+
+
+def _resize_images(
+    image,
+    min_size,
+    max_size
+) -> None:
+    image_shape = torch.tensor(image.shape[-2:])
+    _min_size = float(torch.min(image_shape))
+    _max_size = float(torch.max(image_shape))
+
+    scale_factor = min_size / _min_size
+    if _max_size * scale_factor > max_size:
+        scale_factor = max_size / _max_size
+
+    image = F.interpolate(
+        image[None], scale_factor=scale_factor, mode='bilinear', recompute_scale_factor=True,
+        align_corners=False
+    )[0]
+
+    return image
+
+
+def max_by_axis(the_list: List[List[int]]) -> List[int]:
+    maxes = the_list[0]
+    for sublist in the_list[1:]:
+        for index, item in enumerate(sublist):
+            maxes[index] = max(maxes[index], item)
+    return maxes
+
+
+def batch_images(images: List[Tensor], size_divisible: int = 32) -> Tensor:
+    max_size = max_by_axis([list(img.shape) for img in images])
+    stride = float(size_divisible)
+    max_size = list(max_size)
+    max_size[1] = int(math.ceil(float(max_size[1]) / stride) * stride)
+    max_size[2] = int(math.ceil(float(max_size[2]) / stride) * stride)
+
+    batch_shape = [len(images)] + max_size
+    batched_imgs = images[0].new_full(batch_shape, 0)
+    for img, pad_img in zip(images, batched_imgs):
+        pad_img[: img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
+
+    return batched_imgs
 
 
 class Backbone(nn.Module, ModelMixin):

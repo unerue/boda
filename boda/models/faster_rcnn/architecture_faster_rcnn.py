@@ -216,7 +216,8 @@ class FasterRcnnModel(FasterRcnnPretrained):
             inputs (List[Tensor]): Original image size; do not resize image
             sizes (List[int, int])
         """
-        # images = self.check_inputs(images)
+        images = self.check_inputs(images)
+        images = self.resize_inputs(images, self.max_size)
         # images, targets = self.transform(images)
         images, image_sizes, targets = self.transform(images)
         # [(1920, 1080), ()]

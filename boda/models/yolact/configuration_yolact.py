@@ -32,6 +32,7 @@ class YolactConfig(BaseConfig):
         self,
         num_classes: int = 80,
         max_size: Tuple[int] = (550, 550),
+        preserve_aspect_ratio: bool = False,
         fpn_channels: int = 256,
         extra_fpn_layers: bool = True,
         num_extra_fpn_layers: int = 2,
@@ -55,7 +56,7 @@ class YolactConfig(BaseConfig):
     ) -> None:
         super().__init__(max_size=max_size, **kwargs)
         self.num_classes = num_classes + 1
-        self.label_map = {}
+        self.preserve_aspect_ratio = preserve_aspect_ratio
         self.fpn_channels = fpn_channels
         self.extra_fpn_layers = extra_fpn_layers
         self.num_extra_fpn_layers = num_extra_fpn_layers
@@ -79,3 +80,5 @@ class YolactConfig(BaseConfig):
         self.mask_weight = mask_weight
         self.score_weight = score_weight
         self.semantic_weight = semantic_weight
+
+        self.label_map = kwargs.get('label_map', None)
