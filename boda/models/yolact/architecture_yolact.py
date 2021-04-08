@@ -370,7 +370,8 @@ class YolactModel(YolactPretrained):
         mask_size: int = 16,
         aspect_ratios: Sequence = [1, 1/2, 2],
         scales: Sequence = [24, 48, 96, 192, 384],
-        num_proto_masks: int = 32
+        num_proto_masks: int = 32,
+        **kwargs
     ) -> None:
         super().__init__(config)
         self.config = config
@@ -382,6 +383,7 @@ class YolactModel(YolactPretrained):
         self.aspect_ratios = aspect_ratios
         self.scales = scales
         self.num_proto_masks = num_proto_masks
+        self.preserve_aspect_ratio = kwargs.get('preserve_aspect_ratio', False)
 
         self.update_config(config)
 
