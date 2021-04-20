@@ -56,7 +56,7 @@ class PriorBox:
         max_size ():
         use_preapply_sqrt ():
         use_pixel_scales ():
-        use-square_anchors (:obj:`bool`) default `True`
+        use_square_anchors (:obj:`bool`): default `True`
     """
     def __init__(
         self,
@@ -249,7 +249,7 @@ class HeadBranch(Head):
         Returns:
             return_dict (:obj:`Dict[str, Tensor]`):
                 `boxes` (:obj:`FloatTensor[B, N, 4]`): B is the number of batch size
-                `masks` (:obj:`FloatTensor[B, N, P]`): P is the number of prototypes
+                `mask_coefs` (:obj:`FloatTensor[B, N, P]`): P is the number of prototypes
                 `scores` (:obj:`FloatTensor[B, N, C]`): C is the number of classes with background e.g. 80 + 1
                 `prior_boxes` (:obj:`FloatTensor[N, 4]`):
         """
@@ -259,8 +259,8 @@ class HeadBranch(Head):
         inputs = branches.upsample_layers(inputs)
 
         boxes = branches.box_layers(inputs)
-        masks = branches.mask_layers(inputs)
         scores = branches.score_layers(inputs)
+        masks = branches.mask_layers(inputs)
 
         boxes = boxes.permute(0, 2, 3, 1).contiguous().view(inputs.size(0), -1, 4)
         masks = masks.permute(0, 2, 3, 1).contiguous().view(inputs.size(0), -1, self.mask_dim)
@@ -269,10 +269,10 @@ class HeadBranch(Head):
         _, prior_boxes = self.prior_box.generate(h, w, inputs.device)
 
         return_dict = {
-            'boxes': boxes,
-            'masks': masks,
             'scores': scores,
+            'boxes': boxes,
             'prior_boxes': prior_boxes,
+            'mask_coefs': masks,
         }
 
         return return_dict
@@ -438,11 +438,11 @@ class YolactModel(YolactPretrained):
 
         Returns:
             return_dict (:obj:`Dict[str, Tensor]`):
-                `boxes` (:obj:`FloatTensor[B, N*S, 4]`): B is the number of batch size, S is the number of selected_layers
-                `masks` (:obj:`FloatTensor[B, N*S, P]`): P is the number of prototypes
                 `scores` (:obj:`FloatTensor[B, N*S, C]`): C is the number of classes with background e.g. 80 + 1
-                `priors` (:obj:`FloatTensor[N, 4]`):
-                `prototype_masks` (:obj:`FloatTensor[B, H, W, P]`):
+                `boxes` (:obj:`FloatTensor[B, N*S, 4]`): B is the number of batch size, S is the number of selected_layers
+                `prior_boxes` (:obj:`FloatTensor[N, 4]`):
+                `mask_coefs` (:obj:`FloatTensor[B, N*S, P]`): P is the number of prototypes
+                `proto_masks` (:obj:`FloatTensor[B, H, W, P]`):
                 `semantic_masks` (:obj:`FloatTensor[B, C, H, W]`):
                 `size` (:obj:Tuple[int, int]):
         """
@@ -454,7 +454,7 @@ class YolactModel(YolactPretrained):
 
         self.config.device = images.device
         self.config.size = (images.size(2), images.size(3))
-    
+
         outputs = self.backbone(images)
         # outputs = [outputs[i] for i in self.config.selected_layers]
         outputs = self.neck(outputs)
@@ -466,7 +466,6 @@ class YolactModel(YolactPretrained):
                 head.parent = [self.heads[0]]
 
             output = head(outputs[i])
-
             for k, v in output.items():
                 return_dict[k].append(v)
 
@@ -484,14 +483,12 @@ class YolactModel(YolactPretrained):
         else:
             return_dict['scores'] = F.softmax(return_dict['scores'], dim=-1)
             # TODO: ah si ba!! What should I do?!
-            from .inference_yolact import YolactInference, postprocess
-            # print(return_dict['proto_masks'])
+            from .inference_yolact import YolactInference, convert_masks_and_boxes
+
             return_dict = YolactInference(81)(return_dict)
-            # print(return_dict)
-            # return_dict = postprocess(return_dict, image_sizes)
             results = []
-            for dict_, image_size in zip(return_dict, image_sizes):
-                results.append(postprocess(dict_, image_size))
+            for _dict, image_size in zip(return_dict, image_sizes):
+                results.append(convert_masks_and_boxes(_dict, image_size))
 
             for result in results:
                 scores = result['scores'].detach().cpu()
@@ -501,23 +498,10 @@ class YolactModel(YolactPretrained):
                 labels = result['labels'][sorted_index]
                 scores = scores[sorted_index]
                 masks = result['masks'][sorted_index]
-                print(masks.size())
-
-                # num_dets_to_consider = min(5, labels.shape[0])
-                # for j in range(num_dets_to_consider):
-                #     if scores[j] < 0.0:
-                #         num_dets_to_consider = j
-                #         break
-
-                # for j in reversed(range(num_dets_to_consider)):
-                #     box = boxes[j, :]
-                #     score = scores[j]
-                #     label = labels[j]
-                #     print(box, score, label)
 
                 result['boxes'] = boxes
-                result['labels'] = labels
                 result['scores'] = scores
+                result['labels'] = labels
                 result['masks'] = masks
 
             return results

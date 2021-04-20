@@ -84,7 +84,7 @@ class ModelMixin(metaclass=ABCMeta):
             for tensor in inputs:
                 # print('??', tensor.size(), tensor.unsqueeze(0).size())
                 tensor = F.interpolate(tensor.unsqueeze(0), size=size, mode=mode)
-                tensor = F.interpolate(tensor[None], size=size, mode=mode)[0]
+                # tensor = F.interpolate(tensor[None], size=size, mode=mode)[0]
                 # print(tensor.size(), tensor.squeeze(0).size())
                 images.append(tensor.squeeze(0))
             # inputs = torch.cat([F.interpolate(tensor, size=size, mode=mode) for tensor in inputs])
@@ -356,6 +356,44 @@ class LossFunction(nn.Module):
     def decode(self, targets: List[Dict[str, Tensor]]) -> Dict[str, Tensor]:
         for target in targets:
             pass
+
+
+class PostProcess:
+    def __init__(
+        self, num_classes, nms, nms_threshold, score_threshold, top_k
+    ) -> None:
+        self.num_classes = num_classes
+        self.top_k = top_k
+        self.nms_threshold = 0.5
+        self.score_threshold = 0.2
+        self.nms = nms
+
+        pass
+
+    def __call__(self, preds: Dict[str, Tensor], **kwargs) -> None:
+        if 'scores' in preds:
+            scores = preds['scores']
+            batch_size = scores.size(0)
+
+        if 'prior_boxes' in preds:
+            prior_boxes = preds['prior_boxes']
+
+
+        if 'boxes' in preds:
+            boxes = preds['boxes']
+
+        if 'masks' in preds:
+            masks = preds['masks']
+
+    def convert_boxes(self):
+        pass
+
+    def convert_scores(self):
+        pass
+
+    def convert_masks(self):
+        pass
+
 
 #  "backbone.layers.2.6.conv1.0.weight", "backbone.layers.2.6.bn1.weight",
 # class Register(ABCMeta):
