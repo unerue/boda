@@ -1,7 +1,12 @@
 import torch
 import torchvision
-# from torch.ops.torchvision import nms
+from torchvision.ops import nms as torchvision_nms
+# import torchvision.ops.nms as torchvision_nms
 from .box import jaccard
+
+
+def nms(boxes, scores, iou_threshold: float = 0.5):
+    pass
 
 
 def fast_nms(
