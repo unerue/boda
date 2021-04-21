@@ -68,8 +68,8 @@ class YolactInference:
             return None
 
         print(boxes.size(), scores.size())
-        hard_nms(boxes, masks, scores)
-        boxes, masks, labels, scores = self.nms(boxes, masks, scores)
+        boxes, masks, labels, scores = hard_nms(boxes, masks, scores)
+        # boxes, masks, labels, scores = self.nms(boxes, masks, scores)
         print('fast_nms', boxes.size())
 
         return_dict = {

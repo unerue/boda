@@ -477,6 +477,8 @@ class YolactModel(YolactPretrained):
         proto_masks = proto_masks.permute(0, 2, 3, 1).contiguous()
         return_dict['proto_masks'] = proto_masks
 
+        print(return_dict['proto_masks'].size(), return_dict['mask_coefs'].size())
+
         if self.training:
             return_dict['semantic_masks'] = self.semantic_layer(outputs[0])
             return return_dict
