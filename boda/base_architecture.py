@@ -63,23 +63,19 @@ class ModelMixin(metaclass=ABCMeta):
         """
         # TODO: modified size
         image_sizes = [tuple(tensor.shape[-2:]) for tensor in inputs]  # H, W
-        print(image_sizes)
-        # if preserve_aspect_ratio:
-        #     padding(inputs)
 
-        # _min_size = None
-        # _max_size = None
-
-        # size = size
-        # pad = None
-        # padding = None
         if preserve_aspect_ratio:
+            print('preserve_aspect_ratio')
             images = []
             for tensor, image_size in zip(inputs, image_sizes):
-                tensor = _resize_image(tensor, size[0], size[1])
+                print(image_size)
+                tensor = _resize_image(tensor, size[0], size[1], image_size)
                 images.append(tensor)
 
+            resized_sizes = [tuple(img.shape[-2:]) for img in images]
             images = _batch_images(images)
+
+            return images, image_sizes, resized_sizes
         else:
             images = []
             for tensor in inputs:
@@ -92,7 +88,7 @@ class ModelMixin(metaclass=ABCMeta):
 
             images = torch.stack(images, dim=0)
 
-        return images, image_sizes
+            return images, image_sizes
 
 
 def _resize_image(
@@ -101,14 +97,13 @@ def _resize_image(
     max_size: int,
     image_size: Tuple[int, int]
 ) -> None:
-    _min_size = float(torch.min(image_size))
-    _max_size = float(torch.max(image_size))
-
-    scale_factor = torch.min(min_size / _min_size, max_size / _max_size).item()
+    _min_size = float(min(image_size))
+    _max_size = float(max(image_size))
+    scale_factor = min(float(min_size) / _min_size, float(max_size) / _max_size)
 
     image = F.interpolate(
-        image[None], scale_factor=scale_factor, mode='bilinear', recompute_scale_factor=True,
-        align_corners=False
+        image[None], scale_factor=scale_factor, mode='bilinear',
+        recompute_scale_factor=True, align_corners=False
     )[0]
 
     return image

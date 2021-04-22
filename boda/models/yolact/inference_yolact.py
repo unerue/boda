@@ -1,4 +1,3 @@
-from boda.base_architecture import batch_images
 from typing import Tuple, List, Dict
 import numpy as np
 import torch
@@ -12,7 +11,7 @@ class YolactInference:
     def __init__(
         self,
         num_classes: int = 81,
-        top_k: int = 5,
+        top_k: int = 10,
         nms_threshold: float = 0.5,
         score_threshold: float = 0.2,
         nms=None

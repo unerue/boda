@@ -31,16 +31,16 @@ class AnchorGenerator:
 
     def __init__(
         self,
-        sizes=((128, 256, 512),),
+        sizes=((32,), (64,), (128,), (256,), (512,)),
         aspect_ratios=((0.5, 1.0, 2.0),),
-    ):
-        super(AnchorGenerator, self).__init__()
+    ) -> None:
+        super().__init__()
 
         if not isinstance(sizes[0], (list, tuple)):
             # TODO change this
             sizes = tuple((s,) for s in sizes)
         if not isinstance(aspect_ratios[0], (list, tuple)):
-            aspect_ratios = (aspect_ratios,) * len(sizes)
+            aspect_ratios = aspect_ratios * len(sizes)
 
         assert len(sizes) == len(aspect_ratios)
 

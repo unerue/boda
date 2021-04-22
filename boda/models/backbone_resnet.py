@@ -40,7 +40,8 @@ class Conv2d3x3(nn.Sequential):
         super().__init__(
             nn.Conv2d(
                 in_planes, out_planes, kernel_size=3, stride=stride,
-                padding=dilation, groups=groups, bias=False, dilation=dilation)
+                padding=dilation, groups=groups, bias=False, dilation=dilation
+            )
         )
 
 
@@ -60,12 +61,13 @@ class BasicBlock(nn.Module):
     ) -> None:
         super().__init__()
         if norm_layer is None:
-            norm_layer = nn.BatchNorm2d
+            norm_layer = nn.BatchNorm2d(track_running_stats=False)
 
         if groups != 1 or base_width != 64:
             raise ValueError('BasicBlock only supports groups=1 and base_width=64')
         if dilation > 1:
             raise NotImplementedError('Dilation > 1 not supported in BasicBlock')
+
         self.conv1 = Conv2d3x3(inplanes, planes, stride)
         self.bn1 = norm_layer(planes)
         self.relu = nn.ReLU(inplace=True)
@@ -255,4 +257,3 @@ def resnet101(pretrained: bool = False):
     #     backbone.add_layer()
 
     return backbone
-

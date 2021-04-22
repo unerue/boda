@@ -23,10 +23,10 @@ class FasterRcnnNeck(FeaturePyramidNetwork):
         self,
         config,
         channels: Sequence[int],
-        selected_layers: Sequence[int] = [1, 2, 3],
+        selected_layers: Sequence[int] = [0, 1, 2, 3],
         fpn_channels: int = 256,
-        extra_layers: bool = True,
-        num_extra_fpn_layers: int = 2,
+        extra_layers: bool = False,
+        num_extra_fpn_layers: int = 1,
     ) -> None:
         super().__init__(
             config,
@@ -146,8 +146,10 @@ class FasterRcnnModel(FasterRcnnPretrained):
         self.backbone = resnet50()
         self.neck = FasterRcnnNeck(config, self.backbone.channels)
 
-        anchor_sizes = [[anchor] for anchor in anchor_sizes]
-        aspect_ratios = [aspect_ratios] * len(anchor_sizes)
+        anchor_sizes = tuple((anchor,) for anchor in anchor_sizes)
+        aspect_ratios = (aspect_ratios,) * len(anchor_sizes)
+        print(anchor_sizes)
+        print(aspect_ratios)
 
         rpn_anchor_generator = AnchorGenerator(
             anchor_sizes, aspect_ratios
@@ -219,25 +221,116 @@ class FasterRcnnModel(FasterRcnnPretrained):
             sizes (List[int, int])
         """
         images = self.check_inputs(images)
-        images = self.resize_inputs(
-            images, self.max_size, preserve_aspect_ratio=self.preserve_aspect_ratio)
+        images, image_sizes, resized_sizes = self.resize_inputs(
+            images, (300, 720), preserve_aspect_ratio=self.preserve_aspect_ratio)
+        print(resized_sizes)
+        for image in images:
+            print(image.size())
 
+        # sys.exit()
         # images, targets = self.transform(images)
-        images, image_sizes, targets = self.transform(images)
+        # images, image_sizes, targets = self.transform(images)
         # [(1920, 1080), ()]
         # outputs = self.backbone(images.tensors)
         outputs = self.backbone(images)  # resnet50, 101, 154, 18, 32
+        for o in outputs:
+            print(o.size())
         # [2, 3, 4, 5]
+        print()
         outputs = self.neck(outputs)
+        for o in outputs:
+            print(o.size())
         # [1, 2, 3, 4, 5]
         outputs = {str(i): o for i, o in enumerate(outputs)}
 
         if self.training:
             raise NotImplementedError
         else:
-            # proposals = self.rpn(images.tensors, images.image_sizes, outputs)
-            # detections = self.roi_heads(outputs, proposals, images.image_sizes)
-            proposals = self.rpn(images, image_sizes, outputs)
-            detections = self.roi_heads(outputs, proposals, image_sizes)
+            # proposals = self.rpn(images, image_sizes, outputs)
+            # detections = self.roi_heads(outputs, proposals, image_sizes)
+            proposals = self.rpn(images, resized_sizes, outputs)
+            detections = self.roi_heads(outputs, proposals, resized_sizes)
             # detections = self.transform.postprocess(detections, images.image_sizes, original_image_sizes)
+
+            for i, (pred, resized, original) in enumerate(zip(detections, resized_sizes, image_sizes)):
+                boxes = pred['boxes']
+                boxes = resize_boxes(boxes, resized, original)
+                detections[i]['boxes'] = boxes
+
             return detections
+
+    def load_weights(self, path):
+        state_dict = torch.load(path)
+        numbering = {str(k): str(v) for k, v in enumerate([3, 2, 1, 0])}
+        head_maps = {'fc6': 1, 'fc7': 3}
+        for key in list(state_dict.keys()):
+            p = key.split('.')
+            if 'num_batches_tracked' not in p and p[0] == 'backbone' and p[1] != 'fpn':
+                if p[2] == 'conv1':
+                    new_key = f'backbone.conv.{p[3]}'
+                    state_dict[new_key] = state_dict.pop(key)
+                elif p[2] == 'bn1':
+                    new_key = f'backbone.bn.{p[3]}'
+                    state_dict[new_key] = state_dict.pop(key)
+                elif p[2].startswith('layer') and p[2] not in ['inner_blocks', 'layer_blocks', 'downsample']:
+                    idx = int(p[2][5]) - 1
+                    if p[4].startswith('conv'):
+                        new_key = f'backbone.layers.{idx}.{p[3]}.{p[4]}.0.{p[5]}'
+                    elif p[4].startswith('downsample'):
+                        new_key = f'backbone.layers.{idx}.{p[3]}.downsample.{p[5]}.{p[6]}'
+                    else:
+                        new_key = f'backbone.layers.{idx}.{p[3]}.{p[4]}.{p[5]}'
+                    state_dict[new_key] = state_dict.pop(key)
+
+            elif p[1] == 'fpn':
+                if p[2] == 'inner_blocks':
+                    idx = numbering.get(p[3])
+                    new_key = f'neck.lateral_layers.{idx}.{p[4]}'
+                    state_dict[new_key] = state_dict.pop(key)
+                elif p[2] == 'layer_blocks':
+                    idx = numbering.get(p[3])
+                    new_key = f'neck.predict_layers.{idx}.{p[4]}'
+                    state_dict[new_key] = state_dict.pop(key)
+
+            elif p[0] == 'rpn':
+                if p[2] == 'conv':
+                    new_key = f'rpn.head.conv.{p[3]}'
+                    state_dict[new_key] = state_dict.pop(key)
+                elif p[2] == 'bbox_pred':
+                    new_key = f'rpn.head.box_layer.{p[3]}'
+                    state_dict[new_key] = state_dict.pop(key)
+                elif p[2] == 'cls_logits':
+                    new_key = f'rpn.head.score_layer.{p[3]}'
+                    state_dict[new_key] = state_dict.pop(key)
+
+            elif p[0] == 'roi_heads':
+                if p[2].startswith('fc'):
+                    idx = head_maps.get(p[2])
+                    new_key = f'roi_heads.box_head.layers.{idx}.{p[3]}'
+                    state_dict[new_key] = state_dict.pop(key)
+                elif p[1] == 'box_predictor':
+                    if p[2] == 'bbox_pred':
+                        new_key = f'roi_heads.box_predictor.box_layer.{p[3]}'
+                        state_dict[new_key] = state_dict.pop(key)
+                    else:
+                        new_key = f'roi_heads.box_predictor.score_layer.{p[3]}'
+                        state_dict[new_key] = state_dict.pop(key)
+
+        self.load_state_dict(state_dict)
+
+
+def resize_boxes(boxes, original_size, new_size):
+    # type: (Tensor, List[int], List[int]) -> Tensor
+    ratios = [
+        torch.tensor(s, dtype=torch.float32, device=boxes.device) /
+        torch.tensor(s_orig, dtype=torch.float32, device=boxes.device)
+        for s, s_orig in zip(new_size, original_size)
+    ]
+    ratio_height, ratio_width = ratios
+    xmin, ymin, xmax, ymax = boxes.unbind(1)
+
+    xmin = xmin * ratio_width
+    xmax = xmax * ratio_width
+    ymin = ymin * ratio_height
+    ymax = ymax * ratio_height
+    return torch.stack((xmin, ymin, xmax, ymax), dim=1)
