@@ -12,7 +12,7 @@ class YolactInference:
         self,
         num_classes: int = 81,
         top_k: int = 10,
-        nms_threshold: float = 0.5,
+        nms_threshold: float = 0.3,
         score_threshold: float = 0.2,
         nms=None
     ) -> None:
@@ -95,7 +95,7 @@ class YolactInference:
 
         # print(boxes.size(), scores.size())
         # boxes, masks, labels, scores = hard_nms(boxes, masks, scores)
-        boxes, masks, labels, scores = self.nms(boxes, masks, scores)
+        boxes, masks, labels, scores = self.nms(boxes, masks, scores, iou_threshold=0.7)
         # print('fast_nms', boxes.size())
 
         return_dict = {
@@ -141,47 +141,3 @@ def _convert_boxes_and_masks(preds, size):
 
     return preds
 
-
-def hard_nms(boxes, masks, scores, iou_threshold=0.5, conf_thresh=0.05):
-    from torchvision.ops import nms as torchvision_nms
-    num_classes = scores.size(0)
-
-    idx_lst = []
-    cls_lst = []
-    scr_lst = []
-
-    # Multiplying by max_size is necessary because of how cnms computes its area and intersections
-    boxes = boxes * 550
-    # print(scores.size())
-    for _class in range(num_classes):
-        class_scores = scores[_class, :]
-        conf_mask = class_scores > conf_thresh
-        idx = torch.arange(class_scores.size(0), device=boxes.device)
-
-        cls_scores = class_scores[conf_mask]
-        idx = idx[conf_mask]
-
-        if cls_scores.size(0) == 0:
-            continue
-
-        keep = torchvision_nms(boxes[conf_mask].cpu(), cls_scores.cpu(), iou_threshold)
-        # keep = torch.Tensor(keep, device=boxes.device).long()
-
-        idx_lst.append(idx[keep])
-        cls_lst.append(keep * 0 + _class)
-        scr_lst.append(cls_scores[keep])
-
-    idx = torch.cat(idx_lst, dim=0)
-    classes = torch.cat(cls_lst, dim=0)
-    scores = torch.cat(scr_lst, dim=0)
-
-    scores, idx2 = scores.sort(0, descending=True)
-    idx2 = idx2[:200]
-    scores = scores[:200]
-
-    idx = idx[idx2]
-    classes = classes[idx2]
-    print('nms', boxes.size())
-
-    # Undo the multiplication above
-    return boxes[idx] / 550, masks[idx], classes, scores
