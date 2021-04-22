@@ -3,10 +3,11 @@ from typing import Optional, Tuple, List, Union, Any
 from ...base_configuration import BaseConfig
 
 
-yolact_pretrained_models = {
+YOLACT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     'yolact-base': 'https://unerue.synology.me/boda/models/yolact/yolact-base.json',
-    'yolact-300': '',
-    'yolact-700': '',
+    'yolact-550-r50': '',
+    'yolact-300-r101': '',
+    'yolact-700-r101': '',
 }
 
 

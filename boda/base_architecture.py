@@ -62,7 +62,8 @@ class ModelMixin(metaclass=ABCMeta):
             image_sizes
         """
         # TODO: modified size
-        image_sizes = [tensor.shape[-2:] for tensor in inputs]
+        image_sizes = [tuple(tensor.shape[-2:]) for tensor in inputs]  # H, W
+        print(image_sizes)
         # if preserve_aspect_ratio:
         #     padding(inputs)
 
@@ -74,11 +75,11 @@ class ModelMixin(metaclass=ABCMeta):
         # padding = None
         if preserve_aspect_ratio:
             images = []
-            for tensor in inputs:
-                tensor = _resize_images(tensor, size[0], size[1])
+            for tensor, image_size in zip(inputs, image_sizes):
+                tensor = _resize_image(tensor, size[0], size[1])
                 images.append(tensor)
 
-            images = batch_images(images)
+            images = _batch_images(images)
         else:
             images = []
             for tensor in inputs:
@@ -94,18 +95,16 @@ class ModelMixin(metaclass=ABCMeta):
         return images, image_sizes
 
 
-def _resize_images(
-    image,
-    min_size,
-    max_size
+def _resize_image(
+    image: Tensor,
+    min_size: int,
+    max_size: int,
+    image_size: Tuple[int, int]
 ) -> None:
-    image_shape = torch.tensor(image.shape[-2:])
-    _min_size = float(torch.min(image_shape))
-    _max_size = float(torch.max(image_shape))
+    _min_size = float(torch.min(image_size))
+    _max_size = float(torch.max(image_size))
 
-    scale_factor = min_size / _min_size
-    if _max_size * scale_factor > max_size:
-        scale_factor = max_size / _max_size
+    scale_factor = torch.min(min_size / _min_size, max_size / _max_size).item()
 
     image = F.interpolate(
         image[None], scale_factor=scale_factor, mode='bilinear', recompute_scale_factor=True,
@@ -123,8 +122,9 @@ def max_by_axis(the_list: List[List[int]]) -> List[int]:
     return maxes
 
 
-def batch_images(images: List[Tensor], size_divisible: int = 32) -> Tensor:
+def _batch_images(images: List[Tensor], size_divisible: int = 32) -> Tensor:
     max_size = max_by_axis([list(img.shape) for img in images])
+    print(max_size)
     stride = float(size_divisible)
     max_size = list(max_size)
     max_size[1] = int(math.ceil(float(max_size[1]) / stride) * stride)
@@ -267,7 +267,7 @@ class Model(nn.Module, ModelMixin):
     # def get_config_dict(cls, model_name_or_path, **kwargs):
     #     raise NotImplementedError
     @classmethod
-    def check_inputs(cls, inputs):
+    def check_inputs(cls, inputs: List[Tensor]) -> List[Tensor]:
         """
         Args:
             inputs (List[Tensor]): Size([C, H, W])
@@ -284,8 +284,8 @@ class Model(nn.Module, ModelMixin):
                     raise ValueError('Expected image to be Tensor.')
             cls._checked_inputs = False
 
-        if isinstance(inputs, list):
-            inputs = torch.stack(inputs)
+        # if isinstance(inputs, list):
+        #     inputs = torch.stack(inputs)
 
         return inputs
 

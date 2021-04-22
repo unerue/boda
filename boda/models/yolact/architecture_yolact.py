@@ -485,26 +485,27 @@ class YolactModel(YolactPretrained):
         else:
             return_dict['scores'] = F.softmax(return_dict['scores'], dim=-1)
             # TODO: ah si ba!! What should I do?!
-            from .inference_yolact import YolactInference, convert_masks_and_boxes
+            from .inference_yolact import YolactInference, _convert_boxes_and_masks
 
-            return_dict = YolactInference(81)(return_dict)
-            results = []
-            for _dict, image_size in zip(return_dict, image_sizes):
-                results.append(convert_masks_and_boxes(_dict, image_size))
+            results = YolactInference(81)(return_dict, image_sizes)
+            # results = []
+            # for _dict, image_size in zip(return_dict, image_sizes):
+            #     results.append(convert_boxes_and_masks(_dict, image_size))
 
-            for result in results:
-                scores = result['scores'].detach().cpu()
-                sorted_index = scores.argsort(0, descending=True)[:5]
+            # for result in results:
+            #     scores = result['scores'].detach().cpu()
+            #     sorted_index = range(len(scores))[:5]
+            #     sorted_index = scores.argsort(0, descending=True)[:5]
 
-                boxes = result['boxes'][sorted_index]
-                labels = result['labels'][sorted_index]
-                scores = scores[sorted_index]
-                masks = result['masks'][sorted_index]
+            #     boxes = result['boxes'][sorted_index]
+            #     labels = result['labels'][sorted_index]
+            #     scores = scores[sorted_index]
+            #     masks = result['masks'][sorted_index]
 
-                result['boxes'] = boxes
-                result['scores'] = scores
-                result['labels'] = labels
-                result['masks'] = masks
+            #     result['boxes'] = boxes
+            #     result['scores'] = scores
+            #     result['labels'] = labels
+            #     result['masks'] = masks
 
             return results
 

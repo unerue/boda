@@ -23,7 +23,7 @@ class BaseConfig:
     def __init__(self, **kwargs):
         self.use_torchscript = kwargs.pop('use_torchscript', False)
         # self.use_fp16 = kwargs.pop('use_fp16', False)
-
+        self.label_map = kwargs.pop('label_map', {})
         self.num_classes = kwargs.pop('num_classes', 0)
         self.min_size = kwargs.pop('min_size', None)
         self.max_size = kwargs.pop('max_size', None)
