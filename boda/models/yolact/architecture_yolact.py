@@ -12,15 +12,15 @@ import torch.nn.functional as F
 from ...base_architecture import Backbone, Neck, Head, Model
 from .configuration_yolact import YolactConfig
 from ..backbone_resnet import resnet101
-from ..neck_fpn import FeaturePyramidNetwork
+from ..neck_fpn import FeaturePyramidNetworks
 
 
-class YolactPredictNeck(FeaturePyramidNetwork):
+class YolactPredictNeck(FeaturePyramidNetworks):
     def __init__(
         self,
         config: YolactConfig,
         channels: Sequence[int],
-        selected_layers: Sequence[int] = [1, 2, 3],
+        selected_backbone_layers: Sequence[int] = [1, 2, 3],
         fpn_channels: int = 256,
         extra_layers: bool = True,
         num_extra_fpn_layers: int = 2,
@@ -28,7 +28,7 @@ class YolactPredictNeck(FeaturePyramidNetwork):
         super().__init__(
             config,
             channels,
-            selected_layers,
+            selected_backbone_layers,
             fpn_channels,
             extra_layers,
             num_extra_fpn_layers
@@ -357,7 +357,7 @@ class YolactModel(YolactPretrained):
         neck: Neck = YolactPredictNeck,
         head: Head = YolactPredictHead,
         num_classes: int = None,
-        selected_layers: Sequence = [1, 2, 3],
+        selected_backbone_layers: Sequence = [1, 2, 3],
         fpn_channels: int = 256,
         num_grids: int = 0,
         mask_size: int = 16,
@@ -369,7 +369,7 @@ class YolactModel(YolactPretrained):
         super().__init__(config)
         self.config = config
         self.num_classes = num_classes
-        self.selected_layers = selected_layers
+        self.selected_backbone_layers = selected_backbone_layers
         self.fpn_channels = fpn_channels
         self.num_grids = num_grids
         self.mask_size = mask_size
@@ -382,7 +382,7 @@ class YolactModel(YolactPretrained):
 
         # TODO: rename backbone, neck, head layers
         self.backbone = resnet101()
-        num_layers = max(self.selected_layers) + 1
+        num_layers = max(self.selected_backbone_layers) + 1
         while len(self.backbone.layers) < num_layers:
             self.backbone.add_layer()
 
@@ -477,8 +477,6 @@ class YolactModel(YolactPretrained):
         proto_masks = proto_masks.permute(0, 2, 3, 1).contiguous()
         return_dict['proto_masks'] = proto_masks
 
-        print(return_dict['proto_masks'].size(), return_dict['mask_coefs'].size())
-
         if self.training:
             return_dict['semantic_masks'] = self.semantic_layer(outputs[0])
             return return_dict
@@ -488,25 +486,6 @@ class YolactModel(YolactPretrained):
             from .inference_yolact import YolactInference, _convert_boxes_and_masks
 
             results = YolactInference(81)(return_dict, image_sizes)
-            # results = []
-            # for _dict, image_size in zip(return_dict, image_sizes):
-            #     results.append(convert_boxes_and_masks(_dict, image_size))
-
-            # for result in results:
-            #     scores = result['scores'].detach().cpu()
-            #     sorted_index = range(len(scores))[:5]
-            #     sorted_index = scores.argsort(0, descending=True)[:5]
-
-            #     boxes = result['boxes'][sorted_index]
-            #     labels = result['labels'][sorted_index]
-            #     scores = scores[sorted_index]
-            #     masks = result['masks'][sorted_index]
-
-            #     result['boxes'] = boxes
-            #     result['scores'] = scores
-            #     result['labels'] = labels
-            #     result['masks'] = masks
-
             return results
 
     def load_weights(self, path):

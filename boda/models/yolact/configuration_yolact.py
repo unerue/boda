@@ -34,10 +34,11 @@ class YolactConfig(BaseConfig):
         num_classes: int = 80,
         max_size: Tuple[int] = (550, 550),
         preserve_aspect_ratio: bool = False,
+
+        selected_backbone_layers: List[int] = [1, 2, 3],
         fpn_channels: int = 256,
         extra_fpn_layers: bool = True,
         num_extra_fpn_layers: int = 2,
-        selected_layers: List[int] = [1, 2, 3],
         aspect_ratios: List = [1, 1/2, 2],
         scales: List = [24, 48, 96, 192, 384],
         num_extra_box_layers: int = 0,
@@ -61,7 +62,7 @@ class YolactConfig(BaseConfig):
         self.fpn_channels = fpn_channels
         self.extra_fpn_layers = extra_fpn_layers
         self.num_extra_fpn_layers = num_extra_fpn_layers
-        self.selected_layers = selected_layers
+        self.selected_backbone_layers = selected_backbone_layers
         self.aspect_ratios = aspect_ratios
         self.scales = scales
         self.num_grids = num_grids

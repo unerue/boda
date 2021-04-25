@@ -3,71 +3,90 @@ import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 
-from ..base_configuration import BaseConfig
 
-
-class FeaturePyramidNetwork(nn.Module):
-    """Pyramid Feature Network
-
-    Args:
-        config (:class:`BaseConfig`):
-        channels (:obj:`List[int]`): list of in_channels from backbone
-        selected_layers (:obj:`List[int]`): list of selected layers from backbone
-        fpn_channels (:obj:`int`):
-        num_extra_fpn_layers (:obj:`int`):
+class FeaturePyramidNetworks(nn.Module):
+    """Pyramid Feature Networks
 
     Example::
         >>> backbone = resnet101()
-        >>> neck = FeaturePyramidNetwork(backbone.channels, [1, 2, 3])
+        >>> neck = FeaturePyramidNetworks(backbone.channels, [1, 2, 3])
         >>> print(neck.channels, neck.selected_layers)
     """
     def __init__(
         self,
-        config: BaseConfig,
+        # TODO: rename channels -> backbone_channels?
         channels: Sequence[int] = [256, 512, 1024, 2048],
+        # TODO: selected_layers -> selected_backbone_layers?
         selected_layers: Sequence[int] = [1, 2, 3],
-        fpn_channels: int = 256,
+        out_channels: int = 256,
+        # TODO: rename num_extra_predict_layers?
         extra_layers: bool = False,
-        num_extra_fpn_layers: int = 2,
+        # TODO: rename num_downsamples? num_upsamples
+        num_extra_predict_layers: int = 2,
     ) -> None:
+        """
+        Args:
+            channels (:obj:`List[int]`): out channels from backbone
+            selected_layers (:obj:`List[int]`): to use selected backbone layers
+            out_channels (:obj:`int`):
+            num_extra_predict_layers (:obj:`int`): make extra predict layers for training
+            num_downsamples: (:obj:`int`): use predict layers does not training
+        """
         super().__init__()
-        self.config = config
         self.channels = [channels[i] for i in selected_layers]
         self.selected_layers = selected_layers
         self.selected_backbones = selected_layers
-        self.fpn_channels = fpn_channels
+        self.out_channels = out_channels
         self.extra_layers = extra_layers
-        self.num_extra_fpn_layers = num_extra_fpn_layers
-
+        self.num_extra_layers = 0
+        self.num_extra_predict_layers = num_extra_predict_layers
+        # TODO: remove variable
         self.selected_layers = \
-            list(range(len(self.selected_layers) + self.num_extra_fpn_layers))
+            list(range(len(self.selected_layers) + self.num_extra_predict_layers))
 
         self.lateral_layers = nn.ModuleList([
             nn.Conv2d(
                 _in_channels,
-                self.fpn_channels,
-                kernel_size=1) for _in_channels in reversed(self.channels)
-            ])
-
-        self.predict_layers = nn.ModuleList([
-            nn.Conv2d(
-                self.fpn_channels,
-                self.fpn_channels,
-                kernel_size=3,
-                padding=1) for _ in self.channels
+                self.out_channels,
+                kernel_size=1
+            ) for _in_channels in reversed(self.channels)
         ])
 
-        if self.extra_layers and self.num_extra_fpn_layers > 0:
+        self.channels = []
+        self.predict_layers = nn.ModuleList()
+        for _ in self.channels:
+            self.predict_layers.append(
+                nn.Conv2d(
+                    self.out_channels,
+                    self.out_channels,
+                    kernel_size=3,
+                    padding=1
+                )
+            )
+            self.channels.append(self.out_channels)
+
+        # self.predict_layers = nn.ModuleList([
+        #     nn.Conv2d(
+        #         self.out_channels,
+        #         self.out_channels,
+        #         kernel_size=3,
+        #         padding=1
+        #     ) for _ in self.channels
+        # ])
+        # TODO: rename self.extra_layers -> self.extra_predict_layers for training
+        # TODO: merge two trigger variables to one variable
+        # use_num_extra_layers? 
+        if self.extra_layers and self.num_extra_predict_layers > 0:
             self.extra_layers = nn.ModuleList([
                 nn.Conv2d(
-                    self.fpn_channels,
-                    self.fpn_channels,
+                    self.out_channels,
+                    self.out_channels,
                     kernel_size=3,
                     stride=2,
-                    padding=1) for _ in range(self.num_extra_fpn_layers)
+                    padding=1
+                ) for _ in range(self.num_extra_predict_layers)
             ])
-
-        self.channels = [self.fpn_channels] * len(self.selected_layers)
+            self.channels.append(self.out_channels)
 
     def forward(self, inputs: List[Tensor]) -> List[Tensor]:
         """
@@ -102,8 +121,9 @@ class FeaturePyramidNetwork(nn.Module):
         if self.extra_layers:
             for extra_layer in self.extra_layers:
                 outputs.append(extra_layer(outputs[-1]))
-        elif self.num_extra_fpn_layers > 0:
-            for _ in range(self.num_extra_fpn_layers):
+
+        elif self.num_extra_predict_layers > 0:
+            for _ in range(self.num_extra_predict_layers):
                 outputs.append(self.predict_layers[-1](outputs[-1]))
 
         return outputs

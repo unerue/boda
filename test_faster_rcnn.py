@@ -12,7 +12,7 @@ model.eval()
 
 images = [torch.randn((3, 1920, 1080), dtype=torch.float32).to('cuda') for _ in range(3)]
 
-file_names = ['test1.jpg', 'test2.jpg', 'test3.jpg', 'test4.jpg', 'test5.jpg', 'test6.jpg']
+file_names = ['test1.jpg', 'test2.jpg', 'test3.jpg', 'test4.jpg', 'test5.jpg', 'test6.jpg', 'test7.jpg', 'test8.jpg']
 
 tensors = []
 for file_name in file_names:

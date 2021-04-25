@@ -1,5 +1,5 @@
 import os
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from typing import Tuple, List, Dict, Any, Callable, TypeVar, Union, Sequence
 
 import torch
@@ -167,7 +167,12 @@ class Solov1PredictHead(Head):
                 list(range(len(self.grids))),
                 upsampled_size=upsampled_size)
 
-        return pred_masks, pred_labels
+        return_dict = {
+            'masks': pred_masks,
+            'labels': pred_labels
+        }
+
+        return return_dict
 
     def split_feature_maps(self, inputs: List[Tensor]) -> Tuple[Tensor]:
         """
@@ -280,6 +285,7 @@ class Solov1Model(Solov1Pretrained):
     ) -> None:
         super().__init__(config)
         self.config = config
+        self.preserve_aspect_ratio = True
 
         if backbone is None:
             self.backbone = resnet50()
@@ -291,19 +297,35 @@ class Solov1Model(Solov1Pretrained):
 
     def forward(self, inputs):
         inputs = self.check_inputs(inputs)
+
+        inputs, image_sizes, resized_sizes = self.resize_inputs(
+            inputs, (300, 720), preserve_aspect_ratio=self.preserve_aspect_ratio)
         # self.config.device = inputs.device
 
         # self.config.size = (inputs.size(2), inputs.size(3))
 
         outputs = self.backbone(inputs)
-        # outputs = [outputs[i] for i in self.config.selected_layers]
         outputs = self.neck(outputs)
-
         outputs = self.head(outputs)
+        if self.training:
+            # pred_instances = F.interpolate(pred_instances.sigmoid(), size=upsampled_size, mode='bilinear', align_corners=False)
+            # pred_categories = points_nms(pred_categories.sigmoid(), kernel=2).permute(0, 2, 3, 1)
+            return outputs
+        else:
+            return_dict = {
+                'masks': defaultdict(list),
+                'labels': defaultdict(list),
+            }
+            for k, values in outputs.items():
+                for i, value in enumerate(values):
+                    return_dict[k][i].append(value)
 
-        # if self.training:
-        #     pred_instances = F.interpolate(pred_instances.sigmoid(), size=upsampled_size, mode='bilinear', align_corners=False)
-        #     pred_categories = points_nms(pred_categories.sigmoid(), kernel=2).permute(0, 2, 3, 1)
+
+            for vs in return_list:
+                for v in vs:
+                    print(v['labels'].size(), v['masks'].size())
+
+            return outputs
 
         # for o in outputs:
         #     print(o.size())
@@ -316,8 +338,6 @@ class Solov1Model(Solov1Pretrained):
         #     print(i, layer)
         #     print(outputs[i].size())
         #     output = layer(outputs[i])
-
-        return outputs
 
     def load_weights(self, path):
         import re

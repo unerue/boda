@@ -21,7 +21,9 @@ class Solov1Config(BaseConfig):
     def __init__(
         self,
         num_classes: int = 80,
-        max_size: Tuple[int] = (1333, 800),
+        min_size: int = 800,
+        max_size: int = 1333,
+        preserve_aspect_ratio: bool = True,
         selected_layers: Sequence[int] = [0, 1, 2, 3],
         fpn_channels: int = 256,
         num_extra_fpn_layers: int = 1,

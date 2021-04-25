@@ -70,6 +70,7 @@ def fast_nms(
 ) -> None:
     """
     """
+    # print(boxes.size(), scores.size(), masks)
     scores, idx = scores.sort(1, descending=True)
 
     idx = idx[:, :top_k].contiguous()

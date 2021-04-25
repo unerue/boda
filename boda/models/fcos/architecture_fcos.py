@@ -65,7 +65,8 @@ class FcosPredictHead(nn.Module):
                 nn.Conv2d(
                     self.fpn_channels, self.fpn_channels,
                     kernel_size=3, stride=1,
-                    padding=1, bias=True),
+                    padding=1, bias=True
+                ),
                 nn.GroupNorm(32, self.fpn_channels),
                 nn.ReLU()
             ]
@@ -77,7 +78,8 @@ class FcosPredictHead(nn.Module):
                 nn.Conv2d(
                     self.fpn_channels, self.fpn_channels,
                     kernel_size=3, stride=1,
-                    padding=1, bias=True),
+                    padding=1, bias=True
+                ),
                 nn.GroupNorm(32, self.fpn_channels),
                 nn.ReLU()
             ]
@@ -89,7 +91,8 @@ class FcosPredictHead(nn.Module):
                 nn.Conv2d(
                     self.fpn_channels, self.fpn_channels,
                     kernel_size=3, stride=1,
-                    padding=1, bias=True),
+                    padding=1, bias=True
+                ),
                 nn.GroupNorm(32, self.fpn_channels),
                 nn.ReLU()
             ]
@@ -104,7 +107,6 @@ class FcosPredictHead(nn.Module):
             kernel_size=3, stride=1,
             padding=1
         )
-
         self.pred_center_layer = nn.Conv2d(
             self.fpn_channels, 1, kernel_size=3,
             stride=1, padding=1
@@ -116,8 +118,6 @@ class FcosPredictHead(nn.Module):
         boxes = []
         scores = []
         centerness = []
-        print(len(inputs))
-        print(len(self.scales))
         for i, feature in enumerate(inputs):
             feature = self.share_layers(feature)
             pred_boxes = self.box_layers(feature)
@@ -175,69 +175,149 @@ class FcosModel(FcosPretrained):
             self.neck.selected_layers
         )
 
+    def compute_locations(self, features):
+        locations = []
+        for level, feature in enumerate(features):
+            h, w = feature.size()[-2:]
+            locations_per_level = self.compute_locations_per_level(
+                h, w, self.fpn_strides[level],
+                feature.device
+            )
+            locations.append(locations_per_level)
+        return locations
+
+    def compute_locations_per_level(self, h, w, stride, device):
+        shifts_x = torch.arange(
+            0, w * stride, step=stride,
+            dtype=torch.float32, device=device
+        )
+        shifts_y = torch.arange(
+            0, h * stride, step=stride,
+            dtype=torch.float32, device=device
+        )
+        shift_y, shift_x = torch.meshgrid(shifts_y, shifts_x)
+        shift_x = shift_x.reshape(-1)
+        shift_y = shift_y.reshape(-1)
+        locations = torch.stack((shift_x, shift_y), dim=1) + stride // 2
+        return locations
+
     def forward(self, inputs):
         inputs = self.check_inputs(inputs)
+        inputs = self.resize_inputs(inputs)
         outputs = self.backbone(inputs)
         outputs = [outputs[i] for i in self.selected_layers]
         outputs = self.neck(outputs)
         o1, o2, o3 = self.heads(outputs)
-        return o1, o2, o3
+        if self.training:
+            pass
+        else:
+            sampled_boxes = []
+            bundle = (
+                self.locations, self.logits_pred,
+                self.reg_pred, self.ctrness_pred,
+                self.strides
+            )
 
-    # def forward(self, images, features, gt_instances):
-    #     """
-    #     Arguments:
-    #         images (list[Tensor] or ImageList): images to be processed
-    #         targets (list[BoxList]): ground-truth boxes present in the image (optional)
+            for i, (l, o, r, c, s) in enumerate(zip(*bundle)):
+                # recall that during training, we normalize regression targets with FPN's stride.
+                # we denormalize them here.
+                r = r * s
+                sampled_boxes.append(
+                    self.forward_for_single_feature_map(
+                        l, o, r, c, self.image_sizes
+                    )
+                )
 
-    #     Returns:
-    #         result (list[BoxList] or dict[Tensor]): the output from the model.
-    #             During training, it returns a dict[Tensor] which contains the losses.
-    #             During testing, it returns list[BoxList] contains additional fields
-    #             like `scores`, `labels` and `mask` (for Mask R-CNN models).
+            boxlists = list(zip(*sampled_boxes))
+            boxlists = [Instances.cat(boxlist) for boxlist in boxlists]
+            boxlists = self.select_over_all_levels(boxlists)
 
-    #     """
-        features = [features[f] for f in self.in_features]
-        locations = self.compute_locations(features)
-        logits_pred, reg_pred, ctrness_pred, bbox_towers = self.fcos_head(features)
+            return outputs
 
-        # if self.training:
-        #     pre_nms_thresh = self.pre_nms_thresh_train
-        #     pre_nms_topk = self.pre_nms_topk_train
-        #     post_nms_topk = self.post_nms_topk_train
-        # else:
-        #     pre_nms_thresh = self.pre_nms_thresh_test
-        #     pre_nms_topk = self.pre_nms_topk_test
-        #     post_nms_topk = self.post_nms_topk_test
+    def select_over_all_levels(self, boxlists):
+        num_images = len(boxlists)
+        results = []
+        for i in range(num_images):
+            # multiclass nms
+            result = ml_nms(boxlists[i], self.nms_thresh)
+            number_of_detections = len(result)
 
-        # outputs = FCOSOutputs(
-        #     images,
-        #     locations,
-        #     logits_pred,
-        #     reg_pred,
-        #     ctrness_pred,
-        #     self.focal_loss_alpha,
-        #     self.focal_loss_gamma,
-        #     self.iou_loss,
-        #     self.center_sample,
-        #     self.sizes_of_interest,
-        #     self.strides,
-        #     self.radius,
-        #     self.fcos_head.num_classes,
-        #     pre_nms_thresh,
-        #     pre_nms_topk,
-        #     self.nms_thresh,
-        #     post_nms_topk,
-        #     self.thresh_with_ctr,
-        #     gt_instances,
-        # )
+            # Limit to max_per_image detections **over all classes**
+            if number_of_detections > self.fpn_post_nms_top_n > 0:
+                cls_scores = result.scores
+                image_thresh, _ = torch.kthvalue(
+                    cls_scores.cpu(),
+                    number_of_detections - self.fpn_post_nms_top_n + 1
+                )
+                keep = cls_scores >= image_thresh.item()
+                keep = torch.nonzero(keep).squeeze(1)
+                result = result[keep]
+            results.append(result)
+        return results
 
-        # if self.training:
-        #     losses, _ = outputs.losses()
-        #     if self.mask_on:
-        #         proposals = outputs.predict_proposals()
-        #         return proposals, losses
-        #     else:
-        #         return None, losses
-        # else:
-        #     proposals = outputs.predict_proposals()
-        #     return proposals, {}
+    def forward_for_single_feature_map(
+            self, locations, box_cls,
+            reg_pred, ctrness, image_sizes
+    ):
+        N, C, H, W = box_cls.shape
+
+        # put in the same format as locations
+        box_cls = box_cls.view(N, C, H, W).permute(0, 2, 3, 1)
+        box_cls = box_cls.reshape(N, -1, C).sigmoid()
+        box_regression = reg_pred.view(N, 4, H, W).permute(0, 2, 3, 1)
+        box_regression = box_regression.reshape(N, -1, 4)
+        ctrness = ctrness.view(N, 1, H, W).permute(0, 2, 3, 1)
+        ctrness = ctrness.reshape(N, -1).sigmoid()
+
+        # if self.thresh_with_ctr is True, we multiply the classification
+        # scores with centerness scores before applying the threshold.
+        if self.thresh_with_ctr:
+            box_cls = box_cls * ctrness[:, :, None]
+        candidate_inds = box_cls > self.pre_nms_thresh
+        # pre_nms_top_n = candidate_inds.view(N, -1).sum(1)
+        pre_nms_top_n = candidate_inds.reshape(N, -1).sum(1)
+        pre_nms_top_n = pre_nms_top_n.clamp(max=self.pre_nms_top_n)
+
+        if not self.thresh_with_ctr:
+            box_cls = box_cls * ctrness[:, :, None]
+
+        results = []
+        for i in range(N):
+            per_box_cls = box_cls[i]
+            per_candidate_inds = candidate_inds[i]
+            per_box_cls = per_box_cls[per_candidate_inds]
+
+            # per_candidate_nonzeros = per_candidate_inds.nonzero()
+            per_candidate_nonzeros = torch.nonzero(per_candidate_inds, as_tuple=False)
+            per_box_loc = per_candidate_nonzeros[:, 0]
+            per_class = per_candidate_nonzeros[:, 1]
+
+            per_box_regression = box_regression[i]
+            per_box_regression = per_box_regression[per_box_loc]
+            per_locations = locations[per_box_loc]
+
+            per_pre_nms_top_n = pre_nms_top_n[i]
+
+            if per_candidate_inds.sum().item() > per_pre_nms_top_n.item():
+                per_box_cls, top_k_indices = \
+                    per_box_cls.topk(per_pre_nms_top_n, sorted=False)
+                per_class = per_class[top_k_indices]
+                per_box_regression = per_box_regression[top_k_indices]
+                per_locations = per_locations[top_k_indices]
+
+            detections = torch.stack([
+                per_locations[:, 0] - per_box_regression[:, 0],
+                per_locations[:, 1] - per_box_regression[:, 1],
+                per_locations[:, 0] + per_box_regression[:, 2],
+                per_locations[:, 1] + per_box_regression[:, 3],
+            ], dim=1)
+
+            boxlist = Instances(image_sizes[i])
+            boxlist.pred_boxes = Boxes(detections)
+            boxlist.scores = torch.sqrt(per_box_cls)
+            boxlist.pred_classes = per_class
+            boxlist.locations = per_locations
+
+            results.append(boxlist)
+
+        return results

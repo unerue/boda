@@ -40,14 +40,8 @@ print(losses)
 
 |Model|State|Training|Inference|Original|Ours|
 |:----|:---:|:------:|:-------:|-------:|---:|
-|[SSD](boda/models/ssd/)|🙂|❌|✔️|||
-|Faster R-CNN|🙂|❌|✔️|||
-|FCIS|😡|❌|❌|||
 |Mask R-CNN|😡|❌|❌|||
-|Keypoint R-CNN|🙂|❌|✔️|||
-|[FCOS](boda/models/fcos/)|🙂|❌|✔️|||
 |PolarMask|😡|❌|❌|||
-|YOLOv4|😡|❌|❌|||
 |[YOLACT](boda/models/yolact/)|😆|✔️|✔️|||
 |[SOLOv1](boda/models/solov1/)|🙂|❌|✔️|||
 |SOLOv2|🙂|❌|✔️|||
@@ -61,6 +55,7 @@ print(losses)
 |:----|:---:|:------:|:-------:|-------:|---:|
 |[SSD](boda/models/ssd/)|🙂|❌|✔️|||
 |Faster R-CNN|🙂|❌|✔️|||
+|[FCOS](boda/models/fcos/)|🙂|❌|✔️|||
 |Keypoint R-CNN|🙂|❌|✔️|||
 |YOLOv4|😡|❌|❌|||
 ||
@@ -73,7 +68,6 @@ print(losses)
 |                       |`ssd-512`|😡|||
 |[Faster R-CNN]()|`faster-rcnn-base`|🙂|||
 |                |`faster-rcnn-r101`|😡|||
-|[FCIS]()|`fcis-base`|😡|||
 |Mask R-CNN|`mask-rcnn-base`|😡|||
 |          |`mask-rcnn-r50`|😡|||
 |Keypoint R-CNN|`keypoint-rcnn-base`|🙂|||

@@ -224,8 +224,6 @@ class FasterRcnnModel(FasterRcnnPretrained):
         images, image_sizes, resized_sizes = self.resize_inputs(
             images, (300, 720), preserve_aspect_ratio=self.preserve_aspect_ratio)
         print(resized_sizes)
-        for image in images:
-            print(image.size())
 
         # sys.exit()
         # images, targets = self.transform(images)
@@ -233,13 +231,7 @@ class FasterRcnnModel(FasterRcnnPretrained):
         # [(1920, 1080), ()]
         # outputs = self.backbone(images.tensors)
         outputs = self.backbone(images)  # resnet50, 101, 154, 18, 32
-        for o in outputs:
-            print(o.size())
-        # [2, 3, 4, 5]
-        print()
         outputs = self.neck(outputs)
-        for o in outputs:
-            print(o.size())
         # [1, 2, 3, 4, 5]
         outputs = {str(i): o for i, o in enumerate(outputs)}
 

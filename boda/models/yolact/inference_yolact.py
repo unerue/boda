@@ -1,10 +1,10 @@
 from typing import Tuple, List, Dict
-import numpy as np
+
 import torch
-from torch import nn, Tensor
+from torch import Tensor
 import torch.nn.functional as F
-from ...ops.box import decode, sanitize_coordinates, crop, jaccard
-from ...ops.nms import fast_nms, torchvision_nms
+from ...ops.box import decode, sanitize_coordinates, crop
+from ...ops.nms import fast_nms
 
 
 class YolactInference:
@@ -17,6 +17,12 @@ class YolactInference:
         nms=None
     ) -> None:
         """
+        Args:
+            num_classes (int)
+            top_k
+            nms_threshold
+            score_threshold
+            nms ()
         """
         self.config = None
         self.num_classes = num_classes
@@ -93,10 +99,7 @@ class YolactInference:
         if scores.size(1) == 0:
             return None
 
-        # print(boxes.size(), scores.size())
-        # boxes, masks, labels, scores = hard_nms(boxes, masks, scores)
-        boxes, masks, labels, scores = self.nms(boxes, masks, scores, iou_threshold=0.7)
-        # print('fast_nms', boxes.size())
+        boxes, masks, labels, scores = self.nms(boxes, scores, masks, iou_threshold=0.3)
 
         return_dict = {
             'boxes': boxes,
@@ -140,4 +143,3 @@ def _convert_boxes_and_masks(preds, size):
     del preds['mask_coefs']
 
     return preds
-

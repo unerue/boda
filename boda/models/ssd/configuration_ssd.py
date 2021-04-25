@@ -16,10 +16,11 @@ class SsdConfig(BaseConfig):
     """
     def __init__(
         self,
-        selected_layers=-1,
-        num_grids=7,
-        max_size=300,
-        num_classes=20,
+        num_classes: int = 20,
+        max_size: int = 300,
+        preserve_aspect_ratio: bool = False,
+        selected_layers: int = -1,
+        num_grids: int = 7,
         **kwargs
     ) -> None:
         super().__init__(max_size=max_size, **kwargs)
@@ -33,7 +34,4 @@ class SsdConfig(BaseConfig):
         self.max_sizes = [60, 111, 162, 213, 264, 315]
         self.steps = [8, 16, 32, 64, 100, 300]
         self.clip = True
-        
         # self.grid_sizes = [38, 19, 10, 5, 3, 1]
-
-
