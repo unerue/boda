@@ -52,7 +52,6 @@ class FeaturePyramidNetworks(nn.Module):
             ) for _in_channels in reversed(self.channels)
         ])
 
-        self.channels = [256] * len(self.selected_layers)
         self.predict_layers = nn.ModuleList()
         for _ in self.channels:
             self.predict_layers.append(
@@ -75,7 +74,7 @@ class FeaturePyramidNetworks(nn.Module):
         # ])
         # TODO: rename self.extra_layers -> self.extra_predict_layers for training
         # TODO: merge two trigger variables to one variable
-        # use_num_extra_layers? 
+        # use_num_extra_layers?
         if self.extra_layers and self.num_extra_predict_layers > 0:
             self.extra_layers = nn.ModuleList([
                 nn.Conv2d(
@@ -87,6 +86,8 @@ class FeaturePyramidNetworks(nn.Module):
                 ) for _ in range(self.num_extra_predict_layers)
             ])
             # self.channels.append(self.out_channels)
+
+        self.channels = [256] * len(self.selected_layers)
 
     def forward(self, inputs: List[Tensor]) -> List[Tensor]:
         """
