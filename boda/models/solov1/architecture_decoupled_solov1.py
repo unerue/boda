@@ -13,7 +13,7 @@ from ...base_architecture import Neck, Head, Model
 from .configuration_solov1 import Solov1Config
 from ..backbone_resnet import resnet101, resnet50
 from ...utils.mask import points_nms
-from ..neck_fpn import FeaturePyramidNetwork
+from ..neck_fpn import FeaturePyramidNetworks
 from .architecture_solov1 import InstanceLayer, CategoryLayer, Solov1PredictNeck, Solov1PredictHead, Solov1Model
 
 

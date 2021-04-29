@@ -18,7 +18,7 @@ from ..neck_fpn import FeaturePyramidNetworks
 class YolactPredictNeck(FeaturePyramidNetworks):
     def __init__(
         self,
-        config: YolactConfig,
+        # config: YolactConfig,
         channels: Sequence[int],
         selected_backbone_layers: Sequence[int] = [1, 2, 3],
         fpn_channels: int = 256,
@@ -26,12 +26,11 @@ class YolactPredictNeck(FeaturePyramidNetworks):
         num_extra_fpn_layers: int = 2,
     ) -> None:
         super().__init__(
-            config,
-            channels,
-            selected_backbone_layers,
-            fpn_channels,
-            extra_layers,
-            num_extra_fpn_layers
+            channels=channels,
+            selected_layers=selected_backbone_layers,
+            out_channels=fpn_channels,
+            extra_layers=extra_layers,
+            num_extra_predict_layers=num_extra_fpn_layers
         )
 
 
@@ -390,9 +389,9 @@ class YolactModel(YolactPretrained):
 
         self.config.mask_dim = config.mask_size**2
 
-        self.neck = YolactPredictNeck(
-            config, self.backbone.channels)
         # self.neck = YolactPredictNeck(
+        #     config, self.backbone.channels)
+        self.neck = YolactPredictNeck(self.backbone.channels)
         #     config, [self.backbone.channels[i] for i in self.selected_layers])
 
         in_channels = self.fpn_channels

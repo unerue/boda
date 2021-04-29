@@ -52,7 +52,7 @@ class FeaturePyramidNetworks(nn.Module):
             ) for _in_channels in reversed(self.channels)
         ])
 
-        self.channels = []
+        self.channels = [256] * len(self.selected_layers)
         self.predict_layers = nn.ModuleList()
         for _ in self.channels:
             self.predict_layers.append(
@@ -63,7 +63,7 @@ class FeaturePyramidNetworks(nn.Module):
                     padding=1
                 )
             )
-            self.channels.append(self.out_channels)
+            # self.channels.append(self.out_channels)
 
         # self.predict_layers = nn.ModuleList([
         #     nn.Conv2d(
@@ -86,7 +86,7 @@ class FeaturePyramidNetworks(nn.Module):
                     padding=1
                 ) for _ in range(self.num_extra_predict_layers)
             ])
-            self.channels.append(self.out_channels)
+            # self.channels.append(self.out_channels)
 
     def forward(self, inputs: List[Tensor]) -> List[Tensor]:
         """

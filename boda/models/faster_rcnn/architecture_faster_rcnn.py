@@ -13,12 +13,12 @@ from .configuration_faster_rcnn import FasterRcnnConfig
 from .anchor_generator import AnchorGenerator
 from .rpn import RpnHead, RegionProposalNetwork
 from .roi_heads import RoiHeads
-from ..neck_fpn import FeaturePyramidNetwork
+from ..neck_fpn import FeaturePyramidNetworks
 from ..backbone_resnet import resnet50
 from ._transform import RcnnTransform
 
 
-class FasterRcnnNeck(FeaturePyramidNetwork):
+class FasterRcnnNeck(FeaturePyramidNetworks):
     def __init__(
         self,
         config,

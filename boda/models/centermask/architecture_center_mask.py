@@ -3,11 +3,11 @@ from typing import Union, Sequence
 import torch
 from torch import nn, Tensor
 from ...base_architecture import Neck, Head, Model
-from ..neck_fpn import FeaturePyramidNetwork
+from ..neck_fpn import FeaturePyramidNetworks
 from .configuration_center_mask import CenterMaskConfig
 
 
-class CenterMaskPredictNeck(FeaturePyramidNetwork):
+class CenterMaskPredictNeck(FeaturePyramidNetworks):
     def __init__(
         self,
         config: CenterMaskConfig,

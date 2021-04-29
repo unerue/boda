@@ -9,10 +9,10 @@ import torch.nn.functional as F
 from ...base_architecture import Head, Model
 from .configuration_solov1 import Solov1Config
 from ..backbone_resnet import resnet101, resnet50
-from ..neck_fpn import FeaturePyramidNetwork
+from ..neck_fpn import FeaturePyramidNetworks
 
 
-class Solov1PredictNeck(FeaturePyramidNetwork):
+class Solov1PredictNeck(FeaturePyramidNetworks):
     def __init__(
         self,
         config: Solov1Config = None,

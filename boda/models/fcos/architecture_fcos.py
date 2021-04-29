@@ -4,12 +4,12 @@ from typing import List, Union, Sequence
 import torch
 from torch import nn, Tensor
 from ...base_architecture import Neck, Head, Model
-from ..neck_fpn import FeaturePyramidNetwork
+from ..neck_fpn import FeaturePyramidNetworks
 from .configuration_fcos import FcosConfig
 from ..backbone_resnet import resnet101
 
 
-class FcosPredictNeck(FeaturePyramidNetwork):
+class FcosPredictNeck(FeaturePyramidNetworks):
     def __init__(
         self,
         config: FcosConfig = None,
