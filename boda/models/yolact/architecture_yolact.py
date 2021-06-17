@@ -11,7 +11,7 @@ import torch.nn.functional as F
 
 from ...base_architecture import Backbone, Neck, Head, Model
 from .configuration_yolact import YolactConfig
-from ..backbone_resnet import resnet101
+from ..backbone_resnet import resnet101, resnet50, resnet18, resnet34
 from ..neck_fpn import FeaturePyramidNetworks
 
 
@@ -380,10 +380,14 @@ class YolactModel(YolactPretrained):
         self.update_config(config)
 
         # TODO: rename backbone, neck, head layers
-        self.backbone = resnet101()
-        num_layers = max(self.selected_backbone_layers) + 1
-        while len(self.backbone.layers) < num_layers:
-            self.backbone.add_layer()
+        self.backbone = backbone
+        # print(self.backbone.channels)
+        # self.backbone = resnet50()
+        # self.backbone = resnet18()
+        # self.backbone = resnet34()
+        # num_layers = max(self.selected_backbone_layers) + 1
+        # while len(self.backbone.layers) < num_layers:
+        #     self.backbone.add_layer()
 
         self.freeze(self.training)
 
@@ -391,7 +395,9 @@ class YolactModel(YolactPretrained):
 
         # self.neck = YolactPredictNeck(
         #     config, self.backbone.channels)
-        self.neck = YolactPredictNeck(self.backbone.channels)
+        self.neck = YolactPredictNeck(
+            self.backbone.channels,
+            selected_backbone_layers=selected_backbone_layers)
         #     config, [self.backbone.channels[i] for i in self.selected_layers])
 
         in_channels = self.fpn_channels
@@ -412,7 +418,7 @@ class YolactModel(YolactPretrained):
             self.neck.channels[0], self.num_classes-1, kernel_size=1
         )
 
-        self.init_weights('cache/backbones/resnet50-19c8e357.pth')
+        # self.init_weights('cache/backbones/resnet50-19c8e357.pth')
 
     def init_weights(self, path):
         self.backbone.from_pretrained(path)
@@ -481,11 +487,12 @@ class YolactModel(YolactPretrained):
             return return_dict
         else:
             return_dict['scores'] = F.softmax(return_dict['scores'], dim=-1)
-            # TODO: ah si ba!! What should I do?!
-            from .inference_yolact import YolactInference, _convert_boxes_and_masks
+            # # TODO: ah si ba!! What should I do?!
+            # from .inference_yolact import YolactInference, _convert_boxes_and_masks
 
-            results = YolactInference(81)(return_dict, image_sizes)
-            return results
+            # results = YolactInference(81)(return_dict, image_sizes)
+            # return results
+            return return_dict
 
     def load_weights(self, path):
         # TODO: 다시 저장해서 다 삭제하자.

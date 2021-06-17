@@ -6,3 +6,5 @@ from .fcos import *
 from .faster_rcnn import *
 from .mask_rcnn import *
 from .keypoint_rcnn import *
+from .backbone_mobilenetv2 import *
+from .backbone_mobilenetv3 import *

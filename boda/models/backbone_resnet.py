@@ -61,7 +61,7 @@ class BasicBlock(nn.Module):
     ) -> None:
         super().__init__()
         if norm_layer is None:
-            norm_layer = nn.BatchNorm2d(track_running_stats=False)
+            norm_layer = nn.BatchNorm2d  # (track_running_stats=False)
 
         if groups != 1 or base_width != 64:
             raise ValueError('BasicBlock only supports groups=1 and base_width=64')
@@ -125,15 +125,15 @@ class Bottleneck(nn.Module):
     def forward(self, inputs) -> Tensor:
         residual = inputs
 
-        outputs = F.relu(self.bn1(self.conv1(inputs)))
-        outputs = F.relu(self.bn2(self.conv2(outputs)))
+        outputs = F.relu(self.bn1(self.conv1(inputs)), inplace=True)
+        outputs = F.relu(self.bn2(self.conv2(outputs)), inplace=True)
         outputs = self.bn3(self.conv3(outputs))
 
         if self.downsample is not None:
             residual = self.downsample(inputs)
 
         outputs += residual
-        outputs = F.relu(outputs)
+        outputs = F.relu(outputs, inplace=True)
 
         return outputs
 
@@ -146,9 +146,9 @@ class ResNet(nn.Module):
         self.channels = []
 
         self.inplanes = 64
-        self.conv = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
-        self.bn = nn.BatchNorm2d(64)
-        self.relu = nn.ReLU()
+        self.conv = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
+        self.bn = nn.BatchNorm2d(self.inplanes)
+        self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
         self._make_layer(block, 64, layers[0])
@@ -157,18 +157,16 @@ class ResNet(nn.Module):
         self._make_layer(block, 512, layers[3], stride=2)
 
         # self.backbone_modules = [m for m in self.modules() if isinstance(m, nn.Conv2d)]
-        self.backbone_modules = [m for m in self.modules()]
+        # self.backbone_modules = [m for m in self.modules()]
 
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
-                nn.Conv2d(
+                Conv2d1x1(
                     self.inplanes,
                     planes * block.expansion,
-                    kernel_size=1,
                     stride=stride,
-                    bias=False
                 ),
                 nn.BatchNorm2d(planes * block.expansion)
             )
@@ -180,10 +178,10 @@ class ResNet(nn.Module):
         for _ in range(1, blocks):
             layers.append(block(self.inplanes, planes))
 
-        layer = nn.Sequential(*layers)
+        # layer = nn.Sequential(*layers)
 
         self.channels.append(planes * block.expansion)
-        self.layers.append(layer)
+        self.layers.append(nn.Sequential(*layers))
 
     def forward(self, inputs):
         inputs = self.conv(inputs)
@@ -227,14 +225,15 @@ def resnet18():
 
 def resnet34():
     backbone = ResNet([3, 4, 6, 3], BasicBlock)
+    print(backbone.channels)
     return backbone
 
 
 def resnet50(pretrained: bool = False):
-    backbone = ResNet([3, 4, 6, 3])
+    backbone = ResNet([3, 4, 6, 3], Bottleneck)
     return backbone
 
 
 def resnet101(pretrained: bool = False):
-    backbone = ResNet([3, 4, 23, 3])
+    backbone = ResNet([3, 4, 23, 3], Bottleneck)
     return backbone
