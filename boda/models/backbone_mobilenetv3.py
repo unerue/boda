@@ -187,7 +187,6 @@ class MobileNetV3(nn.Module):
             #     nn.init.zeros_(m.bias)
 
         # self.backbone_modules = [m for m in self.modules() if isinstance(m, nn.Conv2d)]
-        print(self.channels)
 
     def _forward_impl(self, x: Tensor) -> Tensor:
         # x = self.features(x)
