@@ -7,16 +7,6 @@ from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from torchvision.models.utils import load_state_dict_from_url
 from .backbone_mobilenetv2 import _make_divisible, ConvBNActivation
-# from torchsummary import summary
-
-
-__all__ = ["MobileNetV3", "mobilenet_v3_large", "mobilenet_v3_small"]
-
-
-model_urls = {
-    "mobilenet_v3_large": "https://download.pytorch.org/models/mobilenet_v3_large-8738ca79.pth",
-    "mobilenet_v3_small": "https://download.pytorch.org/models/mobilenet_v3_small-047dcff4.pth",
-}
 
 
 class SqueezeExcitation(nn.Module):
@@ -74,20 +64,32 @@ class InvertedResidual(nn.Module):
 
         # expand
         if cnf.expanded_channels != cnf.input_channels:
-            layers.append(ConvBNActivation(cnf.input_channels, cnf.expanded_channels, kernel_size=1,
-                                           norm_layer=norm_layer, activation_layer=activation_layer))
+            layers.append(
+                ConvBNActivation(
+                    cnf.input_channels, cnf.expanded_channels, kernel_size=1,
+                    norm_layer=norm_layer, activation_layer=activation_layer
+                )
+            )
 
         # depthwise
         stride = 1 if cnf.dilation > 1 else cnf.stride
-        layers.append(ConvBNActivation(cnf.expanded_channels, cnf.expanded_channels, kernel_size=cnf.kernel,
-                                       stride=stride, dilation=cnf.dilation, groups=cnf.expanded_channels,
-                                       norm_layer=norm_layer, activation_layer=activation_layer))
+        layers.append(
+            ConvBNActivation(
+                cnf.expanded_channels, cnf.expanded_channels, kernel_size=cnf.kernel,
+                stride=stride, dilation=cnf.dilation, groups=cnf.expanded_channels,
+                norm_layer=norm_layer, activation_layer=activation_layer
+            )
+        )
         if cnf.use_se:
             layers.append(se_layer(cnf.expanded_channels))
 
         # project
-        layers.append(ConvBNActivation(cnf.expanded_channels, cnf.out_channels, kernel_size=1, norm_layer=norm_layer,
-                                       activation_layer=nn.Identity))
+        layers.append(
+            ConvBNActivation(
+                cnf.expanded_channels, cnf.out_channels, kernel_size=1, 
+                norm_layer=norm_layer, activation_layer=nn.Identity
+            )
+        )
 
         self.block = nn.Sequential(*layers)
         self.out_channels = cnf.out_channels
@@ -133,7 +135,7 @@ class MobileNetV3(nn.Module):
         if norm_layer is None:
             norm_layer = partial(nn.BatchNorm2d, eps=0.001, momentum=0.01)
 
-        layers: List[nn.Module] = []
+        self.layers = nn.ModuleList()
         # Small
         self.channels = []
         # self.channels = [16, 16, 24, 24, 40, 40, 40, 48, 48, 96, 96, 96, 576]
@@ -141,7 +143,7 @@ class MobileNetV3(nn.Module):
 
         # building first layer
         firstconv_output_channels = inverted_residual_setting[0].input_channels
-        layers.append(ConvBNActivation(
+        self.layers.append(ConvBNActivation(
             3, firstconv_output_channels, kernel_size=3, stride=2,
             norm_layer=norm_layer, activation_layer=nn.Hardswish)
         )
@@ -149,22 +151,22 @@ class MobileNetV3(nn.Module):
 
         # building inverted residual blocks
         for cnf in inverted_residual_setting:
-            layers.append(block(cnf, norm_layer))
+            self.layers.append(block(cnf, norm_layer))
             self.channels.append(cnf.input_channels)
 
         # building last several layers
         lastconv_input_channels = inverted_residual_setting[-1].out_channels
         lastconv_output_channels = 6 * lastconv_input_channels
-        layers.append(ConvBNActivation(
+        self.layers.append(ConvBNActivation(
             lastconv_input_channels, lastconv_output_channels, kernel_size=1,
             norm_layer=norm_layer, activation_layer=nn.Hardswish)
         )
         self.channels.append(lastconv_output_channels)
 
         # self.features = nn.Sequential(*layers)
-        self.features = nn.ModuleList()
-        for layer in layers:
-            self.features.append(layer)
+        # self.features = nn.ModuleList()
+        # for layer in layers:
+        #     self.features.append(layer)
 
         # self.avgpool = nn.AdaptiveAvgPool2d(1)
         # self.classifier = nn.Sequential(
@@ -189,18 +191,10 @@ class MobileNetV3(nn.Module):
         # self.backbone_modules = [m for m in self.modules() if isinstance(m, nn.Conv2d)]
 
     def _forward_impl(self, x: Tensor) -> Tensor:
-        # x = self.features(x)
         outputs = []
-        # for feat in self.features:
-        for (i, feat) in enumerate(self.features):
-            x = feat(x)
+        for layer in self.layers:
+            x = layer(x)
             outputs.append(x)
-            print(i, x.size())
-
-        # print(self.channels)
-        # x = self.avgpool(x)
-        # x = torch.flatten(x, 1)
-        # x = self.classifier(x)
 
         return outputs
 
@@ -368,7 +362,6 @@ def mobilenet_v3_small(pretrained: bool = False, progress: bool = True, **kwargs
 10 torch.Size([2, 96, 18, 18])
 11 torch.Size([2, 96, 18, 18])
 12 torch.Size([2, 576, 18, 18])
-
 """
 # features.0.0.weight torch.Size([16, 3, 3, 3])
 # features.0.1.weight torch.Size([16])
