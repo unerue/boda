@@ -125,6 +125,7 @@ class RegionProposalNetwork(nn.Module):
         self,
         anchor_generator,
         head,
+        weights,
         fg_iou_thresh,
         bg_iou_thresh,
         batch_size_per_image,
@@ -142,7 +143,7 @@ class RegionProposalNetwork(nn.Module):
         super().__init__()
         self.anchor_generator = anchor_generator
         self.head = head
-        self.box_coder = BoxCoder(weights=(1.0, 1.0, 1.0, 1.0))
+        self.box_coder = BoxCoder(weights=weights)
 
         # used during training
         self.box_similarity = box_iou
