@@ -8,6 +8,8 @@
 # from .keypoint_rcnn import *
 from .efficientdet import *
 from .cascade_mask_rcnn import *
+from .yolox import *
 # from .backbone_mobilenetv2 import *
 # from .backbone_mobilenetv3 import *
 from .backbone_efficientnet import *
+from .backbone_darknet import *
