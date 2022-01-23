@@ -13,3 +13,4 @@ from .yolox import *
 # from .backbone_mobilenetv3 import *
 from .backbone_efficientnet import *
 from .backbone_darknet import *
+from .backbone_swin_transformer import *
