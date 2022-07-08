@@ -170,7 +170,7 @@ class PostprocessYolact:
             # return_list.append(results)
 
         for result in return_list:
-            scores = result['scores'].detach().cpu()
+            scores = result['scores'].detach()
             sorted_index = range(len(scores))[:self.top_k]
             # sorted_index = scores.argsort(0, descending=True)[:5]
 
@@ -178,6 +178,7 @@ class PostprocessYolact:
             labels = result['labels'][sorted_index]
             scores = scores[sorted_index]
             masks = result['masks'][sorted_index]
+            print(masks[0].sum())
 
             result['boxes'] = boxes
             result['scores'] = scores
@@ -200,7 +201,9 @@ class PostprocessYolact:
         scores = scores[:, keep]
         boxes = decoded_boxes[keep, :]
         labels = labels[keep]
+        print(pred_masks.size())
         masks = pred_masks[batch_index, keep, :]
+        print('mask', masks.size())
 
         if scores.size(1) == 0:
             return None
@@ -235,12 +238,15 @@ def _convert_boxes_and_masks(preds, size):
     proto_masks = preds['proto_masks']
 
     masks = proto_masks @ mask_coefs.t()
+    
     masks = torch.sigmoid(masks)
+    print(masks[0].sum().long())
 
     masks = crop(masks, boxes)
+    masks = masks.permute(2, 0, 1).contiguous()
     masks = F.interpolate(masks.unsqueeze(0), (h, w), mode='bilinear', align_corners=False).squeeze(0)
     masks.gt_(0.5)  # Binarize the masks
-
+    print(masks[0].sum())
     boxes[:, 0], boxes[:, 2] = \
         sanitize_coordinates(boxes[:, 0], boxes[:, 2], w, cast=False)
     boxes[:, 1], boxes[:, 3] = \

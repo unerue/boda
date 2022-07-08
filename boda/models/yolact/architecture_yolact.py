@@ -162,12 +162,12 @@ class YolactPredictModule(Head):
         masks = masks.permute(0, 2, 3, 1).contiguous().view(inputs.size(0), -1, self.mask_dim)
         masks = torch.tanh(masks)
         scores = scores.permute(0, 2, 3, 1).contiguous().view(inputs.size(0), -1, self.num_classes)
-        _, prior_boxes = self.prior_box.generate(h, w, inputs.device)
+        _, default_boxes = self.prior_box.generate(h, w, inputs.device)
 
         return_dict = {
             'scores': scores,
             'boxes': boxes,
-            'default_boxes': prior_boxes,
+            'default_boxes': default_boxes,
             'mask_coefs': masks,
         }
 
@@ -297,6 +297,7 @@ class YolactModel(YolactPretrained):
         # Preprocessing nested list
         self.aspect_ratios = [[self.aspect_ratios]] * len(self.neck.selected_layers)
         self.scales = [[scale] for scale in self.scales]
+
         self.heads = YolactPredictHead(
             config, self.neck.selected_layers, self.neck.channels,
             self.aspect_ratios, self.scales, self.num_classes
