@@ -19,7 +19,7 @@ boda/models/solov1/
 boda/models/yolact_edge/
 boda/models/yolov4/
 
-boda/ops/
+# boda/ops/
 
 benchmarks/data/
 benchmarks/*pth
