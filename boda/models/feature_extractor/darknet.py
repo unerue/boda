@@ -43,7 +43,7 @@ class ConvBatchAct2d(nn.Module):
         return self.act(self.conv(x))
 
 
-class DWConv(nn.Module):
+class DepthWiseConv2d(nn.Module):
     """Depthwise Conv + Conv"""
 
     def __init__(self, in_channels, out_channels, ksize, stride=1, act="silu"):

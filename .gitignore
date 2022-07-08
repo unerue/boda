@@ -15,7 +15,7 @@ boda/models/fcos/
 boda/models/keypoint_rcnn/
 boda/models/mask_rcnn/
 boda/models/polarmask/
-boda/models/solov1/
+# boda/models/solov1/
 boda/models/yolact_edge/
 boda/models/yolov4/
 

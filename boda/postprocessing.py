@@ -7,14 +7,14 @@ import torch.nn.functional as F
 from torchvision.ops import batched_nms
 
 
-def decode(boxes: Tensor, default_boxes: Tensor, variances: List[float] = [0.1, 0.2]):
+def decode(boxes: Tensor, prior_boxes: Tensor, variances: List[float] = [0.1, 0.2]):
     """Decode locations from predictions using priors to undo
     the encoding we did for offset regression at train time.
 
     https://github.com/Hakuyume/chainer-ssd
 
     Args:
-        loc (FloatTensor[N, 4]): location predictions for loc layers,
+        loc (tensor): location predictions for loc layers,
             Shape: [num_priors, 4]
         priors (tensor): Prior boxes in center-offset form.
             Shape: [num_priors, 4].
@@ -23,8 +23,8 @@ def decode(boxes: Tensor, default_boxes: Tensor, variances: List[float] = [0.1, 
         decoded bounding box predictions
     """
     boxes = torch.cat((
-        default_boxes[:, :2] + boxes[:, :2] * variances[0] * default_boxes[:, 2:],
-        default_boxes[:, 2:] * torch.exp(boxes[:, 2:] * variances[1])), dim=1)
+        prior_boxes[:, :2] + boxes[:, :2] * variances[0] * prior_boxes[:, 2:],
+        prior_boxes[:, 2:] * torch.exp(boxes[:, 2:] * variances[1])), dim=1)
     boxes[:, :2] -= boxes[:, 2:] / 2
     boxes[:, 2:] += boxes[:, :2]
 
@@ -88,7 +88,7 @@ def crop(
     return masks * crop_mask.float()
 
 
-class PostprocessYolact:
+class PostprocessOutputs:
     def __init__(
         self,
         num_classes: int = 80,
@@ -121,13 +121,6 @@ class PostprocessYolact:
         image_sizes: List[Tuple[int]]
     ) -> List[Dict[str, Tensor]]:
         """
-        preds (Dict[str, Tensor]):
-            boxes (FloatTensor[B, N, 4])
-            scores (FloatTensor[B, N, 81])
-
-            mask_coefs (FloatTensor[B, N, 32])
-            default_boxes (FloatTensor[N, 4])
-            proto_masks (FloatTensor[1, 138, 138, 32])
         """
         pred_boxes = None
         pred_scores = None
@@ -138,7 +131,6 @@ class PostprocessYolact:
             pred_boxes = preds['boxes']
         if 'scores' in preds:
             pred_scores = preds['scores']
-            print('before', pred_scores.size())
         if 'default_boxes' in preds:
             default_boxes = preds['default_boxes']
         if 'mask_coefs' in preds: 
@@ -146,15 +138,10 @@ class PostprocessYolact:
         if 'proto_masks' in preds:
             proto_masks = preds['proto_masks']
 
-        print(pred_boxes.size(), pred_scores.size(), pred_masks.size(), default_boxes.size(), proto_masks.size())
         batch_size = pred_boxes.size(0)
         num_prior_boxes = default_boxes.size(0)
-        # pred_scores = preds['scores'].view(batch_size, num_prior_boxes, self.num_classes).transpose(2, 1).contiguous()
+        pred_scores = preds['scores'].view(batch_size, num_prior_boxes, self.num_classes).transpose(2, 1).contiguous()
 
-        pred_scores = preds['scores'].view(batch_size, num_prior_boxes, self.num_classes)
-        print('after', pred_scores.size())
-        pred_scores = pred_scores.transpose(2, 1).contiguous()
-        print('after', pred_scores.size())
         # test_scores, test_index = torch.max(preds['scores'], dim=1)
 
         return_list = []
@@ -215,7 +202,7 @@ class PostprocessYolact:
             indices = self.nms(boxes, _scores, labels, iou_threshold=0.3)
 
         return_dict['boxes'] = boxes[indices]
-        return_dict['scores'] = scores[indices]
+        return_dict['scores'] = _scores[indices]
         return_dict['mask_coefs'] = masks[indices]
         return_dict['labels'] = labels[indices]
 
