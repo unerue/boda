@@ -1,5 +1,4 @@
 from typing import List, Sequence
-from numpy import pad
 
 import torch
 from torch import nn, Tensor
@@ -16,15 +15,10 @@ class FeaturePyramidNetworks(nn.Module):
     """
     def __init__(
         self,
-        # TODO: rename channels -> backbone_channels?
         in_channels: Sequence[int] = [256, 512, 1024, 2048],
-        # TODO: selected_layers -> selected_backbone_layers?
         selected_layers: Sequence[int] = [1, 2, 3],
-        # TODO: single value, multi values FPN의 아웃풋채널이 달라질수도있나???
         out_channels: int = 256,
-        # TODO: rename num_extra_predict_layers?
         extra_layers: bool = False,
-        # TODO: rename num_downsamples? num_upsamples
         num_extra_predict_layers: int = 2,
         **kwargs
     ) -> None:
@@ -40,29 +34,20 @@ class FeaturePyramidNetworks(nn.Module):
         self.in_channels = [in_channels[i] for i in selected_layers]
         self.selected_layers = selected_layers
         self.selected_backbones = selected_layers
-        # if isinstance(out_channels, int):
-        #     self.out_channels = [out_channels] * len(selected_layers)
+
         self.extra_layers = extra_layers
         self.num_extra_layers = 0
         self.num_extra_predict_layers = num_extra_predict_layers
-        # TODO: remove variable
+
         self.selected_layers = \
             list(range(len(self.selected_layers) + self.num_extra_predict_layers))
-
-        # self.lateral_layers = nn.ModuleList([
-        #     nn.Conv2d(
-        #         _in_channels,
-        #         self.out_channels,
-        #         kernel_size=1
-        #     ) for _in_channels in reversed(self.in_channels)
-        # ])
 
         self.lateral_layers = nn.ModuleList()
         for _in_channels in reversed(self.in_channels):
             self.lateral_layers.append(
                 nn.Conv2d(
                     _in_channels,
-                    self.out_channels,
+                    out_channels,
                     kernel_size=kwargs.get('lateral_kernel_size', 1),
                     stride=kwargs.get('lateral_stride', 1),
                     padding=kwargs.get('lateral_padding', 0)
@@ -70,33 +55,22 @@ class FeaturePyramidNetworks(nn.Module):
             )
 
         self.predict_layers = nn.ModuleList()
-        for _ in self.channels:
+        for _ in self.in_channels:
             self.predict_layers.append(
                 nn.Conv2d(
-                    self.out_channels,
-                    self.out_channels,
+                    out_channels,
+                    out_channels,
                     kernel_size=kwargs.get('', 3),
                     stride=kwargs.get('', 1),
                     padding=kwargs.get('', 1),
                 )
             )
 
-        # self.predict_layers = nn.ModuleList([
-        #     nn.Conv2d(
-        #         self.out_channels,
-        #         self.out_channels,
-        #         kernel_size=3,
-        #         padding=1
-        #     ) for _ in self.channels
-        # ])
-        # TODO: rename self.extra_layers -> self.extra_predict_layers for training
-        # TODO: merge two trigger variables to one variable
-        # use_num_extra_layers?
-        if self.extra_layers and self.num_extra_predict_layers > 0:
+        if self.num_extra_predict_layers > 0:
             self.extra_layers = nn.ModuleList([
                 nn.Conv2d(
-                    self.out_channels,
-                    self.out_channels,
+                    out_channels,
+                    out_channels,
                     kernel_size=3,
                     stride=2,
                     padding=1
@@ -104,7 +78,7 @@ class FeaturePyramidNetworks(nn.Module):
             ])
             # self.channels.append(self.out_channels)
 
-        self.channels = [256] * len(self.selected_layers)
+        self.channels = [out_channels] * len(self.selected_layers)
 
     def forward(self, inputs: List[Tensor]) -> List[Tensor]:
         """

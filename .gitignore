@@ -8,6 +8,18 @@ dist
 tests
 misc
 doc
+boda/models/cascade_mask_rcnn/
+boda/models/efficientdet/
+boda/models/faster_rcnn/
+boda/models/fcos/
+boda/models/keypoint_rcnn/
+boda/models/mask_rcnn/
+boda/models/polarmask/
+boda/models/solov1/
+boda/models/yolact_edge/
+boda/models/yolov4/
+
+boda/ops/
 
 benchmarks/data/
 benchmarks/*pth
@@ -17,6 +29,7 @@ benchmarks/benchmark_yolov1.py
 benchmarks/benchmark_backbone.py
 
 boda/dev/
+dev/
 old/
 cache/
 

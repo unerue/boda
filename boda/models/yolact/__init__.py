@@ -1,11 +1,12 @@
 from .configuration_yolact import YolactConfig
-from .architecture_yolact import YolactPredictNeck, YolactPredictHead, YolactModel
-from .loss_yolact import YolactLoss
+from .architecture_yolact import YolactPredictHead, YolactModel
+from .inference_yolact import PostprocessYolact
+# from .loss_yolact import YolactLoss
 
 
 __all__ = [
-    'YolactLoss', 'YolactConfig', 'YolactPredictNeck',
-    'YolactPredictHead', 'YolactModel', 'YolactLoss',
+    'YolactConfig', 'PostprocessYolact',
+    'YolactPredictHead', 'YolactModel'
 ]
 
 # _import_structure = {

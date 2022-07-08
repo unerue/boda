@@ -34,7 +34,6 @@ class YolactConfig(BaseConfig):
         num_classes: int = 80,
         max_size: Tuple[int] = (550, 550),
         preserve_aspect_ratio: bool = False,
-
         selected_backbone_layers: List[int] = [1, 2, 3],
         fpn_channels: int = 256,
         extra_fpn_layers: bool = True,

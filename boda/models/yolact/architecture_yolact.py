@@ -9,116 +9,12 @@ import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 
-from ...base_architecture import Backbone, Neck, Head, Model
 from .configuration_yolact import YolactConfig
-from ..backbone_resnet import resnet101, resnet50, resnet18, resnet34
-from ..neck_fpn import FeaturePyramidNetworks
+from ..feature_extractor import FeaturePyramidNetworks
+from ...base_architecture import Head, Model
+from ...ops.anchor_generators import DefaultBoxGenerator
 
-
-class YolactPredictNeck(FeaturePyramidNetworks):
-    def __init__(
-        self,
-        # config: YolactConfig,
-        channels: Sequence[int],
-        selected_backbone_layers: Sequence[int] = [1, 2, 3],
-        fpn_channels: int = 256,
-        extra_layers: bool = True,
-        num_extra_fpn_layers: int = 2,
-    ) -> None:
-        super().__init__(
-            channels=channels,
-            selected_layers=selected_backbone_layers,
-            out_channels=fpn_channels,
-            extra_layers=extra_layers,
-            num_extra_predict_layers=num_extra_fpn_layers
-        )
-
-
-# T = TypeVar('T', bound=Callable[..., Any])
-def prior_cache(func):
-    cache = defaultdict()
-
-    @functools.wraps(func)
-    def wrapper(*args):
-        k, v = func(*args)
-        if k not in cache:
-            cache[k] = v
-        return k, cache[k]
-    return wrapper
-
-
-class PriorBox:
-    """
-    Args:
-        aspect_ratios (:obj:`List[int]`):
-        scales (:obj:):
-        max_size ():
-        use_preapply_sqrt ():
-        use_pixel_scales ():
-        use_square_anchors (:obj:`bool`): default `True`
-    """
-    def __init__(
-        self,
-        aspect_ratios: List[int],
-        scales: List[float],
-        max_size: Tuple[int] = (550, 550),
-        use_preapply_sqrt: bool = True,
-        use_pixel_scales: bool = True,
-        use_square_anchors: bool = True
-    ) -> None:
-        self.aspect_ratios = aspect_ratios
-        self.scales = scales
-        self.max_size = max_size
-        self.use_preapply_sqrt = use_preapply_sqrt
-        self.use_pixel_scales = use_pixel_scales
-        self.use_square_anchors = use_square_anchors
-
-    @prior_cache
-    def generate(
-        self,
-        h: int,
-        w: int,
-        device: str = 'cuda'
-    ) -> Tuple[Tuple[int], Tensor]:
-        """
-        Args:
-            h (:obj:`int`): feature map size from backbone
-            w (:obj:`int`): feature map size from backbone
-            device (:obj:`str`): default `cuda`
-
-        Returns
-            size (:obj:`Tuple[int]`): feature map size
-            prior_boxes (:obj:`FloatTensor[N, 4]`):
-        """
-        size = (h, w)
-        prior_boxes = []
-        for j, i in itertools.product(range(h), range(w)):
-            x = (i + 0.5) / w
-            y = (j + 0.5) / h
-            for ratios in self.aspect_ratios:
-                for scale in self.scales:
-                    for ratio in ratios:
-                        if not self.use_preapply_sqrt:
-                            ratio = math.sqrt(ratio)
-
-                        if self.use_pixel_scales:
-                            _h = scale / ratio / self.max_size[0]
-                            _w = scale * ratio / self.max_size[1]
-                        else:
-                            _h = scale / ratio / h
-                            _w = scale * ratio / w
-
-                        if self.use_square_anchors:
-                            _h = _w
-
-                        prior_boxes += [x, y, _w, _h]
-
-        # TODO: thinking processing to(device)
-        prior_boxes = \
-            torch.as_tensor(prior_boxes, dtype=torch.float32).view(-1, 4).to(device)
-        prior_boxes.requires_grad = False
-
-        return size, prior_boxes
+from ..feature_extractor import resnet101
 
 
 class ProtoNet(nn.Sequential):
@@ -139,7 +35,7 @@ class ProtoNet(nn.Sequential):
         )
 
 
-class HeadBranch(Head):
+class YolactPredictModule(Head):
     """Prediction Head for YOLACT
 
     Args:
@@ -177,16 +73,17 @@ class HeadBranch(Head):
         self.num_extra_mask_layers = num_extra_mask_layers
         self.num_extra_score_layers = num_extra_score_layers
 
-        self.prior_box = PriorBox(
+        self.prior_box = DefaultBoxGenerator(
             aspect_ratios,
             scales,
             config.max_size,
             config.use_preapply_sqrt,
             config.use_pixel_scales,
-            config.use_square_anchors)
+            config.use_square_anchors
+        )
 
         self.mask_dim = config.mask_dim
-        self.num_priors = sum(len(x)*len(scales) for x in aspect_ratios)
+        self.num_priors = sum(len(ratio) * len(scales) for ratio in aspect_ratios)
         self.parent = [parent]
 
         if parent is None:
@@ -270,7 +167,7 @@ class HeadBranch(Head):
         return_dict = {
             'scores': scores,
             'boxes': boxes,
-            'prior_boxes': prior_boxes,
+            'default_boxes': prior_boxes,
             'mask_coefs': masks,
         }
 
@@ -296,7 +193,7 @@ class YolactPredictHead(nn.Sequential):
             if i > 0:
                 parent = head_layers[0]
 
-            head_layers.append(HeadBranch(
+            head_layers.append(YolactPredictModule(
                 config,
                 in_channels[j],
                 in_channels[j],
@@ -352,12 +249,9 @@ class YolactModel(YolactPretrained):
     def __init__(
         self,
         config: YolactConfig,
-        backbone: Backbone = resnet101,
-        neck: Neck = YolactPredictNeck,
-        head: Head = YolactPredictHead,
+        backbone=None,
         num_classes: int = None,
-        selected_backbone_layers: Sequence = [1, 2, 3],
-        fpn_channels: int = 256,
+        selected_layers: Sequence = [1, 2, 3],
         num_grids: int = 0,
         mask_size: int = 16,
         aspect_ratios: Sequence = [1, 1/2, 2],
@@ -368,8 +262,7 @@ class YolactModel(YolactPretrained):
         super().__init__(config)
         self.config = config
         self.num_classes = num_classes
-        self.selected_backbone_layers = selected_backbone_layers
-        self.fpn_channels = fpn_channels
+        self.selected_backbone_layers = selected_layers
         self.num_grids = num_grids
         self.mask_size = mask_size
         self.aspect_ratios = aspect_ratios
@@ -379,25 +272,20 @@ class YolactModel(YolactPretrained):
 
         self.update_config(config)
 
-        # TODO: rename backbone, neck, head layers
         self.backbone = backbone
-        # print(self.backbone.channels)
-        # self.backbone = resnet50()
-        # self.backbone = resnet18()
-        # self.backbone = resnet34()
-        # num_layers = max(self.selected_backbone_layers) + 1
-        # while len(self.backbone.layers) < num_layers:
-        #     self.backbone.add_layer()
+        if self.backbone is None:
+            self.backbone = resnet101()
 
         self.freeze(self.training)
 
         self.config.mask_dim = config.mask_size**2
 
-        # self.neck = YolactPredictNeck(
-        #     config, self.backbone.channels)
-        self.neck = YolactPredictNeck(
-            self.backbone.channels,
-            selected_backbone_layers=selected_backbone_layers)
+        self.neck = FeaturePyramidNetworks(
+            in_channels=self.backbone.channels,
+            selected_layers=selected_layers,
+            out_channels=256,
+            num_extra_predict_layers=2
+        )
         #     config, [self.backbone.channels[i] for i in self.selected_layers])
 
         in_channels = self.fpn_channels
@@ -481,6 +369,7 @@ class YolactModel(YolactPretrained):
         proto_masks = F.relu(proto_masks)
         proto_masks = proto_masks.permute(0, 2, 3, 1).contiguous()
         return_dict['proto_masks'] = proto_masks
+        return_dict['image_sizes'] = image_sizes
 
         if self.training:
             return_dict['semantic_masks'] = self.semantic_layer(outputs[0])
@@ -508,6 +397,14 @@ class YolactModel(YolactPretrained):
                     state_dict[new_key] = state_dict.pop(key)
                 elif p[4].startswith('conv'):
                     new_key = f'backbone.layers.{p[2]}.{p[3]}.{p[4]}.0.{p[5]}'
+                    state_dict[new_key] = state_dict.pop(key)
+                elif key in [
+                    "backbone.layers.0.0.downsample.0.weight", 
+                    "backbone.layers.1.0.downsample.0.weight", 
+                    "backbone.layers.2.0.downsample.0.weight", 
+                    "backbone.layers.3.0.downsample.0.weight"
+                    ]:
+                    new_key = f'backbone.layers.{p[2]}.{p[3]}.{p[4]}.{p[5]}.0.{p[6]}'
                     state_dict[new_key] = state_dict.pop(key)
                 else:
                     state_dict[key] = state_dict.pop(key)
