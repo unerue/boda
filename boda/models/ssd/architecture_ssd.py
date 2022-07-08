@@ -86,18 +86,13 @@ class SsdPredictNeck(Neck):
 
             if v == 'M':
                 # _layers.append(nn.MaxPool2d(**kwargs))
-                _layers.update({
-                    f'maxpool{i}': nn.MaxPool2d(**kwargs)
-                })
+                _layers.update({f'maxpool{i}': nn.MaxPool2d(**kwargs)})
             else:
                 if kwargs is None:
                     kwargs = {'kernel_size': 1}
 
                 _layers.update({
-                    (f'{i}', nn.Conv2d(
-                        in_channels=self._in_channels,
-                        out_channels=v,
-                        **kwargs)),
+                    (f'{i}', nn.Conv2d(in_channels=self._in_channels, out_channels=v, **kwargs)),
                     (f'relu{i}', nn.ReLU())
                 })
 
@@ -187,24 +182,24 @@ class PriorBox:
         return size, prior_boxes
 
 
-class BoxBranch(nn.Conv2d):
-    def __init__(self, in_channels, out_channels):
-        super().__init__(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            kernel_size=3,
-            padding=1
-        )
+# class BoxBranch(nn.Conv2d):
+#     def __init__(self, in_channels, out_channels):
+#         super().__init__(
+#             in_channels=in_channels,
+#             out_channels=out_channels,
+#             kernel_size=3,
+#             padding=1
+#         )
 
 
-class ScoreBranch(nn.Conv2d):
-    def __init__(self, in_channels, out_channels):
-        super().__init__(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            kernel_size=3,
-            padding=1
-        )
+# class ScoreBranch(nn.Conv2d):
+#     def __init__(self, in_channels, out_channels):
+#         super().__init__(
+#             in_channels=in_channels,
+#             out_channels=out_channels,
+#             kernel_size=3,
+#             padding=1
+#         )
 
 
 class SsdPredictHeads(nn.ModuleList):
@@ -231,28 +226,28 @@ class SsdPredictHead(nn.Module):
         self.prior_box = PriorBox(
             config, aspect_ratios, step, min_sizes, max_sizes)
 
-        # self.box_layer = nn.Conv2d(
-        #     in_channels=in_channels,
-        #     out_channels=self.boxes * 4,
-        #     kernel_size=3,
-        #     padding=1
-        # )
+        self.box_layer = nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=self.boxes * 4,
+            kernel_size=3,
+            padding=1
+        )
 
-        # self.score_layer = nn.Conv2d(
-        #     in_channels=in_channels,
-        #     out_channels=self.boxes * self.num_classes,
-        #     kernel_size=3,
-        #     padding=1
-        # )
-        self.box_layer = BoxBranch(in_channels, self.boxes*4)
-        self.score_layer = ScoreBranch(in_channels, self.boxes*self.num_classes)
+        self.score_layer = nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=self.boxes * self.num_classes,
+            kernel_size=3,
+            padding=1
+        )
+        # self.box_layer = BoxBranch(in_channels, self.boxes*4)
+        # self.score_layer = ScoreBranch(in_channels, self.boxes*self.num_classes)
 
     def forward(self, inputs):
         h, w = inputs.size(2), inputs.size(3)
         boxes = self.box_layer(inputs)
         scores = self.score_layer(inputs)
 
-        _, prior_boxes = self.prior_box.generate(h, w)
+        _, default_boxes = self.prior_box.generate(h, w)
 
         boxes = boxes.view(boxes.size(0), -1, 4)
         scores = scores.view(scores.size(0), -1, self.num_classes)
@@ -260,7 +255,7 @@ class SsdPredictHead(nn.Module):
         return_dict = {
             'boxes': boxes,
             'scores': scores,
-            'prior_boxes': prior_boxes
+            'prior_boxes': default_boxes
         }
 
         return return_dict
@@ -280,6 +275,8 @@ class SsdPretrained(Model):
 
 class SsdModel(SsdPretrained):
     """
+    boxes: xyxy?
+
     """
     structures = {
         'ssd300': [
@@ -314,8 +311,9 @@ class SsdModel(SsdPretrained):
         self.heads = SsdPredictHeads()
         for i, in_channels in enumerate(self.neck.channels):
             head = SsdPredictHead(
-                config,
-                in_channels, config.boxes[i], config.aspect_ratios[i], config.steps[i], config.min_sizes[i], config.max_sizes[i])
+                config, in_channels, config.boxes[i], config.aspect_ratios[i],
+                config.steps[i], config.min_sizes[i], config.max_sizes[i]
+            )
             self.heads.append(head)
 
     def forward(self, inputs):

@@ -40,6 +40,7 @@ class DefaultBoxGenerator:
     ) -> None:
         self.aspect_ratios = aspect_ratios
         self.scales = scales
+        self.clip = False
         self.max_size = max_size
         self.use_preapply_sqrt = use_preapply_sqrt
         self.use_pixel_scales = use_pixel_scales
@@ -61,10 +62,10 @@ class DefaultBoxGenerator:
             prior_boxes (:obj:`FloatTensor[N, 4]`):
         """
         size = (h, w)
-        prior_boxes = []
+        default_boxes = []
         for j, i in itertools.product(range(h), range(w)):
-            x = (i + 0.5) / w
-            y = (j + 0.5) / h
+            cx = (i + 0.5) / w
+            cy = (j + 0.5) / h
             for ratios in self.aspect_ratios:
                 for scale in self.scales:
                     for ratio in ratios:
@@ -81,10 +82,12 @@ class DefaultBoxGenerator:
                         if self.use_square_anchors:
                             _h = _w
 
-                        prior_boxes += [x, y, _w, _h]
+                        default_boxes += [cx, cy, _w, _h]
 
-        prior_boxes = \
-            torch.as_tensor(prior_boxes, dtype=torch.float32, device=device).view(-1, 4)
-        prior_boxes.requires_grad = False
+        default_boxes = \
+            torch.tensor(default_boxes, dtype=torch.float32, device=device, requires_grad=False).view(-1, 4)
+        if self.clip:
+            default_boxes.clamp_(min=0, max=1)
+        # prior_boxes.requires_grad = False
 
-        return size, prior_boxes
+        return size, default_boxes

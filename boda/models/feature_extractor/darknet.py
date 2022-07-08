@@ -14,11 +14,11 @@ def get_activation(name="silu", inplace=True):
     return module
 
 
-class BaseConv(nn.Module):
+class ConvBatchAct2d(nn.Module):
     """A Conv2d -> Batchnorm -> silu/leaky relu block"""
 
     def __init__(
-        self, in_channels, out_channels, ksize, stride, groups=1, bias=False, act="silu"
+        self, in_channels, out_channels, ksize, stride, groups=1, bias=False, act=nn.SiLU(inplace=True)
     ):
         super().__init__()
         self.out_channels = out_channels
@@ -34,7 +34,7 @@ class BaseConv(nn.Module):
             bias=bias,
         )
         self.bn = nn.BatchNorm2d(out_channels)
-        self.act = get_activation(act, inplace=True)
+        self.act = act
 
     def forward(self, x):
         return self.act(self.bn(self.conv(x)))

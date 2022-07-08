@@ -4,8 +4,7 @@ from typing import Tuple, List, Dict
 import torch
 from torch import Tensor
 import torch.nn.functional as F
-from torchvision.ops import batched_nms, nms
-
+from torchvision.ops import batched_nms
 
 
 def decode(boxes: Tensor, prior_boxes: Tensor, variances: List[float] = [0.1, 0.2]):
@@ -52,8 +51,8 @@ def sanitize_coordinates(
         _x2 = _x2.long()
     x1 = torch.min(_x1, _x2)
     x2 = torch.max(_x1, _x2)
-    x1 = torch.clamp(x1-padding, min=0)
-    x2 = torch.clamp(x2+padding, max=img_size)
+    x1 = torch.clamp(x1 - padding, min=0)
+    x2 = torch.clamp(x2 + padding, max=img_size)
 
     return x1, x2
 
@@ -92,7 +91,7 @@ def crop(
 class PostprocessYolact:
     def __init__(
         self,
-        num_classes: int = 81,
+        num_classes: int = 80,
         top_k: int = 10,
         nms_threshold: float = 0.3,
         score_threshold: float = 0.2,
@@ -106,7 +105,7 @@ class PostprocessYolact:
             nms ()
         """
         self.config = None
-        self.num_classes = num_classes
+        self.num_classes = num_classes + 1
         self.background_label = 0
         self.top_k = top_k
         self.nms_threshold = 0.5
@@ -128,18 +127,15 @@ class PostprocessYolact:
         pred_masks = preds['mask_coefs']
         default_boxes = preds['default_boxes']
         proto_masks = preds['proto_masks']
-        print(proto_masks.size())
-        print(proto_masks[0])
 
         batch_size = pred_boxes.size(0)
         num_prior_boxes = default_boxes.size(0)
-        pred_scores = preds['scores'].view(
-            batch_size, num_prior_boxes, self.num_classes).transpose(2, 1).contiguous()
+        pred_scores = preds['scores'].view(batch_size, num_prior_boxes, self.num_classes).transpose(2, 1).contiguous()
 
         # test_scores, test_index = torch.max(preds['scores'], dim=1)
 
         return_list = []
-        print(image_sizes)
+        # print(image_sizes)
         for i, image_size in enumerate(image_sizes):
             print(i, proto_masks.size())
             decoded_boxes = decode(pred_boxes[i], default_boxes)
@@ -175,55 +171,32 @@ class PostprocessYolact:
         pred_scores,
     ) -> Dict[str, Tensor]:
         scores = pred_scores[batch_index, 1:, :]
-        max_scores, max_class = torch.max(scores, dim=0)
+        max_scores, labels = torch.max(scores, dim=0)
 
-        keep = (max_scores > 0.2)  # 0.05
+        keep = max_scores > self.score_threshold  # 0.05
         scores = scores[:, keep]
         boxes = decoded_boxes[keep, :]
-        classes = max_class[keep]
+        labels = labels[keep]
         masks = pred_masks[batch_index, keep, :]
 
         if scores.size(1) == 0:
             return None
         
-        print(max_scores[0], max_class[0])
-        print(boxes.size(), scores.size(), keep.size(), classes.size())
+        # print(max_scores[0], max_class[0])
+        print(boxes.size(), scores.size(), keep.size(), labels.size())
         # boxes, masks, labels, scores = self.nms(boxes, scores, keep, iou_threshold=0.3)
-        
-        # not fast nms, 
+
         return_dict = defaultdict()
-        # return_dict = {
-        #     'boxes': [],
-        #     'mask_coefs': [],
-        #     'scores': [],
-        #     'labels': [],
-        #     'proto_masks': []
-        # }
-
         for _class in range(scores.size(0)):
-            _scores = scores[_class, :]
-            
-            indices = self.nms(boxes, _scores, classes, iou_threshold=0.3)
+            _scores = scores[_class, :]            
+            indices = self.nms(boxes, _scores, labels, iou_threshold=0.3)
 
-
-        print(boxes[indices])
         return_dict['boxes'] = boxes[indices]
         return_dict['scores'] = _scores[indices]
         return_dict['mask_coefs'] = masks[indices]
-        return_dict['labels'] = classes[indices]
-        return_dict['proto_masks'] = None
+        return_dict['labels'] = labels[indices]
 
-        print('쉬발?', indices)
-        # print(return_dict['boxes'])
-        # return_dict = {
-        #     'boxes': boxes,
-        #     'mask_coefs': masks,
-        #     'scores': scores,
-        #     # 'labels': labels,
-        #     'proto_masks': None
-        # }
-
-        return return_dict
+        return dict(return_dict)
 
 
 def _convert_boxes_and_masks(preds, size):
