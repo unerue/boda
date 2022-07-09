@@ -242,6 +242,7 @@ def _convert_boxes_and_masks(preds, size):
     masks = torch.sigmoid(masks)
 
     masks = crop(masks, boxes)
+    masks = masks.permute(2, 0, 1).contiguous()
     masks = F.interpolate(masks.unsqueeze(0), (h, w), mode='bilinear', align_corners=False).squeeze(0)
     masks.gt_(0.5)  # Binarize the masks
 
