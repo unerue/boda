@@ -111,6 +111,7 @@ for output in outputs:
             )
             ax.add_patch(rect)
 
+            ## contours
             for contour in contours:
                 shapes = []
                 for point in contour:
