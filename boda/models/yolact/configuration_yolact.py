@@ -1,13 +1,14 @@
 import os
 from typing import Optional, Tuple, List, Union, Any
+
 from ...base_configuration import BaseConfig
 
 
 YOLACT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    'yolact-base': 'https://unerue.synology.me/boda/models/yolact/yolact-base.json',
-    'yolact-550-r50': '',
-    'yolact-300-r101': '',
-    'yolact-700-r101': '',
+    "yolact-base": "https://unerue.synology.me/boda/models/yolact/yolact-base.json",
+    "yolact-550-r50": "",
+    "yolact-300-r101": "",
+    "yolact-700-r101": "",
 }
 
 
@@ -27,7 +28,8 @@ class YolactConfig(BaseConfig):
         num_grid_sizes (:obj:`int`):
         num_mask_dim (:obj:`int`):
     """
-    model_name = 'yolact'
+
+    model_name = "yolact"
 
     def __init__(
         self,
@@ -38,7 +40,7 @@ class YolactConfig(BaseConfig):
         fpn_channels: int = 256,
         extra_fpn_layers: bool = True,
         num_extra_fpn_layers: int = 2,
-        aspect_ratios: List = [1, 1/2, 2],
+        aspect_ratios: List = [1, 1 / 2, 2],
         scales: List = [24, 48, 96, 192, 384],
         num_extra_box_layers: int = 0,
         num_extra_mask_layers: int = 0,
@@ -82,4 +84,4 @@ class YolactConfig(BaseConfig):
         self.score_weight = score_weight
         self.semantic_weight = semantic_weight
 
-        self.label_map = kwargs.get('label_map', None)
+        self.label_map = kwargs.get("label_map", None)

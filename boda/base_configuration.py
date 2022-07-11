@@ -1,11 +1,11 @@
-import os
-import sys
 import copy
 import json
+import os
+import sys
 import time
+from typing import Tuple, List, Dict, Any, Union, Sequence
 from urllib.parse import urlparse
 from urllib.request import urlretrieve
-from typing import Tuple, List, Dict, Any, Union, Sequence
 
 from .file_utils import DataEncoder
 
@@ -17,40 +17,41 @@ class BaseConfig:
     Args:
         name_or_path (:obj:`str`):
     """
-    model_name: str = ''
-    cache_dir = 'cache'
+
+    model_name: str = ""
+    cache_dir = "cache"
 
     def __init__(self, **kwargs):
-        self.use_torchscript = kwargs.pop('use_torchscript', False)
+        self.use_torchscript = kwargs.pop("use_torchscript", False)
         # self.use_fp16 = kwargs.pop('use_fp16', False)
-        self.label_map = kwargs.pop('label_map', {})
-        self.num_classes = kwargs.pop('num_classes', 0)
-        self.min_size = kwargs.pop('min_size', None)
-        self.max_size = kwargs.pop('max_size', None)
-        self.preserve_aspect_ratio = kwargs.pop('preserve_aspect_ratio', False)
+        self.label_map = kwargs.pop("label_map", {})
+        self.num_classes = kwargs.pop("num_classes", 0)
+        self.min_size = kwargs.pop("min_size", None)
+        self.max_size = kwargs.pop("max_size", None)
+        self.preserve_aspect_ratio = kwargs.pop("preserve_aspect_ratio", False)
         if not isinstance(self.max_size, Sequence):
             if not self.preserve_aspect_ratio:
                 self.max_size = (self.max_size, self.max_size)
             else:
                 self.max_size = (self.min_size, self.max_size)
 
-        self.num_grids = kwargs.pop('num_grids', 0)
-        self.top_k = kwargs.pop('top_k', 5)
-        self.score_thresh = kwargs.pop('score_thresh', 0.15)
+        self.num_grids = kwargs.pop("num_grids", 0)
+        self.top_k = kwargs.pop("top_k", 5)
+        self.score_thresh = kwargs.pop("score_thresh", 0.15)
 
         # backbone
-        self.backbone_name = kwargs.pop('backbone_name', 'resnet101')
-        self.backbone_structure = kwargs.pop('backbone_structure', None)
+        self.backbone_name = kwargs.pop("backbone_name", "resnet101")
+        self.backbone_structure = kwargs.pop("backbone_structure", None)
 
         # neck
-        self.neck_name = kwargs.pop('neck_name', 'fpn')
-        self.selected_layers = kwargs.pop('selected_layers', [1, 2, 3])
-        self.aspect_ratios = kwargs.pop('aspect_ratios', [1, 1/2, 2])
-        self.scales = kwargs.pop('scales', [24, 48, 96, 192, 384])
-        self.fpn_channels = kwargs.pop('fpn_channels', 256)
+        self.neck_name = kwargs.pop("neck_name", "fpn")
+        self.selected_layers = kwargs.pop("selected_layers", [1, 2, 3])
+        self.aspect_ratios = kwargs.pop("aspect_ratios", [1, 1 / 2, 2])
+        self.scales = kwargs.pop("scales", [24, 48, 96, 192, 384])
+        self.fpn_channels = kwargs.pop("fpn_channels", 256)
 
         # head
-        self.anchors = kwargs.pop('anchors', None)
+        self.anchors = kwargs.pop("anchors", None)
 
         for k, v in kwargs.items():
             print(k, v)
@@ -60,7 +61,7 @@ class BaseConfig:
                 print(k, v, e)
 
     def __repr__(self):
-        return f'{self.__class__.__name__} {self.to_dict()}'
+        return f"{self.__class__.__name__} {self.to_dict()}"
 
     def to_json(self):
         config_dict = self.to_dict()
@@ -68,8 +69,8 @@ class BaseConfig:
 
     def to_dict(self):
         output = copy.deepcopy(self.__dict__)
-        if hasattr(self.__class__, 'model_name'):
-            output['model_name'] = self.__class__.model_name
+        if hasattr(self.__class__, "model_name"):
+            output["model_name"] = self.__class__.model_name
         return output
 
     def save_json(self, path: str):
@@ -78,7 +79,7 @@ class BaseConfig:
 
         # os.makedirs(path, exist_ok=True)
         # config_file = os.path.join(path, CONFIG_NAME)
-        with open(path, 'w', encoding='utf-8') as writer:
+        with open(path, "w", encoding="utf-8") as writer:
             writer.write(self.to_json())
 
     def update(self, config_dict: Dict[str, Any]):
@@ -92,7 +93,7 @@ class BaseConfig:
 
     @classmethod
     def _dict_from_json_file(self, path):
-        with open(path, 'r', encoding='utf-8') as json_file:
+        with open(path, "r", encoding="utf-8") as json_file:
             config_dict = json.load(json_file)
         return config_dict
 
@@ -106,15 +107,16 @@ class BaseConfig:
     def _get_config_dict(cls, name_or_path, **kwargs):
         if os.path.isdir(name_or_path):
             # TODO: Thinking idea!!
-            config_file = os.path.join(name_or_path, 'config.json')
+            config_file = os.path.join(name_or_path, "config.json")
         elif os.path.isfile(name_or_path):
             config_file = name_or_path
         else:
-            url = 'https://unerue.synology.me/boda/models/'
+            url = "https://unerue.synology.me/boda/models/"
             config_dir = os.path.join(cls.cache_dir, cls.model_name)
-            config_file = os.path.join(config_dir, f'{name_or_path}.json')
+            config_file = os.path.join(config_dir, f"{name_or_path}.json")
             if not os.path.isfile(config_file):
                 from urllib import request
+
                 from .file_utils import reporthook
 
                 if not os.path.isdir(config_dir):
@@ -123,8 +125,9 @@ class BaseConfig:
                 # file_name = f'{config_file}.json'
                 # print(f'Downloading {name_or_path}.{extension}...', end=' ')
                 request.urlretrieve(
-                    f'{url}{cls.model_name}/{name_or_path}.json',
-                    config_file, reporthook
+                    f"{url}{cls.model_name}/{name_or_path}.json",
+                    config_file,
+                    reporthook,
                 )
                 print()
 
@@ -152,13 +155,13 @@ class BaseConfig:
         # config_dict = cls._dict_from_json_file(config_file)
 
         # return config_dict, kwargs
+
     # @classmethod
     # def from_json(cls, json_file: str):
     #     with open(path, 'r') as json_file:
     #         config_dict = json.loads(json_file)
     #     config_dict = cls.dict_from_json_fiel(json_file)
     #     return cls(**config_dict)
-
 
     # @classmethod
     # def from_pretrained(cls, pretrained_model_or_path: str, **kwargs):

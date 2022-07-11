@@ -2,8 +2,8 @@ from collections import defaultdict
 from typing import Tuple, List, Dict
 
 import torch
-from torch import Tensor
 import torch.nn.functional as F
+from torch import Tensor
 from torchvision.ops import batched_nms
 
 
@@ -22,9 +22,13 @@ def decode(boxes: Tensor, prior_boxes: Tensor, variances: List[float] = [0.1, 0.
     Return:
         decoded bounding box predictions
     """
-    boxes = torch.cat((
-        prior_boxes[:, :2] + boxes[:, :2] * variances[0] * prior_boxes[:, 2:],
-        prior_boxes[:, 2:] * torch.exp(boxes[:, 2:] * variances[1])), dim=1)
+    boxes = torch.cat(
+        (
+            prior_boxes[:, :2] + boxes[:, :2] * variances[0] * prior_boxes[:, 2:],
+            prior_boxes[:, 2:] * torch.exp(boxes[:, 2:] * variances[1]),
+        ),
+        dim=1,
+    )
     boxes[:, :2] -= boxes[:, 2:] / 2
     boxes[:, 2:] += boxes[:, :2]
 
@@ -32,11 +36,7 @@ def decode(boxes: Tensor, prior_boxes: Tensor, variances: List[float] = [0.1, 0.
 
 
 def sanitize_coordinates(
-    _x1,
-    _x2,
-    img_size: int,
-    padding: int = 0,
-    cast: bool = True
+    _x1, _x2, img_size: int, padding: int = 0, cast: bool = True
 ) -> Tuple[Tensor, Tensor]:
     """
     Sanitizes the input coordinates so that x1 < x2, x1 != x2, x1 >= 0, and x2 <= image_size.
@@ -57,11 +57,7 @@ def sanitize_coordinates(
     return x1, x2
 
 
-def crop(
-    masks,
-    boxes,
-    padding: int = 1
-) -> Tensor:
+def crop(masks, boxes, padding: int = 1) -> Tensor:
     """
     "Crop" predicted masks by zeroing out everything not in the predicted bbox.
     Vectorized by Chong (thanks Chong).
@@ -75,8 +71,16 @@ def crop(
     x1, x2 = sanitize_coordinates(boxes[:, 0], boxes[:, 2], w, padding, cast=False)
     y1, y2 = sanitize_coordinates(boxes[:, 1], boxes[:, 3], h, padding, cast=False)
 
-    rows = torch.arange(w, device=masks.device, dtype=x1.dtype).view(1, -1, 1).expand(h, w, n)
-    cols = torch.arange(h, device=masks.device, dtype=x1.dtype).view(-1, 1, 1).expand(h, w, n)
+    rows = (
+        torch.arange(w, device=masks.device, dtype=x1.dtype)
+        .view(1, -1, 1)
+        .expand(h, w, n)
+    )
+    cols = (
+        torch.arange(h, device=masks.device, dtype=x1.dtype)
+        .view(-1, 1, 1)
+        .expand(h, w, n)
+    )
 
     masks_left = rows >= x1.view(1, 1, -1)
     masks_right = rows < x2.view(1, 1, -1)
@@ -116,31 +120,33 @@ class PostprocessOutputs:
         #     self.nms = fast_nms
 
     def __call__(
-        self,
-        preds: Dict[str, Tensor],
-        image_sizes: List[Tuple[int]]
+        self, preds: Dict[str, Tensor], image_sizes: List[Tuple[int]]
     ) -> List[Dict[str, Tensor]]:
-        """
-        """
+        """ """
         pred_boxes = None
         pred_scores = None
         default_boxes = None
         pred_masks = None
         proto_masks = None
-        if 'boxes' in preds:
-            pred_boxes = preds['boxes']
-        if 'scores' in preds:
-            pred_scores = preds['scores']
-        if 'default_boxes' in preds:
-            default_boxes = preds['default_boxes']
-        if 'mask_coefs' in preds: 
-            pred_masks = preds['mask_coefs']
-        if 'proto_masks' in preds:
-            proto_masks = preds['proto_masks']
+        if "boxes" in preds:
+            pred_boxes = preds["boxes"]
+        if "scores" in preds:
+            pred_scores = preds["scores"]
+        if "default_boxes" in preds:
+            default_boxes = preds["default_boxes"]
+        if "mask_coefs" in preds:
+            pred_masks = preds["mask_coefs"]
+        if "proto_masks" in preds:
+            proto_masks = preds["proto_masks"]
 
         batch_size = pred_boxes.size(0)
         num_prior_boxes = default_boxes.size(0)
-        pred_scores = preds['scores'].view(batch_size, num_prior_boxes, self.num_classes).transpose(2, 1).contiguous()
+        pred_scores = (
+            preds["scores"]
+            .view(batch_size, num_prior_boxes, self.num_classes)
+            .transpose(2, 1)
+            .contiguous()
+        )
 
         # test_scores, test_index = torch.max(preds['scores'], dim=1)
 
@@ -151,25 +157,25 @@ class PostprocessOutputs:
             decoded_boxes = decode(pred_boxes[i], default_boxes)
             results = self._filter_overlaps(i, decoded_boxes, pred_masks, pred_scores)
             print(proto_masks[i].dtype)
-            results['proto_masks'] = proto_masks[i]
+            results["proto_masks"] = proto_masks[i]
 
             return_list.append(_convert_boxes_and_masks(results, image_size))
             # return_list.append(results)
 
         for result in return_list:
-            scores = result['scores'].detach().cpu()
-            sorted_index = range(len(scores))[:self.top_k]
+            scores = result["scores"].detach().cpu()
+            sorted_index = range(len(scores))[: self.top_k]
             # sorted_index = scores.argsort(0, descending=True)[:5]
 
-            boxes = result['boxes'][sorted_index]
-            labels = result['labels'][sorted_index]
+            boxes = result["boxes"][sorted_index]
+            labels = result["labels"][sorted_index]
             scores = scores[sorted_index]
-            masks = result['masks'][sorted_index]
+            masks = result["masks"][sorted_index]
 
-            result['boxes'] = boxes
-            result['scores'] = scores
-            result['labels'] = labels
-            result['masks'] = masks
+            result["boxes"] = boxes
+            result["scores"] = scores
+            result["labels"] = labels
+            result["masks"] = masks
 
         return return_list
 
@@ -191,20 +197,20 @@ class PostprocessOutputs:
 
         if scores.size(1) == 0:
             return None
-        
+
         # print(max_scores[0], max_class[0])
         print(boxes.size(), scores.size(), keep.size(), labels.size())
         # boxes, masks, labels, scores = self.nms(boxes, scores, keep, iou_threshold=0.3)
 
         return_dict = defaultdict()
         for _class in range(scores.size(0)):
-            _scores = scores[_class, :]            
+            _scores = scores[_class, :]
             indices = self.nms(boxes, _scores, labels, iou_threshold=0.3)
 
-        return_dict['boxes'] = boxes[indices]
-        return_dict['scores'] = _scores[indices]
-        return_dict['mask_coefs'] = masks[indices]
-        return_dict['labels'] = labels[indices]
+        return_dict["boxes"] = boxes[indices]
+        return_dict["scores"] = _scores[indices]
+        return_dict["mask_coefs"] = masks[indices]
+        return_dict["labels"] = labels[indices]
 
         return dict(return_dict)
 
@@ -217,27 +223,31 @@ def _convert_boxes_and_masks(preds, size):
 
     """
     h, w = size
-    boxes = preds['boxes']
-    mask_coefs = preds['mask_coefs']
-    proto_masks = preds['proto_masks']
+    boxes = preds["boxes"]
+    mask_coefs = preds["mask_coefs"]
+    proto_masks = preds["proto_masks"]
 
     masks = proto_masks @ mask_coefs.t()
     masks = torch.sigmoid(masks)
 
     masks = crop(masks, boxes)
-    masks = F.interpolate(masks.unsqueeze(0), (h, w), mode='bilinear', align_corners=False).squeeze(0)
+    masks = F.interpolate(
+        masks.unsqueeze(0), (h, w), mode="bilinear", align_corners=False
+    ).squeeze(0)
     masks.gt_(0.5)  # Binarize the masks
 
-    boxes[:, 0], boxes[:, 2] = \
-        sanitize_coordinates(boxes[:, 0], boxes[:, 2], w, cast=False)
-    boxes[:, 1], boxes[:, 3] = \
-        sanitize_coordinates(boxes[:, 1], boxes[:, 3], h, cast=False)
+    boxes[:, 0], boxes[:, 2] = sanitize_coordinates(
+        boxes[:, 0], boxes[:, 2], w, cast=False
+    )
+    boxes[:, 1], boxes[:, 3] = sanitize_coordinates(
+        boxes[:, 1], boxes[:, 3], h, cast=False
+    )
     boxes = boxes.long()
 
-    preds['boxes'] = boxes
-    preds['masks'] = masks
+    preds["boxes"] = boxes
+    preds["masks"] = masks
 
-    del preds['proto_masks']
-    del preds['mask_coefs']
+    del preds["proto_masks"]
+    del preds["mask_coefs"]
 
     return preds

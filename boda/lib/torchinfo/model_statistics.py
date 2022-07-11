@@ -17,7 +17,7 @@ CORRECTED_INPUT_SIZE_TYPE = List[Union[Iterable[Any], torch.Size]]
 
 
 class ModelStatistics:
-    """ Class for storing results of the summary. """
+    """Class for storing results of the summary."""
 
     def __init__(
         self,
@@ -46,7 +46,7 @@ class ModelStatistics:
                     self.total_output += 2 * prod(layer_info.output_size)
 
     def __repr__(self) -> str:
-        """ Print results of the summary. """
+        """Print results of the summary."""
         header_row = self.formatting.format_row("Layer (type:depth-idx)", HEADER_TITLES)
         layer_rows = self.layers_to_str()
         divider = "=" * self.formatting.get_total_width()
@@ -86,12 +86,12 @@ class ModelStatistics:
 
     @staticmethod
     def to_bytes(num: int) -> float:
-        """ Converts a number (assume floats, 4 bytes each) to megabytes. """
+        """Converts a number (assume floats, 4 bytes each) to megabytes."""
         return num * 4 / 1e6
 
     @staticmethod
     def to_readable(num: int) -> Tuple[str, float]:
-        """ Converts a number to millions, billions, or trillions. """
+        """Converts a number to millions, billions, or trillions."""
         if num >= 1e12:
             return "T", num / 1e12
         if num >= 1e9:
@@ -101,7 +101,7 @@ class ModelStatistics:
     def layer_info_to_row(
         self, layer_info: LayerInfo, reached_max_depth: bool = False
     ) -> str:
-        """ Convert layer_info to string representation of a row. """
+        """Convert layer_info to string representation of a row."""
 
         def get_start_str(depth: int) -> str:
             return "├─" if depth == 1 else "|    " * (depth - 1) + "└─"
@@ -128,7 +128,7 @@ class ModelStatistics:
         return new_line
 
     def layers_to_str(self) -> str:
-        """ Print each layer of the model using a fancy branching diagram. """
+        """Print each layer of the model using a fancy branching diagram."""
         new_str = ""
         current_hierarchy: Dict[int, LayerInfo] = {}
 

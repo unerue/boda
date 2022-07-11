@@ -7,19 +7,20 @@ import torch
 from torch import nn, Tensor
 from torchvision.ops import StochasticDepth
 from torchvision.ops.misc import ConvNormActivation, SqueezeExcitation
+
 # from torchvision._internally_replaced_utils import load_state_dict_from_url
 
 
 __all__ = [
-    'EfficientNet',
-    'efficientnet_b0',
-    'efficientnet_b1',
-    'efficientnet_b2',
-    'efficientnet_b3',
-    'efficientnet_b4',
-    'efficientnet_b5',
-    'efficientnet_b6',
-    'efficientnet_b7',
+    "EfficientNet",
+    "efficientnet_b0",
+    "efficientnet_b1",
+    "efficientnet_b2",
+    "efficientnet_b3",
+    "efficientnet_b4",
+    "efficientnet_b5",
+    "efficientnet_b6",
+    "efficientnet_b7",
 ]
 
 
@@ -79,18 +80,18 @@ class MBConvConfig:
         return s.format(**self.__dict__)
 
     @staticmethod
-    def adjust_channels(channels: int, width_mult: float, min_value: Optional[int] = None) -> int:
+    def adjust_channels(
+        channels: int, width_mult: float, min_value: Optional[int] = None
+    ) -> int:
         return _make_divisible(channels * width_mult, 8, min_value)
 
     @staticmethod
     def adjust_depth(num_layers: int, depth_mult: float):
         return int(math.ceil(num_layers * depth_mult))
-    
-    
+
+
 def _efficientnet_conf(width_mult: float, depth_mult: float) -> List[MBConvConfig]:
-    bneck_conf = partial(
-        MBConvConfig, width_mult=width_mult, depth_mult=depth_mult
-    )
+    bneck_conf = partial(MBConvConfig, width_mult=width_mult, depth_mult=depth_mult)
     inverted_residual_setting = [
         bneck_conf(1, 3, 1, 32, 16, 1),
         bneck_conf(6, 3, 2, 16, 24, 2),
@@ -100,7 +101,7 @@ def _efficientnet_conf(width_mult: float, depth_mult: float) -> List[MBConvConfi
         bneck_conf(6, 5, 2, 112, 192, 4),
         bneck_conf(6, 3, 1, 192, 320, 1),
     ]
-    
+
     return inverted_residual_setting
 
 
@@ -117,7 +118,9 @@ class MBConv(nn.Module):
         if not (1 <= cnf.stride <= 2):
             raise ValueError("illegal stride value")
 
-        self.use_res_connect = cnf.stride == 1 and cnf.input_channels == cnf.out_channels
+        self.use_res_connect = (
+            cnf.stride == 1 and cnf.input_channels == cnf.out_channels
+        )
 
         layers: List[nn.Module] = []
         activation_layer = nn.SiLU
@@ -150,12 +153,22 @@ class MBConv(nn.Module):
 
         # squeeze and excitation
         squeeze_channels = max(1, cnf.input_channels // 4)
-        layers.append(se_layer(expanded_channels, squeeze_channels, activation=partial(nn.SiLU, inplace=True)))
+        layers.append(
+            se_layer(
+                expanded_channels,
+                squeeze_channels,
+                activation=partial(nn.SiLU, inplace=True),
+            )
+        )
 
         # project
         layers.append(
             ConvNormActivation(
-                expanded_channels, cnf.out_channels, kernel_size=1, norm_layer=norm_layer, activation_layer=None
+                expanded_channels,
+                cnf.out_channels,
+                kernel_size=1,
+                norm_layer=norm_layer,
+                activation_layer=None,
             )
         )
 
@@ -191,7 +204,7 @@ class EfficientNet(nn.Module):
 
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
-            
+
         self.inverted_residual_setting = _efficientnet_conf(
             width_mult=width_mult, depth_mult=depth_mult
         )
@@ -199,11 +212,18 @@ class EfficientNet(nn.Module):
         # building first layer
         firstconv_output_channels = self.inverted_residual_setting[0].input_channels
         self.firstconv_layer = ConvNormActivation(
-            3, firstconv_output_channels, kernel_size=3, stride=2, norm_layer=norm_layer, activation_layer=nn.SiLU
+            3,
+            firstconv_output_channels,
+            kernel_size=3,
+            stride=2,
+            norm_layer=norm_layer,
+            activation_layer=nn.SiLU,
         )
 
         # building inverted residual blocks
-        total_stage_blocks = sum(cnf.num_layers for cnf in self.inverted_residual_setting)
+        total_stage_blocks = sum(
+            cnf.num_layers for cnf in self.inverted_residual_setting
+        )
         stage_block_id = 0
         for cnf in self.inverted_residual_setting:
             stage: List[nn.Module] = []
@@ -217,14 +237,16 @@ class EfficientNet(nn.Module):
                     block_cnf.stride = 1
 
                 # adjust stochastic depth probability based on the depth of the stage block
-                sd_prob = stochastic_depth_prob * float(stage_block_id) / total_stage_blocks
+                sd_prob = (
+                    stochastic_depth_prob * float(stage_block_id) / total_stage_blocks
+                )
 
                 stage.append(block(block_cnf, sd_prob, norm_layer))
                 stage_block_id += 1
-                
+
             # self.channels.append(block_cnf.out_channels)
             self.layers.extend(stage)
-            
+
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight, mode="fan_out")
@@ -241,25 +263,26 @@ class EfficientNet(nn.Module):
         last_x = None
         for i, layer in enumerate(self.layers):
             x = layer(x)
-            
+
             if layer.stride == 2:
                 outputs.append(last_x)
             elif i == len(self.layers) - 1:
                 outputs.append(x)
             last_x = x
-        
+
         del last_x
 
         return outputs[1:]
-    
+
     def from_pretrained(self, path):
         state_dict = torch.load(path)
         # state_dict = load_state_dict_from_url(model_urls[arch], progress=True)
 
         try:
             excepted_keys = [
-                key for key in list(state_dict)
-                if key.startswith('features.8') or key.startswith('classifier')
+                key
+                for key in list(state_dict)
+                if key.startswith("features.8") or key.startswith("classifier")
             ]
             for excepted_key in excepted_keys:
                 state_dict.pop(excepted_key)
@@ -298,7 +321,7 @@ def efficientnet_b5() -> EfficientNet:
     backbone = EfficientNet(
         width_mult=1.6,
         depth_mult=2.2,
-        norm_layer=partial(nn.BatchNorm2d, eps=0.001, momentum=0.01)
+        norm_layer=partial(nn.BatchNorm2d, eps=0.001, momentum=0.01),
     )
     return backbone
 
@@ -307,7 +330,7 @@ def efficientnet_b6() -> EfficientNet:
     backbone = EfficientNet(
         width_mult=1.8,
         depth_mult=2.6,
-        norm_layer=partial(nn.BatchNorm2d, eps=0.001, momentum=0.01)
+        norm_layer=partial(nn.BatchNorm2d, eps=0.001, momentum=0.01),
     )
     return backbone
 
@@ -316,6 +339,6 @@ def efficientnet_b7() -> EfficientNet:
     backbone = EfficientNet(
         width_mult=2.0,
         depth_mult=3.1,
-        norm_layer=partial(nn.BatchNorm2d, eps=0.001, momentum=0.01)
+        norm_layer=partial(nn.BatchNorm2d, eps=0.001, momentum=0.01),
     )
     return backbone

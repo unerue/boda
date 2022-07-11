@@ -13,7 +13,7 @@
 #         align_corners=False
 #     )[0]
 #     print(resized_img.shape)
-    
+
 #     padded_img[:, :int(img.shape[1] * r), :int(img.shape[2] * r)] = resized_img
 #     padded_img = padded_img.contiguous().type(torch.float32)
 
@@ -89,11 +89,11 @@
 #             output[i] = detections
 #         else:
 #             output[i] = torch.cat((output[i], detections))
-          
+
 #     output = [{
 #         'boxes': o[:, :4],
 #         'labels': o[:, 6],
 #         'scores': o[:, 4] * o[:, 5],
 #     } for o in output]
-            
+
 #     return output

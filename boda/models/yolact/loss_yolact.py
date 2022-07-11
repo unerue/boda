@@ -278,7 +278,7 @@
 #             F.smooth_l1_loss(
 #                 pred_boxes,
 #                 matched_pred_boxes, reduction='sum') * self.box_weight
-        
+
 #         losses['M'] = self.lincomb_mask_loss(
 #             positive_scores,
 #             matched_indexes,
@@ -460,6 +460,3 @@
 #                 pred_segmentic_mask, true_segmentic_mask, reduction='sum')
 
 #         return loss / h / w
-
-
-

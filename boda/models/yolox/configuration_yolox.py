@@ -5,7 +5,7 @@
 
 # class YoloXConfig(BaseConfig):
 #     model_name = 'yolox'
-    
+
 #     def __init__(
 #         self,
 #         num_classes: int = 80,
@@ -25,10 +25,10 @@
 #         self.depth = depth
 #         self.width = width
 #         self.act = act
-        
+
 #         self.selected_backbone_layers = selected_backbone_layers
-        
+
 #         self.depthwise = depthwise
-        
+
 #         self.test_conf = test_conf
 #         self.nmsthre = nmsthre

@@ -1,21 +1,22 @@
 from typing import Tuple, List, Optional, Callable
 
 import torch
-from torch import nn, Tensor
 import torch.nn.functional as F
+from torch import nn, Tensor
 
 
 # TODO: BACKBONE_ARCHIVE_MAP or _MAPS? or ARCHIVES?
 BACKBONE_ARCHIVE_MAP = {
-    'resnet18': 'https://download.pytorch.org/models/resnet18-5c106cde.pth',
-    'resnet34': 'https://download.pytorch.org/models/resnet34-333f7ec4.pth',
-    'resnet50': 'https://download.pytorch.org/models/resnet50-19c8e357.pth',
-    'resnet101': 'https://download.pytorch.org/models/resnet101-5d3b4d8f.pth',
+    "resnet18": "https://download.pytorch.org/models/resnet18-5c106cde.pth",
+    "resnet34": "https://download.pytorch.org/models/resnet34-333f7ec4.pth",
+    "resnet50": "https://download.pytorch.org/models/resnet50-19c8e357.pth",
+    "resnet101": "https://download.pytorch.org/models/resnet101-5d3b4d8f.pth",
 }
 
 
 class Conv2d1x1(nn.Sequential):
     """1x1 convolution"""
+
     def __init__(
         self,
         in_planes: int,
@@ -29,18 +30,25 @@ class Conv2d1x1(nn.Sequential):
 
 class Conv2d3x3(nn.Sequential):
     """3x3 convolution with padding"""
+
     def __init__(
         self,
         in_planes: int,
         out_planes: int,
         stride: int = 1,
         groups: int = 1,
-        dilation: int = 1
+        dilation: int = 1,
     ) -> None:
         super().__init__(
             nn.Conv2d(
-                in_planes, out_planes, kernel_size=3, stride=stride,
-                padding=dilation, groups=groups, bias=False, dilation=dilation
+                in_planes,
+                out_planes,
+                kernel_size=3,
+                stride=stride,
+                padding=dilation,
+                groups=groups,
+                bias=False,
+                dilation=dilation,
             )
         )
 
@@ -57,16 +65,16 @@ class BasicBlock(nn.Module):
         groups: int = 1,
         base_width: int = 64,
         dilation: int = 1,
-        norm_layer: Optional[Callable[..., nn.Module]] = None
+        norm_layer: Optional[Callable[..., nn.Module]] = None,
     ) -> None:
         super().__init__()
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d  # (track_running_stats=False)
 
         if groups != 1 or base_width != 64:
-            raise ValueError('BasicBlock only supports groups=1 and base_width=64')
+            raise ValueError("BasicBlock only supports groups=1 and base_width=64")
         if dilation > 1:
-            raise NotImplementedError('Dilation > 1 not supported in BasicBlock')
+            raise NotImplementedError("Dilation > 1 not supported in BasicBlock")
 
         self.conv1 = Conv2d3x3(inplanes, planes, stride)
         self.bn1 = norm_layer(planes)
@@ -104,7 +112,7 @@ class Bottleneck(nn.Module):
         planes: int,
         stride: int = 1,
         downsample: Optional[nn.Module] = None,
-        norm_layer: Optional[Callable[..., nn.Module]] = None
+        norm_layer: Optional[Callable[..., nn.Module]] = None,
     ) -> None:
         super().__init__()
         if norm_layer is None:
@@ -148,7 +156,9 @@ class ResNet(nn.Module):
         self.inplanes = 64
 
         # TODO self.stem = nn.Sequential() ??
-        self.conv = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
+        self.conv = nn.Conv2d(
+            3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False
+        )
         self.bn = nn.BatchNorm2d(self.inplanes)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
@@ -171,7 +181,7 @@ class ResNet(nn.Module):
                     planes * block.expansion,
                     stride=stride,
                 ),
-                nn.BatchNorm2d(planes * block.expansion)
+                nn.BatchNorm2d(planes * block.expansion),
             )
 
         layers = [block(self.inplanes, planes, stride, downsample)]
@@ -200,22 +210,24 @@ class ResNet(nn.Module):
         return outputs
 
     def add_layer(self, conv_channels=1024, downsample=2, depth=1, block=Bottleneck):
-        self._make_layer(block, conv_channels // block.expansion, blocks=depth, stride=downsample)
+        self._make_layer(
+            block, conv_channels // block.expansion, blocks=depth, stride=downsample
+        )
 
     def from_pretrained(self, path):
         state_dict = torch.load(path)
 
         try:
-            state_dict.pop('fc.weight')
-            state_dict.pop('fc.bias')
+            state_dict.pop("fc.weight")
+            state_dict.pop("fc.bias")
         except KeyError:
             pass
 
         keys = list(state_dict)
         for key in keys:
-            if key.startswith('layer'):
+            if key.startswith("layer"):
                 idx = int(key[5])
-                new_key = 'layers.' + str(idx - 1) + key[6:]
+                new_key = "layers." + str(idx - 1) + key[6:]
                 state_dict[new_key] = state_dict.pop(key)
 
         self.load_state_dict(state_dict, strict=False)

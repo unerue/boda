@@ -1,6 +1,6 @@
-import os
-import math
 import functools
+import math
+import os
 from abc import ABC, ABCMeta, abstractmethod
 from typing import Tuple, List, Dict, Union, Callable
 
@@ -10,7 +10,7 @@ from torch import nn, Tensor
 
 
 class ModelMixin(metaclass=ABCMeta):
-    model_name: str = ''
+    model_name: str = ""
     _checked_inputs: bool = True
     _url_map: Dict[str, str]
 
@@ -48,8 +48,8 @@ class ModelMixin(metaclass=ABCMeta):
         cls,
         inputs: Tensor,
         size: Tuple[int, int],
-        mode: str = 'nearest',
-        preserve_aspect_ratio: bool = False
+        mode: str = "nearest",
+        preserve_aspect_ratio: bool = False,
     ) -> Tensor:
         """
         Args:
@@ -65,7 +65,7 @@ class ModelMixin(metaclass=ABCMeta):
         image_sizes = [tuple(tensor.shape[-2:]) for tensor in inputs]  # H, W
 
         if preserve_aspect_ratio:
-            print('preserve_aspect_ratio')
+            print("preserve_aspect_ratio")
             images = []
             for tensor, image_size in zip(inputs, image_sizes):
                 print(image_size)
@@ -92,18 +92,18 @@ class ModelMixin(metaclass=ABCMeta):
 
 
 def _resize_image(
-    image: Tensor,
-    min_size: int,
-    max_size: int,
-    image_size: Tuple[int, int]
+    image: Tensor, min_size: int, max_size: int, image_size: Tuple[int, int]
 ) -> None:
     _min_size = float(min(image_size))
     _max_size = float(max(image_size))
     scale_factor = min(float(min_size) / _min_size, float(max_size) / _max_size)
 
     image = F.interpolate(
-        image[None], scale_factor=scale_factor, mode='bilinear',
-        recompute_scale_factor=True, align_corners=False
+        image[None],
+        scale_factor=scale_factor,
+        mode="bilinear",
+        recompute_scale_factor=True,
+        align_corners=False,
     )[0]
 
     return image
@@ -134,7 +134,7 @@ def _batch_images(images: List[Tensor], size_divisible: int = 32) -> Tensor:
 
 
 class Backbone(nn.Module, ModelMixin):
-    backbone_name: str = ''
+    backbone_name: str = ""
 
     def __init__(self):
         super().__init__()
@@ -159,7 +159,7 @@ class Backbone(nn.Module, ModelMixin):
 
 
 class Neck(nn.Module, ModelMixin):
-    neck_type: str = ''
+    neck_type: str = ""
 
     def __init__(self):
         super().__init__()
@@ -183,12 +183,12 @@ class Head(nn.Module, ModelMixin):
 
 class Model(nn.Module, ModelMixin):
     config_class = None
-    base_model_prefix: str = ''
+    base_model_prefix: str = ""
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__()
         self.config = config
-        self.name_or_path = ''
+        self.name_or_path = ""
 
     @property
     def base_model(self) -> nn.Module:
@@ -207,21 +207,25 @@ class Model(nn.Module, ModelMixin):
 
     @classmethod
     def get_pretrained_from_file(cls, name_or_path, **kwargs):
-        cache_dir = kwargs.get('cache_dir', 'cache')
+        cache_dir = kwargs.get("cache_dir", "cache")
 
-        pretrained_file = os.path.join(cache_dir, cls.base_model_prefix, f'{name_or_path}.pth')
+        pretrained_file = os.path.join(
+            cache_dir, cls.base_model_prefix, f"{name_or_path}.pth"
+        )
         if os.path.isfile(pretrained_file):
             return pretrained_file
         else:
             from urllib import request
+
             from .file_utils import reporthook
 
-            url = 'https://unerue.synology.me/boda/models/'
+            url = "https://unerue.synology.me/boda/models/"
 
             # print(f'Downloading {name_or_path}.{extension}...', end=' ')
             request.urlretrieve(
-                f'{url}{cls.base_model_prefix}/{name_or_path}.pth',
-                pretrained_file, reporthook
+                f"{url}{cls.base_model_prefix}/{name_or_path}.pth",
+                pretrained_file,
+                reporthook,
             )
             print()
             # pretrained_file = os.path.join(
@@ -231,12 +235,8 @@ class Model(nn.Module, ModelMixin):
 
     @classmethod
     @abstractmethod
-    def from_pretrained(
-        cls,
-        name_or_path: Union[str, os.PathLike],
-        **kwargs
-    ) -> None:
-        """Create from pretrained model weights """
+    def from_pretrained(cls, name_or_path: Union[str, os.PathLike], **kwargs) -> None:
+        """Create from pretrained model weights"""
         ...
 
     def load_weights(self, path):
@@ -274,9 +274,11 @@ class Model(nn.Module, ModelMixin):
             for image in inputs:
                 if isinstance(image, Tensor):
                     if image.dim() != 3:
-                        raise ValueError(f'images is expected to be 3d tensors of shape [C, H, W] {image.size()}')
+                        raise ValueError(
+                            f"images is expected to be 3d tensors of shape [C, H, W] {image.size()}"
+                        )
                 else:
-                    raise ValueError('Expected image to be Tensor.')
+                    raise ValueError("Expected image to be Tensor.")
             cls._checked_inputs = False
 
         # if isinstance(inputs, list):
@@ -285,10 +287,10 @@ class Model(nn.Module, ModelMixin):
         return inputs
 
     def __repr__(self):
-        return_str = str(self.config.model_name) + '\n'
+        return_str = str(self.config.model_name) + "\n"
         for k, v in self.config.to_dict().items():
-            if k not in ['label_map'] and v is not None:
-                return_str += f'{k}: {v}\n'
+            if k not in ["label_map"] and v is not None:
+                return_str += f"{k}: {v}\n"
 
         return return_str
 
@@ -312,9 +314,7 @@ class LossFunction(nn.Module):
         # self.config = config
 
     def forward(
-        self,
-        inputs: Dict[str, Tensor],
-        targets: List[Dict[str, Tensor]]
+        self, inputs: Dict[str, Tensor], targets: List[Dict[str, Tensor]]
     ) -> Dict[str, Tensor]:
         raise NotImplementedError
 
@@ -335,17 +335,19 @@ class LossFunction(nn.Module):
     def check_targets(cls, targets: List[Dict[str, Tensor]]) -> None:
         if cls._checked_targets:
             for target in targets:
-                if isinstance(target['boxes'], Tensor):
-                    boxes = target['boxes']
+                if isinstance(target["boxes"], Tensor):
+                    boxes = target["boxes"]
                     check_boxes = boxes[:, :2] >= boxes[:, 2:]
                     if boxes.dim() != 2 or boxes.size(1) != 4:
-                        raise ValueError('Expected target boxes to be a tensor of [N, 4].')
+                        raise ValueError(
+                            "Expected target boxes to be a tensor of [N, 4]."
+                        )
                     elif check_boxes.any():
-                        raise ValueError(f'{boxes}')
-                    elif target['labels'].dim() != 1:
-                        raise ValueError('Expected target boxes to be a tensor of [N].')
+                        raise ValueError(f"{boxes}")
+                    elif target["labels"].dim() != 1:
+                        raise ValueError("Expected target boxes to be a tensor of [N].")
                 else:
-                    raise ValueError('Expected target boxes to be Tensor.')
+                    raise ValueError("Expected target boxes to be Tensor.")
             cls._checked_targets = False
 
     def decode(self, targets: List[Dict[str, Tensor]]) -> Dict[str, Tensor]:
@@ -354,9 +356,7 @@ class LossFunction(nn.Module):
 
 
 class PostProcess:
-    def __init__(
-        self, num_classes, nms, nms_threshold, score_threshold, top_k
-    ) -> None:
+    def __init__(self, num_classes, nms, nms_threshold, score_threshold, top_k) -> None:
         self.num_classes = num_classes
         self.top_k = top_k
         self.nms_threshold = 0.5
@@ -366,19 +366,18 @@ class PostProcess:
         pass
 
     def __call__(self, preds: Dict[str, Tensor], **kwargs) -> None:
-        if 'scores' in preds:
-            scores = preds['scores']
+        if "scores" in preds:
+            scores = preds["scores"]
             batch_size = scores.size(0)
 
-        if 'prior_boxes' in preds:
-            prior_boxes = preds['prior_boxes']
+        if "prior_boxes" in preds:
+            prior_boxes = preds["prior_boxes"]
 
+        if "boxes" in preds:
+            boxes = preds["boxes"]
 
-        if 'boxes' in preds:
-            boxes = preds['boxes']
-
-        if 'masks' in preds:
-            masks = preds['masks']
+        if "masks" in preds:
+            masks = preds["masks"]
 
     def convert_boxes(self):
         pass
@@ -405,9 +404,9 @@ class PostProcess:
 #     def get_registry(cls):
 #         return dict(cls.registry)
 
-    # @classmethod
-    # def __subclasshook__(cls, subclass):
-    #     return hasattr(subclass, 'from_pretrained') or NotImplementedError
+# @classmethod
+# def __subclasshook__(cls, subclass):
+#     return hasattr(subclass, 'from_pretrained') or NotImplementedError
 
 
 # registry = []

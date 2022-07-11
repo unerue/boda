@@ -18,7 +18,7 @@ CORRECTED_INPUT_SIZE_TYPE = List[Union[Iterable[Any], torch.Size]]
 
 
 class ModelStatistics:
-    """ Class for storing results of the summary. """
+    """Class for storing results of the summary."""
 
     def __init__(
         self,
@@ -49,7 +49,7 @@ class ModelStatistics:
                     self.total_output += 2.0 * abs(np.prod(layer_info.output_size))
 
     def __repr__(self) -> str:
-        """ Print results of the summary. """
+        """Print results of the summary."""
         header_row = self.formatting.format_row("Layer (type:depth-idx)", HEADER_TITLES)
         layer_rows = self.layers_to_str()
         divider = "=" * self.formatting.get_total_width()
@@ -90,12 +90,12 @@ class ModelStatistics:
 
     @staticmethod
     def to_bytes(num: int) -> float:
-        """ Converts a number (assume floats, 4 bytes each) to megabytes. """
+        """Converts a number (assume floats, 4 bytes each) to megabytes."""
         return num * 4 / (1024 ** 2)
 
     @staticmethod
     def to_readable(num: int) -> float:
-        """ Converts a number to millions or billions. """
+        """Converts a number to millions or billions."""
         if num >= 1e9:
             return num / 1e9
         return num / 1e6
@@ -103,7 +103,7 @@ class ModelStatistics:
     def layer_info_to_row(
         self, layer_info: LayerInfo, reached_max_depth: bool = False
     ) -> str:
-        """ Convert layer_info to string representation of a row. """
+        """Convert layer_info to string representation of a row."""
 
         def get_start_str(depth: int) -> str:
             return "├─" if depth == 1 else "|    " * (depth - 1) + "└─"
@@ -134,7 +134,7 @@ class ModelStatistics:
         return new_line
 
     def layers_to_str(self) -> str:
-        """ Print each layer of the model as tree or as a list. """
+        """Print each layer of the model as tree or as a list."""
         if self.formatting.use_branching:
             return self._layer_tree_to_str()
 
@@ -144,7 +144,7 @@ class ModelStatistics:
         return layer_rows
 
     def _layer_tree_to_str(self) -> str:
-        """ Print each layer of the model using a fancy branching diagram. """
+        """Print each layer of the model using a fancy branching diagram."""
         new_str = ""
         current_hierarchy: Dict[int, LayerInfo] = {}
 

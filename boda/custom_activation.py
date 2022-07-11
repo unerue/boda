@@ -5,6 +5,7 @@ from torch.nn import functional as F
 
 class Swish(nn.Module):
     """Swish https://arxiv.org/pdf/1905.02244.pdf"""
+
     @staticmethod
     def forward(x):
         return x * torch.sigmoid(x)
@@ -16,10 +17,11 @@ class Hardswish(nn.Module):
     Return:
         x * F.hardsigmoid(x) for torchscript and CoreML
     """
+
     @staticmethod
     def forward(x):
         # for torchscript, CoreML and ONNX
-        return x * F.hardtanh(x + 3, 0., 6.) / 6.
+        return x * F.hardtanh(x + 3, 0.0, 6.0) / 6.0
 
 
 class MemoryEfficientSwish(nn.Module):
@@ -41,6 +43,7 @@ class MemoryEfficientSwish(nn.Module):
 
 class Mish(nn.Module):
     """# Mish https://github.com/digantamisra98/Mish"""
+
     @staticmethod
     def forward(x):
         return x * F.softplus(x).tanh()
@@ -66,11 +69,18 @@ class MemoryEfficientMish(nn.Module):
 
 class FReLU(nn.Module):
     """FReLU https://arxiv.org/abs/2007.11824"""
+
     def __init__(self, in_channels, kernel_size=3):
         super().__init__()
         self.conv = nn.Conv2d(
-            in_channels, in_channels, kernel_size,
-            stride=1, padding=1, groups=in_channels, bias=False)
+            in_channels,
+            in_channels,
+            kernel_size,
+            stride=1,
+            padding=1,
+            groups=in_channels,
+            bias=False,
+        )
         self.bn = nn.BatchNorm2d(in_channels)
 
     def forward(self, x):

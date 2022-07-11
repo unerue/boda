@@ -18,7 +18,14 @@ class ConvBatchAct2d(nn.Module):
     """A Conv2d -> Batchnorm -> silu/leaky relu block"""
 
     def __init__(
-        self, in_channels, out_channels, ksize, stride, groups=1, bias=False, act=nn.SiLU(inplace=True)
+        self,
+        in_channels,
+        out_channels,
+        ksize,
+        stride,
+        groups=1,
+        bias=False,
+        act=nn.SiLU(inplace=True),
     ):
         super().__init__()
         self.out_channels = out_channels
@@ -200,7 +207,7 @@ class Focus(nn.Module):
             dim=1,
         )
         return self.conv(x)
-    
+
 
 class Darknet(nn.Module):
     # number of blocks from dark2 to dark5.
@@ -223,9 +230,9 @@ class Darknet(nn.Module):
         """
         super().__init__()
         self.selected_backbone_layers = selected_backbone_layers
-        
+
         self.channels = []
-        
+
         stem = nn.Sequential(
             BaseConv(in_channels, stem_out_channels, ksize=3, stride=1, act="lrelu"),
             *self.make_group_layer(stem_out_channels, num_blocks=1, stride=2),
@@ -241,13 +248,13 @@ class Darknet(nn.Module):
         )
         in_channels *= 2  # 128
         self.channels.append(in_channels)
-        
+
         dark3 = nn.Sequential(
             *self.make_group_layer(in_channels, num_blocks[1], stride=2)
         )
         in_channels *= 2  # 256
         self.channels.append(in_channels)
-        
+
         dark4 = nn.Sequential(
             *self.make_group_layer(in_channels, num_blocks[2], stride=2)
         )
@@ -259,7 +266,7 @@ class Darknet(nn.Module):
             *self.make_spp_block([in_channels, in_channels * 2], in_channels * 2),
         )
         self.channels.append(dark5[-1][-1].out_channels)
-        
+
         self.layers = nn.Sequential(*[stem, dark2, dark3, dark4, dark5])
 
     def make_group_layer(self, in_channels: int, num_blocks: int, stride: int = 1):
@@ -291,9 +298,9 @@ class Darknet(nn.Module):
             x = layer(x)
             if i in self.selected_backbone_layers:
                 outputs.append(x)
-                
+
         return outputs
-    
+
     def from_pretrained(self, path):
         state_dict = torch.load(path)
         # state_dict = load_state_dict_from_url(model_urls[arch], progress=True)
@@ -313,7 +320,7 @@ class CSPDarknet(nn.Module):
         super().__init__()
         self.selected_backbone_layers = selected_backbone_layers
         Conv = DWConv if depthwise else BaseConv
-        
+
         self.channels = []
 
         base_channels = int(wid_mul * 64)  # 64
@@ -376,7 +383,7 @@ class CSPDarknet(nn.Module):
             ),
         )
         self.channels.append(dark5[-1].conv3.out_channels)
-        
+
         self.layers = nn.Sequential(*[stem, dark2, dark3, dark4, dark5])
 
     def forward(self, x):
@@ -385,9 +392,9 @@ class CSPDarknet(nn.Module):
             x = layer(x)
             if i in self.selected_backbone_layers:
                 outputs.append(x)
-                
+
         return outputs
-    
+
     def from_pretrained(self, path):
         state_dict = torch.load(path)
         # state_dict = load_state_dict_from_url(model_urls[arch], progress=True)
@@ -397,32 +404,25 @@ class CSPDarknet(nn.Module):
 
 def darknet21(selected_backbone_layers=[2, 3, 4], **kwargs):
     backbone = Darknet(
-        depth=21, 
-        selected_backbone_layers=selected_backbone_layers, 
-        **kwargs
+        depth=21, selected_backbone_layers=selected_backbone_layers, **kwargs
     )
     return backbone
 
-    
+
 def darknet53(selected_backbone_layers=[2, 3, 4], **kwargs):
     backbone = Darknet(
-        depth=53, 
-        selected_backbone_layers=selected_backbone_layers, 
-        **kwargs
+        depth=53, selected_backbone_layers=selected_backbone_layers, **kwargs
     )
     return backbone
 
 
 def cspdarknet(
-    dep_mul=1.0, 
-    wid_mul=1.0, 
-    selected_backbone_layers=[2, 3, 4], 
-    **kwargs
+    dep_mul=1.0, wid_mul=1.0, selected_backbone_layers=[2, 3, 4], **kwargs
 ) -> CSPDarknet:
     backbone = CSPDarknet(
-        dep_mul=dep_mul, 
-        wid_mul=wid_mul, 
+        dep_mul=dep_mul,
+        wid_mul=wid_mul,
         selected_backbone_layers=selected_backbone_layers,
-        **kwargs
+        **kwargs,
     )
     return backbone

@@ -155,7 +155,7 @@ def summary(
 def validate_user_params(
     input_data: INPUT_DATA_TYPE, col_names: Iterable[str], verbose: int
 ) -> None:
-    """ Raise exceptions if the user's input is invalid. """
+    """Raise exceptions if the user's input is invalid."""
     if verbose not in (0, 1, 2):
         raise ValueError(
             "Verbose must be either 0 (quiet), 1 (default), or 2 (verbose)."
@@ -169,7 +169,7 @@ def validate_user_params(
 
 
 def set_device(data: Any, device: torch.device) -> Any:
-    """ Sets device for all input types and collections of input types. """
+    """Sets device for all input types and collections of input types."""
     if torch.is_tensor(data):
         return data.to(device, non_blocking=True)
 
@@ -191,7 +191,7 @@ def process_input_data(
     device: torch.device,
     dtypes: Optional[List[torch.dtype]],
 ) -> Tuple[INPUT_DATA_TYPE, CORRECTED_INPUT_SIZE_TYPE]:
-    """ Create sample input data and the corrected input size. """
+    """Create sample input data and the corrected input size."""
     if isinstance(input_data, torch.Tensor):
         input_size = get_correct_input_sizes(input_data.size())
         x = [input_data.to(device)]
@@ -226,7 +226,7 @@ def get_input_tensor(
     dtypes: List[torch.dtype],
     device: torch.device,
 ) -> List[torch.Tensor]:
-    """ Get input_tensor with batch size 2 for use in model.forward() """
+    """Get input_tensor with batch size 2 for use in model.forward()"""
     x = []
     for size, dtype in zip(input_size, dtypes):
         # add batch_size of 2 for BatchNorm
@@ -245,7 +245,7 @@ def get_correct_input_sizes(input_size: INPUT_SIZE_TYPE) -> CORRECTED_INPUT_SIZE
     """
 
     def flatten(nested_array: INPUT_SIZE_TYPE) -> Iterator[Any]:
-        """ Flattens a nested array. """
+        """Flattens a nested array."""
         for item in nested_array:
             if isinstance(item, (list, tuple)):
                 yield from flatten(item)
@@ -284,7 +284,7 @@ def apply_hooks(
     info = LayerInfo(module, curr_depth, None, parent_info)
 
     def pre_hook(module: nn.Module, inputs: Any) -> None:
-        """ Create a LayerInfo object to aggregate information about that layer. """
+        """Create a LayerInfo object to aggregate information about that layer."""
         del inputs
         nonlocal info
         idx[curr_depth] = idx.get(curr_depth, 0) + 1
@@ -293,7 +293,7 @@ def apply_hooks(
         summary_list.append(info)
 
     def hook(module: nn.Module, inputs: Any, outputs: Any) -> None:
-        """ Update LayerInfo after forward pass. """
+        """Update LayerInfo after forward pass."""
         del module
         info.input_size = info.calculate_size(inputs, batch_dim)
         info.output_size = info.calculate_size(outputs, batch_dim)

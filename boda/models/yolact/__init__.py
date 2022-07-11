@@ -1,13 +1,11 @@
-from .configuration_yolact import YolactConfig
 from .architecture_yolact import YolactPredictHead, YolactModel
+from .configuration_yolact import YolactConfig
 from .inference_yolact import PostprocessYolact
+
 # from .loss_yolact import YolactLoss
 
 
-__all__ = [
-    'YolactConfig', 'PostprocessYolact',
-    'YolactPredictHead', 'YolactModel'
-]
+__all__ = ["YolactConfig", "PostprocessYolact", "YolactPredictHead", "YolactModel"]
 
 # _import_structure = {
 #     'configuration_yolact': ['YolactConfig'],
@@ -66,5 +64,3 @@ __all__ = [
 
 #     def _get_module(self, module_name: str):
 #         return importlib.import_module("." + module_name, self.__name__)
-
-    

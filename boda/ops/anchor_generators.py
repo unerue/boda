@@ -1,8 +1,9 @@
-import math
-import itertools
 import functools
+import itertools
+import math
 from collections import defaultdict
 from typing import List, Tuple
+
 import torch
 from torch import Tensor
 
@@ -16,6 +17,7 @@ def default_box_cache(func):
         if k not in cache:
             cache[k] = v
         return k, cache[k]
+
     return wrapper
 
 
@@ -29,6 +31,7 @@ class DefaultBoxGenerator:
         use_pixel_scales ():
         use_square_anchors (:obj:`bool`): default `True`
     """
+
     def __init__(
         self,
         aspect_ratios: List[int],
@@ -36,7 +39,7 @@ class DefaultBoxGenerator:
         max_size: Tuple[int] = (550, 550),
         use_preapply_sqrt: bool = True,
         use_pixel_scales: bool = True,
-        use_square_anchors: bool = True
+        use_square_anchors: bool = True,
     ) -> None:
         self.aspect_ratios = aspect_ratios
         self.scales = scales
@@ -48,9 +51,9 @@ class DefaultBoxGenerator:
 
     @default_box_cache
     def generate(
-        self, h: int, w: int, device: str = 'cuda:0'
+        self, h: int, w: int, device: str = "cuda:0"
     ) -> Tuple[Tuple[int], Tensor]:
-        """DefaultBoxGenerator is 
+        """DefaultBoxGenerator is
 
         Args:
             h (:obj:`int`): feature map size from backbone
@@ -84,8 +87,9 @@ class DefaultBoxGenerator:
 
                         default_boxes += [cx, cy, _w, _h]
 
-        default_boxes = \
-            torch.tensor(default_boxes, dtype=torch.float32, device=device, requires_grad=False).view(-1, 4)
+        default_boxes = torch.tensor(
+            default_boxes, dtype=torch.float32, device=device, requires_grad=False
+        ).view(-1, 4)
         if self.clip:
             default_boxes.clamp_(min=0, max=1)
         # prior_boxes.requires_grad = False

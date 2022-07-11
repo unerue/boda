@@ -639,22 +639,22 @@
 # class YoloXPretrained(Model):
 #     config_class = YoloXConfig
 #     base_model_prefix = 'yolox'
-    
+
 #     @classmethod
 #     def from_pretrained(cls, name_or_path: Union[str, os.PathLike]):
 #         config = cls.config_class.from_pretrained(name_or_path)
 #         model = YoloXModel(config)
-        
+
 #         pretrained_file = super().get_pretrained_from_file(
 #             name_or_path, cache_dir=cls.config_class.cache_dir)
 #         model.load_weights(pretrained_file)
-        
+
 #         return model
 
-        
+
 # class YoloXModel(YoloXPretrained):
 #     model_name = 'yolox'
-    
+
 #     def __init__(
 #         self,
 #         config: YoloXConfig,
@@ -667,53 +667,53 @@
 #         self.depth = config.depth
 #         self.width = config.width
 #         self.act = config.act
-        
+
 #         self.selected_backbone_layers = config.selected_backbone_layers
 #         self.depthwise = config.depthwise
-        
+
 #         self.confthre = config.test_conf
 #         self.nmsthre = config.nmsthre
-        
+
 #         self.backbone = cspdarknet(
 #             self.depth, self.width,
 #             selected_backbone_layers=self.selected_backbone_layers,
-#             depthwise=self.depthwise, 
+#             depthwise=self.depthwise,
 #             act=self.act
 #         )
-        
+
 #         self.backbone_out_channels = [
 #             self.backbone.channels[i] for i in self.selected_backbone_layers
 #         ]
-        
+
 #         self.neck = YOLOPAFPN(
 #             self.backbone_out_channels,
-#             self.depth, self.width, 
+#             self.depth, self.width,
 #             depthwise=self.depthwise,
 #             act=self.act
 #         )
 #         self.head = YOLOXHead(self.num_classes, self.width, act=self.act)
-        
+
 #         self.preproc = preproc
-        
+
 #     def init_bm(M):
 #         for m in M.modules():
 #             if isinstance(m, nn.BatchNorm2d):
 #                 m.eps = 1e-3
 #                 m.momentum = 0.03
-        
+
 #     def init_weights(self, path):
 #         self.model.apply(self.init_bm)
 #         self.model.head.initialize_biases(1e-2)
-        
+
 #         self.backbone.from_pretrained(path)
-        
+
 #     def forward(self, inputs, ):
 #         outputs = []
 #         for image in inputs:
 #             image, _ = self.preproc(image, self.max_size)
 #             outputs.append(image)
 #         inputs = torch.stack(outputs)
-        
+
 #         out_features = self.backbone(inputs)
 #         # fpn output content features of [dark3, dark4, dark5]
 #         fpn_outs = self.neck(out_features)
@@ -737,9 +737,9 @@
 #             outputs = postprocess(
 #                 outputs, self.num_classes, self.confthre, self.nmsthre
 #             )
-            
+
 #         return outputs
-    
+
 #     def load_weights(self, path):
 #         state_dict = torch.load(path)
 #         for key in list(state_dict.keys()):

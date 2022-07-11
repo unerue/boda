@@ -10,7 +10,7 @@ DETECTED_INPUT_OUTPUT_TYPES = Union[
 
 
 class LayerInfo:
-    """ Class that holds information about a layer module. """
+    """Class that holds information about a layer module."""
 
     def __init__(
         self,
@@ -49,10 +49,10 @@ class LayerInfo:
     def calculate_size(
         inputs: DETECTED_INPUT_OUTPUT_TYPES, batch_dim: Optional[int]
     ) -> List[int]:
-        """ Set input_size or output_size using the model's inputs. """
+        """Set input_size or output_size using the model's inputs."""
 
         def nested_list_size(inputs: Sequence[Any]) -> List[int]:
-            """ Flattens nested list size. """
+            """Flattens nested list size."""
             if hasattr(inputs[0], "size") and callable(inputs[0].size):
                 return list(inputs[0].size())
             if isinstance(inputs, (list, tuple)):
@@ -136,7 +136,7 @@ class LayerInfo:
                     self.is_recursive = True
 
     def macs_to_str(self, reached_max_depth: bool) -> str:
-        """ Convert MACs to string. """
+        """Convert MACs to string."""
         if self.num_params > 0 and (
             reached_max_depth or not any(self.module.children())
         ):
@@ -144,7 +144,7 @@ class LayerInfo:
         return "--"
 
     def num_params_to_str(self, reached_max_depth: bool = False) -> str:
-        """ Convert num_params to string. """
+        """Convert num_params to string."""
         if self.is_recursive:
             return "(recursive)"
         if self.num_params > 0:

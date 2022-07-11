@@ -44,7 +44,7 @@
 #         overlaps = jaccard(
 #             true_boxes, cxcywh_to_xyxy(pred_priors))
 
-#         # Best prior for each ground truth 
+#         # Best prior for each ground truth
 #         best_prior_overlaps, best_prior_indexes = overlaps.max(1, keepdim=True)
 #         best_prior_indexes.squeeze_(1)
 #         best_prior_overlaps.squeeze_(1)

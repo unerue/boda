@@ -1,8 +1,8 @@
 from typing import List, Sequence
 
 import torch
-from torch import nn, Tensor
 import torch.nn.functional as F
+from torch import nn, Tensor
 
 
 class FeaturePyramidNetworks(nn.Module):
@@ -13,6 +13,7 @@ class FeaturePyramidNetworks(nn.Module):
         >>> neck = FeaturePyramidNetworks(backbone.channels, [1, 2, 3])
         >>> print(neck.channels, neck.selected_layers)
     """
+
     def __init__(
         self,
         in_channels: Sequence[int] = [256, 512, 1024, 2048],
@@ -39,8 +40,9 @@ class FeaturePyramidNetworks(nn.Module):
         self.num_extra_layers = 0
         self.num_extra_predict_layers = num_extra_predict_layers
 
-        self.selected_layers = \
-            list(range(len(self.selected_layers) + self.num_extra_predict_layers))
+        self.selected_layers = list(
+            range(len(self.selected_layers) + self.num_extra_predict_layers)
+        )
 
         self.lateral_layers = nn.ModuleList()
         for _in_channels in reversed(self.in_channels):
@@ -48,9 +50,9 @@ class FeaturePyramidNetworks(nn.Module):
                 nn.Conv2d(
                     _in_channels,
                     out_channels,
-                    kernel_size=kwargs.get('lateral_kernel_size', 1),
-                    stride=kwargs.get('lateral_stride', 1),
-                    padding=kwargs.get('lateral_padding', 0)
+                    kernel_size=kwargs.get("lateral_kernel_size", 1),
+                    stride=kwargs.get("lateral_stride", 1),
+                    padding=kwargs.get("lateral_padding", 0),
                 )
             )
 
@@ -60,22 +62,21 @@ class FeaturePyramidNetworks(nn.Module):
                 nn.Conv2d(
                     out_channels,
                     out_channels,
-                    kernel_size=kwargs.get('', 3),
-                    stride=kwargs.get('', 1),
-                    padding=kwargs.get('', 1),
+                    kernel_size=kwargs.get("", 3),
+                    stride=kwargs.get("", 1),
+                    padding=kwargs.get("", 1),
                 )
             )
 
         if self.num_extra_predict_layers > 0:
-            self.extra_layers = nn.ModuleList([
-                nn.Conv2d(
-                    out_channels,
-                    out_channels,
-                    kernel_size=3,
-                    stride=2,
-                    padding=1
-                ) for _ in range(self.num_extra_predict_layers)
-            ])
+            self.extra_layers = nn.ModuleList(
+                [
+                    nn.Conv2d(
+                        out_channels, out_channels, kernel_size=3, stride=2, padding=1
+                    )
+                    for _ in range(self.num_extra_predict_layers)
+                ]
+            )
             # self.channels.append(self.out_channels)
 
         self.channels = [out_channels] * len(self.selected_layers)
@@ -99,8 +100,7 @@ class FeaturePyramidNetworks(nn.Module):
             i -= 1
             if i < len(inputs) - 1:
                 _, _, h, w = inputs[i].size()
-                x = F.interpolate(
-                    x, size=(h, w), mode='bilinear', align_corners=False)
+                x = F.interpolate(x, size=(h, w), mode="bilinear", align_corners=False)
 
             x = x + lateral_layer(inputs[i])
             outputs[i] = x

@@ -1,11 +1,10 @@
 import os
 from typing import Tuple, Sequence, Union, Any
+
 from ...base_configuration import BaseConfig
 
 
-solov1_pretrained_models = {
-    'solov1-base': ''
-}
+solov1_pretrained_models = {"solov1-base": ""}
 
 
 class Solov1Config(BaseConfig):
@@ -16,7 +15,8 @@ class Solov1Config(BaseConfig):
         padding ():
         proto_net_structure (List):
     """
-    config_name = 'solov1'
+
+    config_name = "solov1"
 
     def __init__(
         self,
@@ -54,7 +54,8 @@ class DecoupledSolov1Config(BaseConfig):
         padding ():
         proto_net_structure (List):
     """
-    config_name = 'solov1'
+
+    config_name = "solov1"
 
     def __init__(
         self,
