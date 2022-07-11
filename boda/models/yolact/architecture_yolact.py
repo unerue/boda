@@ -369,6 +369,7 @@ class YolactModel(YolactPretrained):
         proto_masks = self.proto_layer(outputs[0])
         proto_masks = F.relu(proto_masks)
         proto_masks = proto_masks.permute(0, 2, 3, 1).contiguous()
+        
         return_dict['proto_masks'] = proto_masks
         return_dict['image_sizes'] = image_sizes
 
