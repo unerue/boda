@@ -41,9 +41,7 @@ print(losses)
 |Model|State|Training|Inference|Original|Ours|
 |:----|:---:|:------:|:-------:|-------:|---:|
 |Mask R-CNN|😡|❌|❌|||
-|PolarMask|😡|❌|❌|||
 |[YOLACT](boda/models/yolact/)|😆|✔️|✔️|||
-|[SOLOv1](boda/models/solov1/)|🙂|❌|✔️|||
 |SOLOv2|🙂|❌|✔️|||
 |[CenterMask]()|😡|❌|❌|||
 |YOLACT EDGE|😡|❌|❌|||

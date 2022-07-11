@@ -3,6 +3,7 @@ import math
 import functools
 from collections import OrderedDict, defaultdict
 from typing import List, Dict, Union
+from numpy import pad
 import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
@@ -23,12 +24,7 @@ class L2Norm(nn.Module):
 
     Adpated from:
     """
-    def __init__(
-        self,
-        in_channels: int = 512,
-        gamma: int = 10,
-        eps: float = 1e-10,
-    ) -> None:
+    def __init__(self, in_channels: int = 512, gamma: int = 10, eps: float = 1e-10) -> None:
         super().__init__()
         self.in_channels = in_channels
         self.gamma = gamma
@@ -39,7 +35,7 @@ class L2Norm(nn.Module):
     def init_weights(self):
         torch.nn.init.constant_(self.weight, self.gamma)
 
-    def forward(self, inputs):
+    def forward(self, inputs) -> Tensor:
         norm_inputs = inputs.pow(2).sum(dim=1, keepdim=True).sqrt() + self.eps
         inputs = torch.div(inputs, norm_inputs)  # x /= norm_x
         outputs = self.weight.unsqueeze(0).unsqueeze(2).unsqueeze(3).expand_as(inputs) * inputs
@@ -73,6 +69,40 @@ class SsdPredictNeck(Neck):
         # TODO: rename variable
         for layer in structure:
             self._make_layer(layer)
+        
+        #    [('M', {'kernel_size': 3, 'stride': 1, 'padding': 1}),
+        #      (1024, {'kernel_size': 3, 'padding': 6, 'dilation': 6}),
+        #      (1024, {'kernel_size': 1})],
+        #     [(256, {'kernel_size': 1}), (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})], 
+        #     [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
+        #     [(128, {'kernel_size': 1}), (256, {'kernel_size': 3})],
+        #     [(128, {'kernel_size': 1}), (256, {'kernel_size': 3})]],
+        # layer = OrderedDict()
+        nn.ModuleList([
+            nn.Sequential(
+                nn.MaxPool2d(kernel_size=3, stride=1, padding=1, ceil_mode=False),
+                nn.Conv2d(512, 1024, kernel_size=3, padding=6, dilation=6),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(1024, 1024, kernel_size=1),
+            ),
+            nn.Sequential(
+                nn.Conv2d(1024, 256, kernel_size=1), 
+                nn.Conv2d(256, 512, kernel_size=3, stride=2, padding=1)
+            ),
+            nn.Sequential(
+                nn.Conv2d(512, 128, kernel_size=1), 
+                nn.Conv2d(128, 256, kernel_size=3, stride=2, padding=1)
+            ),
+            nn.Sequential(
+                nn.Conv2d(512, 128, kernel_size=1), 
+                nn.Conv2d(128, 256, kernel_size=3)
+            ),
+            nn.Sequential(
+                nn.Conv2d(256, 128, kernel_size=1),
+                nn.Conv2d(128, 256, kernel_size=3)
+            )
+        ])
+        
 
     def _make_layer(self, config, **kwargs):
         # _layers = []
@@ -90,7 +120,7 @@ class SsdPredictNeck(Neck):
             else:
                 if kwargs is None:
                     kwargs = {'kernel_size': 1}
-
+                print(self._in_channels)
                 _layers.update({
                     (f'{i}', nn.Conv2d(in_channels=self._in_channels, out_channels=v, **kwargs)),
                     (f'relu{i}', nn.ReLU())
@@ -287,12 +317,6 @@ class SsdModel(SsdPretrained):
             [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
             [(128, {'kernel_size': 1}), (256, {'kernel_size': 3})],
             [(128, {'kernel_size': 1}), (256, {'kernel_size': 3})]],
-        'ssd512': [
-            [(256, {'kernel_size': 1}), (512, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
-            [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
-            [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride':  2, 'padding':  1})],
-            [(128, {'kernel_size': 1}), (256, {'kernel_size': 3, 'stride': 2, 'padding':  1})],
-            [(128, {'kernel_size': 1})]]
     }
 
     def __init__(
